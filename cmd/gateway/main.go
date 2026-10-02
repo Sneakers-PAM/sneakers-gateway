@@ -308,6 +308,16 @@ func main() {
 		logger.Fatal().Err(err).Msg("cookie config")
 	}
 	logger.Info().Str("auth_mode", authMode).Bool("cookie_secure", secureCookies).Msg("cookie config")
+	corsP, err := newCORSPolicy(authMode, os.Getenv("CORS_ALLOWED_ORIGINS"))
+	if err != nil {
+		logger.Fatal().Err(err).Msg("cors config")
+	}
+	if corsP.reflectAny {
+		logger.Warn().Msg("cors: AUTH_MODE=noauth and CORS_ALLOWED_ORIGINS unset, echoing any origin (local development only)")
+	} else {
+		logger.Info().Strs("allowed_origins", corsP.origins()).Msg("cors config")
+	}
+	cors := corsP.wrap
 	mux := http.NewServeMux()
 	if authMode == "real" {
 		// Session timeout is admin-configured (vault SecuritySettings), not an env
@@ -416,7 +426,7 @@ func main() {
 				return actorCtx, nil, nil
 			},
 		})
-		mux.Handle("/graphql", withCORSActor(identityClient, gql))
+		mux.Handle("/graphql", cors(withActor(identityClient, gql)))
 	}
 
 	// Machine bearer-auth path (with a pluggable OIDC leg): a SEPARATE GraphQL
@@ -506,31 +516,6 @@ func logSetupToken(logger zerolog.Logger, token string) {
 	logger.Info().Msg("SETUP_TOKEN configured: POST /setup/bootstrap with it to create the first admin; read the value from the Secret (or environment) that sets SETUP_TOKEN")
 }
 
-// cors applies dev CORS (credentialed — echoes the request Origin, never "*",
-// so cookie-bearing requests are allowed) and short-circuits preflight.
-func cors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			origin = "*"
-		}
-		h := w.Header()
-		h.Set("Access-Control-Allow-Origin", origin)
-		h.Set("Access-Control-Allow-Credentials", "true")
-		h.Set("Vary", "Origin")
-		if r.Method == http.MethodOptions {
-			h.Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-			// Authorization is allowed for the machine bearer-auth path
-			// (/machine/graphql) — a preflighted cross-origin
-			// machine client sends its API token in this header.
-			h.Set("Access-Control-Allow-Headers", "Content-Type,X-Dev-User,X-CSRF-Token,Authorization")
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 // wsReqCtxKey carries the raw *http.Request through the request context so the
 // WebSocket transport's InitFunc (which only receives the connection context)
 // can read the session cookie for authentication.
@@ -590,15 +575,15 @@ func graphqlWithWS(gql http.Handler, httpGate http.Handler) http.Handler {
 	})
 }
 
-// withCORSActor is the no-auth path: CORS + the dev persona identity
-// (X-Dev-User) injected into the resolver context, enriched with the user's
+// withActor is the no-auth path: the dev persona identity (X-Dev-User)
+// injected into the resolver context, enriched with the user's
 // site-admin/root/groups from the identity service (for firewall-RACI).
-func withCORSActor(identity identityv1.IdentityServiceClient, next http.Handler) http.Handler {
-	return cors(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func withActor(identity identityv1.IdentityServiceClient, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := resolvers.WithActor(r.Context(), r.Header.Get("X-Dev-User"))
 		ctx = enrichActor(ctx, identity, r.Header.Get("X-Dev-User"))
 		next.ServeHTTP(w, r.WithContext(ctx))
-	}))
+	})
 }
 
 // enrichActor resolves the acting user's authz attributes from identity. Best

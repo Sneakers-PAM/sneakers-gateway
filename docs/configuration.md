@@ -11,6 +11,7 @@ a real deployment.
 | `HTTP_PORT` | `9100` | The port for every HTTP route (GraphQL, auth, setup, health). |
 | `AUTH_MODE` | `noauth` | `noauth`: local development; the caller is the user id in the `X-Dev-User` header (or the `x-dev-user` field of a WebSocket `connection_init`), and no login, Redis or session is used. `real`: the BFF login, Redis-backed sessions and CSRF. Any value other than `real` behaves as `noauth`. |
 | `COOKIE_SECURE` | on | The `Secure` flag on the session cookies. See [cookies.md](cookies.md). A value that isn't a boolean stops the gateway at start. |
+| `CORS_ALLOWED_ORIGINS` | (none) | The browser origins allowed to call the gateway with credentials: a comma-separated list of `scheme://host[:port]`, for example `https://sneakers.example.org`. Set it to the web app's origin. Only an exact match gets CORS headers; any other origin gets none, and its preflight answers 403. An entry that isn't a plain http or https origin, or `*`, stops the gateway at start. Unset with `AUTH_MODE=real` allows no cross-origin caller (serve the UI from the gateway's origin). Unset with `AUTH_MODE=noauth` echoes any origin, for local development only. |
 | `SETUP_TOKEN` | (none) | Guards `/setup/bootstrap` and `/setup/seed`. Unset disables both (they answer 503). Surrounding whitespace (such as the newline a Secret made from a file ends in) is trimmed, and a blank value counts as unset. The gateway never logs the value; read it from the Secret or environment that sets it. Clear it once the first admin exists. |
 
 ## Backend services

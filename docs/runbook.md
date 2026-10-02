@@ -16,8 +16,10 @@
   so read it from the Secret that sets it, for example
   `kubectl get secret <name> -o jsonpath='{.data.SETUP_TOKEN}' | base64 -d`.
 - **Serve it over HTTPS** behind a reverse proxy that passes the original `Host` (or
-  `X-Forwarded-Host`): the subscription socket's `Origin` must match it. The gateway echoes any
-  `Origin` in its CORS headers, so the proxy should expose it for your UI's origin only.
+  `X-Forwarded-Host`): the subscription socket's `Origin` must match it.
+- **Set `CORS_ALLOWED_ORIGINS`** to the web app's origin (for example
+  `https://sneakers.example.org`) when the UI is served from another origin. Without it, a real
+  deployment allows no cross-origin browser caller.
 - **Redis holds live sessions** (the tokens behind each session id). Give the gateway its own
   Redis database, require a password, and use `rediss://` when the hop isn't private.
 
