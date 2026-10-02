@@ -39,9 +39,11 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
     permissions:
       contents: read
-    uses: Sneakers-PAM/.github/.github/workflows/proto-sync.yml@79e08e14e14503bee04268e57c7a4b1467e2803f
+    # Throwaway proof pin for Sneakers-PAM/.github@fix/proto-sync-callee-buf-config
+    # (issue #2 / PR #3). Revert to the tagged commit before this branch is deleted.
+    uses: Sneakers-PAM/.github/.github/workflows/proto-sync.yml@e83ab9fec959c1513e6449bbcd5dabfc184689ac
     with:
-      tools-ref: 79e08e14e14503bee04268e57c7a4b1467e2803f
+      tools-ref: e83ab9fec959c1513e6449bbcd5dabfc184689ac
   proto-refresh:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     permissions:
