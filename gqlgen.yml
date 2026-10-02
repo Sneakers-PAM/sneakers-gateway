@@ -1,0 +1,17 @@
+# gqlgen config for the Sneakers gateway's human GraphQL surface. The schema
+# is in graphql/. skip_mod_tidy keeps gqlgen from running go mod tidy during
+# generation.
+schema:
+  - graphql/schema.graphqls
+exec:
+  filename: internal/resolvers/generated.go
+  package: resolvers
+model:
+  filename: internal/resolvers/models_gen.go
+  package: resolvers
+resolver:
+  filename_template: "{name}.resolvers.go"
+  dir: internal/resolvers
+  package: resolvers
+  layout: follow-schema
+skip_mod_tidy: true

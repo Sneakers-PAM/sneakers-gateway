@@ -5,36 +5,43 @@ hook-enforced rules). Keep this file current when the build, layout, or public A
 
 ## What this is
 
-Sneakers gateway: GraphQL and machine API for the web, mobile and MCP clients
-
-<!-- Fill in: what the project does, what it ships (library, service, action, CLI), and the one or
-two things an agent must understand before changing it. -->
-
-## Using sneakers-gateway
-
-<!-- If this project is consumed by others (a library/plugin/action), describe the contract a
-consumer must respect: the single entry point, the public surface, required options, and anything
-that must not be bypassed. Delete this section for a leaf application. -->
+Sneakers gateway: the GraphQL and machine API for the web, mobile and MCP clients. A leaf HTTP
+service: two gqlgen GraphQL endpoints (`/graphql` for people, `/machine/graphql` for tokens and
+service accounts), a backend-for-frontend login layer with Redis sessions, and gRPC clients for
+identity, vault, workflow, audit, notify and the SSH broker. Before changing it, know the rules it
+keeps: every backend call carries the caller's actor context and the backend decides access (the
+gateway never grants anything itself); `/graphql` fails closed without a valid session, CSRF token
+and, when enforced, a verified second factor; tokens and secret values are never logged; and the
+human and machine schemas share no generated code or resolver.
 
 ## Layout
 
-<!-- The directories that matter and what lives in each. Keep it short; point at the entry points. -->
-
-- `src/` - <what>
-- `<tests dir>/` - <what>
+- `cmd/gateway/` - the entrypoint: environment, the backend clients, the routes and the auth
+  modes.
+- `graphql/` - the two schemas, `schema.graphqls` (human) and `machine.graphqls` (machine).
+- `internal/resolvers/` - the human schema's resolvers; `generated.go` and `models_gen.go` are
+  gqlgen output.
+- `internal/machineresolvers/` - the machine schema's resolvers, generated separately.
+- `internal/bff/` - login, sessions (memory and Redis stores), CSRF, MFA, SSO (Polis), the OAuth
+  server for native clients, and the machine bearer-token gate.
+- `internal/setup/` - the first-run `/setup/*` handlers.
+- `internal/gqllog/` - one log line per GraphQL error.
+- `internal/apperr/` - the gateway's error-code table (the 2xxx range); the coded-error helpers
+  come from `github.com/Bugs5382/go-apperr`.
+- `internal/safeconv/` - bounds-checked integer conversions.
+- `docs/` - configuration, API, runbook and the topic pages.
 
 ## Build, test, lint
 
-<!-- The exact commands. Pull these from package.json scripts (npm), the Taskfile (Go/Task), or
-pyproject (Python) so they stay accurate. -->
-
-- Build: `<command>`
-- Test: `<command>` (note any service/fixture the integration tests require)
-- Lint: `<command>`
-- Package checks (npm packages), after a build: `npm run check:pack` (contents and ceiling),
-  `npm run check:pack:growth` (growth against the last release), `npm run check:install`
-  (install the tarball, import ESM and CJS); see CLAUDE.md "npm package contents"
-- License headers / docs: `<command>`
+- Build: `task build`
+- Test: `task test`; the backends, Redis and the login backends are faked in process, so nothing
+  else is needed.
+- Lint: `task lint`.
+- Generated code: `go tool gqlgen generate --config gqlgen.yml` and
+  `go tool gqlgen generate --config gqlgen-machine.yml` after a schema change, and
+  `scripts/proto-generate.sh` (buf, with the plugin versions pinned in
+  `.github/workflows/job-go-lang-ci.yaml`) after a pin change; CI checks both are current.
+- License headers: `task license` (golic, the Apache-2.0 SPDX header in `.golic.yaml`).
 
 ## Logging
 
@@ -56,4 +63,13 @@ Follow the logging rules in `CLAUDE.md`. In short:
   `.claude/hooks` (run `bash .claude/hooks/install.sh` once per clone).
 - Open every PR as a draft. CI skips drafts, so run the full checks locally, push once they pass,
   and mark the PR ready when the work is finished; see CLAUDE.md "CI and Actions minutes".
-- <project-specific conventions, non-obvious constraints, and traps an agent should know>
+- Every commit carries a DCO sign-off (`git commit -s`); the `checks / scrub` job fails without it.
+- No real identifiers anywhere: fixtures use example.org, 192.0.2.0/24, 2001:db8::/32 and invented
+  names.
+- The service client stubs in `gen/go/thirdparty/` (identity, vault, workflow, audit, notify and
+  sshbroker) are generated from the commits pinned in `proto-refs.env` (see docs/api.md, "Calling
+  other services"); never import another service's Go module.
+- Request-scoped logging goes through a go-log `Logger` passed in (`Log` fields, `Ctx(ctx)` for
+  trace ids); never the deprecated package-level `log.Ctx`.
+- Never edit `generated.go` or `models_gen.go` by hand; gqlgen keeps resolver bodies in
+  `*.resolvers.go` across regeneration.
