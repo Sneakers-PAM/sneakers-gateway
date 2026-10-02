@@ -18,9 +18,29 @@ authenticates, and where to read more.
 - Every call runs as the caller: the gateway passes an actor context (user id, roles, groups, and
   for machine callers the principal kind and token id) to the backend service, and the service
   makes the authorization decision and writes the audit record.
-- Errors carry the backend's gRPC status text, for example
-  `rpc error: code = PermissionDenied desc = ...`. There is no `extensions.code` yet, so match on
-  the gRPC code in that text, never on the description after `desc =`.
+- Errors from a backend carry its gRPC status text as the message, for example
+  `rpc error: code = PermissionDenied desc = ...`, and stable `extensions` on both endpoints:
+  - `code`: the canonical gRPC code name, such as `PERMISSION_DENIED` or `FAILED_PRECONDITION`;
+  - `reason`: present when the service gave a stable reason for the refusal, such as
+    `CHECKOUT_LEASE_HELD` (see "Refusal reasons" below);
+  - `metadata`: present when the reason carries details, such as `holder_user_id`.
+
+  Match on `code` and `reason`, never on the message text after `desc =`.
+
+### Refusal reasons
+
+The backends attach a `google.rpc.ErrorInfo` (domain `sneakers.vault` or `sneakers.workflow`) to
+the refusals a client should explain; the gateway passes its reason and metadata through
+unchanged, and drops details from any other domain. The check-out and check-in reasons are:
+
+| Mutation | `code` | `reason` | `metadata` | Meaning |
+|---|---|---|---|---|
+| `checkoutSecret` | `PERMISSION_DENIED` | `CHECKOUT_NO_ACCESS` | | The caller can't read the secret. |
+| `checkoutSecret` | `FAILED_PRECONDITION` | `CHECKOUT_TYPE_DISABLED` | | The secret's type doesn't allow check-out. |
+| `checkoutSecret` | `FAILED_PRECONDITION` | `CHECKOUT_LEASE_HELD` | `holder_user_id` | Someone already holds a lease on the secret. |
+| `checkinSecret` | `PERMISSION_DENIED` | `CHECKIN_NOT_HOLDER` | | Only the lease holder can check in. |
+
+The workflow service owns these reasons; a refusal without one still has its `code`.
 
 The human schema has about 45 queries (users and groups, folders, secrets and their rulesets,
 access requests and approvals, audit, notifications, tokens), about 70 mutations, and one
@@ -88,7 +108,7 @@ With `OAUTH_PUBLIC_URL` set, the gateway is an OAuth 2.0 authorization server fo
 | Route | Purpose |
 |---|---|
 | `GET /setup/state` | `{"needsSetup": true}` until the first admin exists. |
-| `POST /setup/bootstrap` | Create the first admin. Needs `setupToken` in the body to equal `SETUP_TOKEN`. |
+| `POST /setup/bootstrap` | Create the first admin. Needs `setupToken` in the body to equal `SETUP_TOKEN` (both trimmed of surrounding whitespace). |
 | `POST /setup/seed` | Install the vault's built-in types and baseline, after bootstrap. Same token. |
 
 These are outside the session gate, like `/health`.

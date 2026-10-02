@@ -28,6 +28,7 @@ import (
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	workflowv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/workflow/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/bff"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/gqlerr"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/gqllog"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/machineresolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
@@ -290,6 +291,7 @@ func main() {
 	gql.AddTransport(transport.POST{})
 	gql.Use(extension.Introspection{})
 	gql.Use(gqllog.ErrorLog{Log: reqLog, Actor: resolvers.CallerID})
+	gql.SetErrorPresenter(gqlerr.Present)
 
 	// Same-origin-only WebSocket upgrader for GraphQL subscriptions. A WS upgrade
 	// can't carry the CSRF double-submit header, so cross-origin sockets are
@@ -448,6 +450,7 @@ func main() {
 	}))
 	machineGQL.AddTransport(transport.POST{})
 	machineGQL.Use(gqllog.ErrorLog{Log: reqLog, Actor: resolvers.CallerID})
+	machineGQL.SetErrorPresenter(gqlerr.Present)
 	mux.Handle("/machine/graphql", cors(machineH.MachineActor(machineGQL)))
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -479,14 +482,7 @@ func main() {
 	// After the first admin is created, the wizard POSTs here to install the
 	// built-in baseline into the fresh vault (idempotent, SETUP_TOKEN-gated).
 	mux.Handle("/setup/seed", cors(setupH.SeedHandler()))
-	if setupToken != "" {
-		// Dev convenience: echo the setup token prominently so an operator can
-		// bootstrap the first admin without digging through the deployment
-		// config. Never rely on this in prod.
-		logger.Info().Str("setup_token", setupToken).Msg("SETUP_TOKEN configured — POST /setup/bootstrap with this token to create the first admin")
-	} else {
-		logger.Warn().Msg("SETUP_TOKEN not set — /setup/bootstrap disabled (returns 503)")
-	}
+	logSetupToken(logger, setupToken)
 
 	// otelhttp (server spans) → request logging → HTTP metrics → mux.
 	instrumented := otelhttp.NewHandler(withLogging(reqLog, otel.Metrics(mux)), "gateway")
@@ -516,6 +512,16 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Fatal().Err(err).Msg("http server exited")
 	}
+}
+
+// logSetupToken says whether first-run setup is enabled. It never logs the
+// token: the operator reads it from wherever SETUP_TOKEN is set.
+func logSetupToken(logger zerolog.Logger, token string) {
+	if strings.TrimSpace(token) == "" {
+		logger.Warn().Msg("SETUP_TOKEN not set: /setup/bootstrap and /setup/seed are disabled (they answer 503)")
+		return
+	}
+	logger.Info().Msg("SETUP_TOKEN configured: POST /setup/bootstrap with it to create the first admin; read the value from the Secret (or environment) that sets SETUP_TOKEN")
 }
 
 // wsReqCtxKey carries the raw *http.Request through the request context so the
