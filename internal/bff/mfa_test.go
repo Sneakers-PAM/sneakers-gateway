@@ -23,7 +23,7 @@ import (
 func mfaLoginHandler(t *testing.T, fid *fakeIdentity) (*Handler, *memPending) {
 	t.Helper()
 	cfg := defaultKratosLoginConfig()
-	cfg.identityID = "kc-abc-123"
+	cfg.identityID = "sub-abc-123"
 	kratos := newKratosLoginServer(t, cfg)
 	pend := newMemPending()
 	h := &Handler{
@@ -76,7 +76,7 @@ func TestLogin_EnrolledUser_RequiresMFA(t *testing.T) {
 		t.Fatalf("expected mfaRequired + pendingId, got %+v", out)
 	}
 	p, ok, _ := pend.Get(context.Background(), out.PendingID)
-	if !ok || p.UserID != "usr-42" || p.Subject != "kc-abc-123" || p.AccessToken == "" {
+	if !ok || p.UserID != "usr-42" || p.Subject != "sub-abc-123" || p.AccessToken == "" {
 		t.Fatalf("pending record not parked with tokens/user/subject: %+v ok=%v", p, ok)
 	}
 }
@@ -247,7 +247,7 @@ func TestVerifyOtp_Success(t *testing.T) {
 	fid := &fakeIdentity{verifyOk: true}
 	h, pend := mfaLoginHandler(t, fid)
 	_ = pend.Create(context.Background(), "pend-1", Pending{
-		AccessToken: "AT", ExpiresIn: 300, UserID: "usr-42", Subject: "kc-abc-123",
+		AccessToken: "AT", ExpiresIn: 300, UserID: "usr-42", Subject: "sub-abc-123",
 	})
 
 	rec := postJSON(h.VerifyOtp, "/auth/verify-otp", map[string]string{"pendingId": "pend-1", "code": "123456"})
@@ -262,7 +262,7 @@ func TestVerifyOtp_Success(t *testing.T) {
 		t.Fatal("expected a session cookie after verified factor")
 	}
 	sess, ok, _ := h.Store.Get(context.Background(), sid)
-	if !ok || sess.UserID != "usr-42" || sess.Subject != "kc-abc-123" || !sess.MFAVerified {
+	if !ok || sess.UserID != "usr-42" || sess.Subject != "sub-abc-123" || !sess.MFAVerified {
 		t.Fatalf("session not MFA-verified/complete: %+v ok=%v", sess, ok)
 	}
 	if _, ok, _ := pend.Get(context.Background(), "pend-1"); ok {
@@ -474,7 +474,7 @@ func TestVerifyOtp_EmailKind_Success(t *testing.T) {
 	h, pend := mfaLoginHandler(t, fid)
 	_ = pend.Create(context.Background(), "pend-1", Pending{
 		AccessToken: "AT", ExpiresIn: 300, UserID: "usr-42",
-		Subject: "kc-abc-123", Factors: []string{"totp", "email"},
+		Subject: "sub-abc-123", Factors: []string{"totp", "email"},
 	})
 
 	rec := postJSON(h.VerifyOtp, "/auth/verify-otp", map[string]string{"pendingId": "pend-1", "code": "123456", "kind": "email"})
@@ -643,7 +643,7 @@ func TestMfaAdminRemoveTotp_SiteAdmin(t *testing.T) {
 		Roles: []string{"user", "site-admin"},
 	}}
 	h, _ := mfaLoginHandler(t, fid)
-	sid, csrf := adminSession(t, h, "usr-admin", "kc-admin-1")
+	sid, csrf := adminSession(t, h, "usr-admin", "sub-admin-1")
 
 	rec := authedPost(h.MfaAdminRemoveTotp, "/auth/mfa/admin/remove-totp", sid, csrf, map[string]string{"userId": "usr-locked-out"})
 	if rec.Code != http.StatusOK {
@@ -662,7 +662,7 @@ func TestMfaAdminRemoveTotp_NotAdmin(t *testing.T) {
 		Roles: []string{"user"},
 	}}
 	h, _ := mfaLoginHandler(t, fid)
-	sid, csrf := adminSession(t, h, "usr-42", "kc-abc-123")
+	sid, csrf := adminSession(t, h, "usr-42", "sub-abc-123")
 
 	rec := authedPost(h.MfaAdminRemoveTotp, "/auth/mfa/admin/remove-totp", sid, csrf, map[string]string{"userId": "usr-other"})
 	if rec.Code != http.StatusForbidden {
@@ -691,7 +691,7 @@ func TestMfaAdminRemoveTotp_CSRFRequired(t *testing.T) {
 		Roles: []string{"site-admin"},
 	}}
 	h, _ := mfaLoginHandler(t, fid)
-	sid, _ := adminSession(t, h, "usr-admin", "kc-admin-1")
+	sid, _ := adminSession(t, h, "usr-admin", "sub-admin-1")
 
 	rec := authedPost(h.MfaAdminRemoveTotp, "/auth/mfa/admin/remove-totp", sid, "", map[string]string{"userId": "usr-other"})
 	if rec.Code != http.StatusForbidden {
@@ -708,7 +708,7 @@ func TestMfaAdminRemoveTotp_RevokesTargetSessions(t *testing.T) {
 		Roles: []string{"site-admin"},
 	}}
 	h, _ := mfaLoginHandler(t, fid)
-	sid, csrf := adminSession(t, h, "usr-admin", "kc-admin-1")
+	sid, csrf := adminSession(t, h, "usr-admin", "sub-admin-1")
 	// Two live sessions for the target + one for a bystander.
 	_ = h.Store.Create(context.Background(), "t-sid-1", Session{UserID: "usr-locked-out", ExpiresAt: time.Now().Add(time.Hour)})
 	_ = h.Store.Create(context.Background(), "t-sid-2", Session{UserID: "usr-locked-out", ExpiresAt: time.Now().Add(time.Hour)})
@@ -735,7 +735,7 @@ func TestMfaAdminStatus_SiteAdmin(t *testing.T) {
 		mfaEnrolled: true,
 	}
 	h, _ := mfaLoginHandler(t, fid)
-	sid, csrf := adminSession(t, h, "usr-admin", "kc-admin-1")
+	sid, csrf := adminSession(t, h, "usr-admin", "sub-admin-1")
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/mfa/admin/status?userId=usr-target", nil)
 	req.AddCookie(&http.Cookie{Name: CookieName, Value: sid})
@@ -761,7 +761,7 @@ func TestMfaAdminStatus_NotAdmin(t *testing.T) {
 		User: &identityv1.User{Id: "usr-42"}, Roles: []string{"user"},
 	}}
 	h, _ := mfaLoginHandler(t, fid)
-	sid, _ := adminSession(t, h, "usr-42", "kc-abc-123")
+	sid, _ := adminSession(t, h, "usr-42", "sub-abc-123")
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/mfa/admin/status?userId=usr-target", nil)
 	req.AddCookie(&http.Cookie{Name: CookieName, Value: sid})
@@ -779,7 +779,7 @@ func TestMfaAdminStatus_MissingUserId(t *testing.T) {
 		User: &identityv1.User{Id: "usr-admin"}, Roles: []string{"site-admin"},
 	}}
 	h, _ := mfaLoginHandler(t, fid)
-	sid, _ := adminSession(t, h, "usr-admin", "kc-admin-1")
+	sid, _ := adminSession(t, h, "usr-admin", "sub-admin-1")
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/mfa/admin/status", nil)
 	req.AddCookie(&http.Cookie{Name: CookieName, Value: sid})

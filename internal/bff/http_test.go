@@ -378,7 +378,7 @@ func TestSessionActor_ResolvesIdentityActorContext(t *testing.T) {
 	}}
 	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour}
 
-	sess := Session{AccessToken: at, ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", UserID: "usr-42", Subject: "kc-abc-123"}
+	sess := Session{AccessToken: at, ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", UserID: "usr-42", Subject: "sub-abc-123"}
 	_ = h.Store.Create(context.Background(), "sid1", sess)
 
 	ran := false
@@ -392,7 +392,7 @@ func TestSessionActor_ResolvesIdentityActorContext(t *testing.T) {
 	if rec.Code != http.StatusOK || !ran {
 		t.Fatalf("expected authed pass-through 200, got %d ran=%v body=%s", rec.Code, ran, rec.Body)
 	}
-	if fid.resolveReq == nil || fid.resolveReq.GetSubject() != "kc-abc-123" {
+	if fid.resolveReq == nil || fid.resolveReq.GetSubject() != "sub-abc-123" {
 		t.Fatalf("ResolveUserContext not called with session subject: %+v", fid.resolveReq)
 	}
 }
@@ -415,12 +415,12 @@ func TestActorAttrs_MapsRolesAndGroups(t *testing.T) {
 func TestActorContext_FailsClosed(t *testing.T) {
 	// identity error
 	h := &Handler{Identity: &fakeIdentity{resolveErr: errors.New("down")}}
-	if _, err := h.actorContext(context.Background(), "kc-abc-123"); err == nil {
+	if _, err := h.actorContext(context.Background(), "sub-abc-123"); err == nil {
 		t.Fatal("expected error when identity unreachable")
 	}
 	// unknown subject → nil user
 	h = &Handler{Identity: &fakeIdentity{resolveRes: &identityv1.ResolveUserContextResponse{}}}
-	if _, err := h.actorContext(context.Background(), "kc-unknown"); err == nil {
+	if _, err := h.actorContext(context.Background(), "sub-unknown"); err == nil {
 		t.Fatal("expected error when subject maps to no user")
 	}
 }
@@ -429,7 +429,7 @@ func TestSessionActor_FailsClosedOnIdentityError(t *testing.T) {
 	at := "opaque-session-token"
 	fid := &fakeIdentity{resolveErr: errors.New("identity down")}
 	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour}
-	_ = h.Store.Create(context.Background(), "sid1", Session{AccessToken: at, ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", Subject: "kc-abc-123"})
+	_ = h.Store.Create(context.Background(), "sid1", Session{AccessToken: at, ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", Subject: "sub-abc-123"})
 
 	ran := false
 	req := httptest.NewRequest(http.MethodPost, "/graphql", nil)

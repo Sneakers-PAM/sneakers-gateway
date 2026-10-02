@@ -60,7 +60,7 @@ func newTestVerifier(jwksURL string) *Verifier {
 
 func goodClaims() jwt.MapClaims {
 	return jwt.MapClaims{
-		"iss": testIssuer, "azp": testClient, "sub": "kc-abc-123",
+		"iss": testIssuer, "azp": testClient, "sub": "sub-abc-123",
 		"preferred_username": "alice@dev", "sid": "sess-1",
 		"exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(),
 	}
@@ -73,7 +73,7 @@ func TestVerifyValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("valid token rejected: %v", err)
 	}
-	if vc.Username != "alice@dev" || vc.Subject != "kc-abc-123" || vc.SID != "sess-1" {
+	if vc.Username != "alice@dev" || vc.Subject != "sub-abc-123" || vc.SID != "sess-1" {
 		t.Fatalf("wrong claims: %+v", vc)
 	}
 }
