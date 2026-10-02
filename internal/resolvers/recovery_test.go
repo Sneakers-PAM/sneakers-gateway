@@ -46,7 +46,7 @@ func (f *recoveryVault) RestoreSecretVersion(_ context.Context, req *vaultv1.Res
 }
 
 func recoveryClient(fv vaultv1.VaultServiceClient, recovery bool) *gqlclient.Client {
-	h := handler.New(NewExecutableSchema(Config{Resolvers: &Resolver{Vault: fv}}))
+	h := handler.New(NewExecutableSchema(Config{Resolvers: &Resolver{Vault: fv, Workflow: &leaseWorkflow{}}}))
 	h.AddTransport(transport.POST{})
 	h.SetErrorPresenter(gqlerr.Present)
 	return gqlclient.New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
