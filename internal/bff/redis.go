@@ -7,8 +7,8 @@ package bff
 // github.com/Bugs5382/go-redis wrapper (option-based Connect with a startup
 // Ping, pooling, and command retries). Sessions survive gateway restarts and
 // are shared across replicas; the pending store is the single-use seam where
-// the 2-step MFA flow parks Keycloak tokens between password grant and factor
-// verification.
+// the 2-step MFA flow parks the Kratos session_token between the password step
+// and factor verification.
 //
 // The wrapper's UniversalClient and Nil sentinel are used directly for
 // Set/Get/Del/SetNX/GETDEL; go-redis/v9 itself supplies only ParseURL and
@@ -140,17 +140,16 @@ func (s *redisStore) DeleteByUser(ctx context.Context, userID string) error {
 
 // ---- pending store (2-step MFA seam) ----------------------------------------
 
-// Pending parks the Keycloak tokens between a successful password grant and a
-// verified second factor. Short-lived + single-use. The tokens are NEVER
+// Pending parks the backend token between a successful password step and a
+// verified second factor. Short-lived + single-use. The token is NEVER
 // returned to the client — only the opaque pending id is.
 type Pending struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int    `json:"expires_in"`
-	UserID       string `json:"user_id"`
-	// KeycloakSubject is the verified token `sub`, carried through so the promoted
-	// session records it (the request gate re-resolves it per request).
-	KeycloakSubject string `json:"keycloak_subject"`
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+	UserID      string `json:"user_id"`
+	// Subject is the login subject, carried through so the promoted session
+	// records it (the request gate re-resolves it per request).
+	Subject string `json:"subject"`
 	// Factors is the set of second-factor kinds the user can satisfy for THIS
 	// login (from identity.ListUserFactors), captured at the password step. The
 	// kind-dispatched verify only honours a kind that is offered here, so a client

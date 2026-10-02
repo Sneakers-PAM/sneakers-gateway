@@ -26,7 +26,7 @@ func TestLogin_KratosBackend_MfaEnforced_NoSessionBeforeVerify(t *testing.T) {
 	}
 	h := &Handler{
 		Store: NewMemStore(time.Hour), Identity: fid, Pending: newMemPending(), TTL: time.Hour,
-		Auth: NewKratosClient(kratos.URL, kratos.URL), Backend: backendKratos, MfaEnforced: true,
+		Auth: NewKratosClient(kratos.URL, kratos.URL), MfaEnforced: true,
 	}
 
 	body, _ := json.Marshal(map[string]string{"username": cfg.email, "password": cfg.goodPassword})
@@ -68,22 +68,22 @@ func TestLogin_KratosBackend_MfaEnforced_NoSessionBeforeVerify(t *testing.T) {
 		t.Fatal("no session cookie after successful MFA verify")
 	}
 	sess, ok, _ := h.Store.Get(context.Background(), sid)
-	if !ok || !sess.MFAVerified || sess.KeycloakSubject != cfg.identityID {
+	if !ok || !sess.MFAVerified || sess.Subject != cfg.identityID {
 		t.Fatalf("session not correctly promoted after MFA: %+v ok=%v", sess, ok)
 	}
 }
 
 func TestSessionActor_KratosBackend_HalfSessionBlockedFromGraphQL(t *testing.T) {
 	// A Kratos-backed session issued with MFAVerified=false (enforced, not yet
-	// enrolled) must be rejected from /graphql exactly like the Keycloak path —
-	// mfaFlags/SessionActor's enforcement gate is backend-agnostic.
+	// enrolled) must be rejected from /graphql — mfaFlags/SessionActor's
+	// enforcement gate.
 	// ResolveUserContext must succeed (as it would for any live session) so the
 	// request reaches the MFA gate rather than failing earlier on actor
 	// resolution — resolveSessionActor resolves the actor before SessionActor
-	// evaluates mfaFlags, exactly as on the Keycloak path.
+	// evaluates mfaFlags.
 	fid := &fakeIdentity{resolveRes: &identityv1.ResolveUserContextResponse{User: &identityv1.User{Id: "usr-42"}}}
-	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour, Backend: backendKratos, MfaEnforced: true}
-	sess := Session{AccessToken: "opaque-tok", ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", UserID: "usr-42", KeycloakSubject: "identity-1", MFAVerified: false}
+	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour, MfaEnforced: true}
+	sess := Session{AccessToken: "opaque-tok", ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", UserID: "usr-42", Subject: "identity-1", MFAVerified: false}
 	_ = h.Store.Create(context.Background(), "sid1", sess)
 
 	req := httptest.NewRequest(http.MethodPost, "/graphql", nil)
@@ -108,7 +108,7 @@ func TestLogin_KratosBackend_PasskeyStepUpUnchanged(t *testing.T) {
 	}
 	h := &Handler{
 		Store: NewMemStore(time.Hour), Identity: fid, Pending: newMemPending(), TTL: time.Hour,
-		Auth: NewKratosClient(kratos.URL, kratos.URL), Backend: backendKratos, MfaEnforced: true,
+		Auth: NewKratosClient(kratos.URL, kratos.URL), MfaEnforced: true,
 	}
 	body, _ := json.Marshal(map[string]string{"username": cfg.email, "password": cfg.goodPassword})
 	rec := httptest.NewRecorder()
@@ -148,7 +148,7 @@ func TestLogin_KratosBackend_EmailOtpStepUpUnchanged(t *testing.T) {
 	}
 	h := &Handler{
 		Store: NewMemStore(time.Hour), Identity: fid, Pending: newMemPending(), TTL: time.Hour,
-		Auth: NewKratosClient(kratos.URL, kratos.URL), Backend: backendKratos, MfaEnforced: true,
+		Auth: NewKratosClient(kratos.URL, kratos.URL), MfaEnforced: true,
 	}
 	body, _ := json.Marshal(map[string]string{"username": cfg.email, "password": cfg.goodPassword})
 	rec := httptest.NewRecorder()
@@ -159,7 +159,7 @@ func TestLogin_KratosBackend_EmailOtpStepUpUnchanged(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &loginOut)
 
 	// This fake's enrolled factors are ["totp"] only (email-OTP login is
-	// exercised end-to-end, Keycloak-backend, by the
+	// exercised end-to-end by the
 	// TestLogin_EmailOnlyEnrolled_* tests in mfa_test.go). Append email onto
 	// the already-Kratos-parked record, exactly as an enrolled user's pending
 	// record would look coming out of the separate email-bootstrap flow, so

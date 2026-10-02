@@ -23,7 +23,7 @@ func postReset(h http.HandlerFunc, path string, body any) *httptest.ResponseReco
 // password; the gateway never runs a Kratos recovery flow.
 func TestReset_KratosBackend_UsesIdentityResetCodes(t *testing.T) {
 	fid := &fakeIdentity{confirmResetOk: true}
-	h := &Handler{Identity: fid, Backend: backendKratos}
+	h := &Handler{Identity: fid}
 
 	if rec := postReset(h.ResetRequest, "/auth/reset/request", map[string]string{"email": "ada@example.org"}); rec.Code != http.StatusOK {
 		t.Fatalf("request: status=%d body=%s", rec.Code, rec.Body)
@@ -42,7 +42,7 @@ func TestReset_KratosBackend_UsesIdentityResetCodes(t *testing.T) {
 }
 
 func TestReset_KratosBackend_WrongCodeIsInvalid(t *testing.T) {
-	h := &Handler{Identity: &fakeIdentity{confirmResetOk: false}, Backend: backendKratos}
+	h := &Handler{Identity: &fakeIdentity{confirmResetOk: false}}
 	rec := postReset(h.ResetConfirm, "/auth/reset/confirm", map[string]string{"email": "ada@example.org", "code": "000000", "newPassword": "a-long-new-password"})
 	var out map[string]string
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)

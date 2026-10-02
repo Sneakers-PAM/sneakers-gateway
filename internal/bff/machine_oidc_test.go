@@ -32,8 +32,8 @@ const (
 )
 
 // newOidcTestVerifier mirrors newTestVerifier (jwks_test.go) but with an
-// empty clientID, matching main.go's Hydra wiring: "the azp check is
-// Keycloak-specific" — Hydra client-credentials tokens carry no azp.
+// empty clientID, matching main.go's Hydra wiring: Hydra client-credentials
+// tokens carry no azp.
 func newOidcTestVerifier(jwksURL string) *Verifier {
 	return NewVerifier(jwksURL, oidcTestIssuer, oidcTestAudience, "", time.Minute, 30*time.Second)
 }

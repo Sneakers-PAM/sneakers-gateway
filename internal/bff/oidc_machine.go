@@ -48,8 +48,7 @@ func (s saTokenVerifier) verify(ctx context.Context, token string) (string, []st
 }
 
 // oidcVerifier resolves a Hydra-issued OIDC/OAuth2 JWT: jwt.Verify checks the
-// token's signature, issuer and audience (bff.Verifier, the same JWKS
-// machinery the Keycloak human-login path uses); the verified `sub` is then
+// token's signature, issuer and audience (bff.Verifier); the verified `sub` is then
 // the OAuth2 client_id, resolved against issuer via
 // identity.ResolveServiceAccountByOidc. Fails closed on a verify error, an
 // identity error, or valid=false — indistinguishably, like saTokenVerifier.

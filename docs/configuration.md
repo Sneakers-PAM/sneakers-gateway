@@ -40,23 +40,17 @@ The session lifetime isn't an environment variable: it's the vault security sett
 
 ## Password backend (`AUTH_MODE=real`)
 
+Sign-in uses Ory: Ory Kratos for accounts and the password step, Ory Polis for SAML SSO (below)
+and Ory Hydra for machine OAuth (below).
+
 | Variable | Default | Meaning |
 |---|---|---|
-| `AUTH_BACKEND` | `keycloak` | `keycloak` or `kratos`. Any other value behaves as `keycloak`. |
-| `KEYCLOAK_URL` | `http://localhost:8080` | Keycloak base URL. |
-| `KEYCLOAK_REALM` | `sneakers` | The realm. |
-| `KEYCLOAK_CLIENT_ID` | `sneakers-gateway` | The confidential client the gateway logs in with. |
-| `KEYCLOAK_CLIENT_SECRET` | `dev-gateway-secret` | Dev default: set it. |
-| `KEYCLOAK_JWKS_URL` | `<realm>/protocol/openid-connect/certs` | Where access-token signing keys come from. |
-| `KEYCLOAK_ISSUER` | `<realm>` | The expected `iss`. |
-| `KEYCLOAK_AUDIENCE` | the client id | The expected `aud` (or `azp`). |
-| `JWT_LEEWAY_SECONDS` | `30` | Clock leeway for token times, for Keycloak and Hydra tokens. |
-| `KRATOS_PUBLIC_URL` | `http://sneakers-kratos:4433` | Ory Kratos public API, with `AUTH_BACKEND=kratos`. |
+| `KRATOS_PUBLIC_URL` | `http://sneakers-kratos:4433` | Ory Kratos public API. |
 | `KRATOS_ADMIN_URL` | `http://sneakers-kratos:4434` | Ory Kratos admin API, for password reset. |
+| `AUTH_BACKEND` | `kratos` | Optional. `kratos` is the only backend; any other value stops the gateway at start. |
+| `JWT_LEEWAY_SECONDS` | `30` | Clock leeway for Ory Hydra token times. |
 
-`<realm>` is `KEYCLOAK_URL` + `/realms/` + `KEYCLOAK_REALM`.
-
-## Single sign-on (Polis)
+## Single sign-on (Ory Polis)
 
 SSO is off unless `POLIS_PUBLIC_URL` is set. Setup's SSO provisioning is off unless
 `POLIS_ADMIN_URL` is set.

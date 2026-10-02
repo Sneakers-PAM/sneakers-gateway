@@ -27,7 +27,7 @@ func TestLogin_DisabledUserGetsNoSession(t *testing.T) {
 	var submitted string
 	kratos := identifierKratos(t, "ada@example.org", "pw", &submitted)
 	fid := &fakeIdentity{adoptUser: &identityv1.User{Id: "usr-ada", DisabledAtUnix: 1790000000}}
-	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour, Auth: NewKratosClient(kratos.URL, kratos.URL), Backend: backendKratos}
+	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour, Auth: NewKratosClient(kratos.URL, kratos.URL)}
 
 	rec := postLogin(h, "ada@example.org", "pw")
 	if rec.Code != http.StatusForbidden || hasSessionCookie(rec) {
@@ -44,8 +44,8 @@ func TestSessionActor_DisabledUserIsSignedOutOnTheNextRequest(t *testing.T) {
 	fid := &fakeIdentity{resolveRes: &identityv1.ResolveUserContextResponse{
 		User: &identityv1.User{Id: "usr-ada", DisabledAtUnix: 1790000000},
 	}}
-	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour, Backend: backendKratos}
-	sess := Session{AccessToken: "opaque", ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", UserID: "usr-ada", KeycloakSubject: "kid-ada", MFAVerified: true}
+	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour}
+	sess := Session{AccessToken: "opaque", ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", UserID: "usr-ada", Subject: "kid-ada", MFAVerified: true}
 	_ = h.Store.Create(context.Background(), "sid1", sess)
 
 	ran := false

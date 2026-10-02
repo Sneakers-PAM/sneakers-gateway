@@ -14,7 +14,6 @@ import (
 	"time"
 
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
-	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc"
 )
 
@@ -82,9 +81,8 @@ type fakeIdentity struct {
 	waAssertFinishErr error
 
 	// Self-service password reset stubs: resetReqPwd records the
-	// Keycloak-path RequestPasswordReset RPC so Kratos-backend tests can
-	// assert it was NOT called; sendEmailTxReq records the Kratos-path
-	// recovery-email delivery via identity.SendTransactionalEmail.
+	// RequestPasswordReset RPC; sendEmailTxReq records the recovery-email
+	// delivery via identity.SendTransactionalEmail.
 	resetReqPwd    *identityv1.RequestPasswordResetRequest
 	sendEmailTxReq *identityv1.SendTransactionalEmailRequest
 
@@ -352,153 +350,12 @@ func (f *fakeIdentity) ResolveUserByEmail(_ context.Context, in *identityv1.Reso
 	return &identityv1.ResolveUserByEmailResponse{User: f.resolveByEmailResp}, nil
 }
 
-// loginClaims is goodClaims plus the email/name the adopt path forwards.
-func loginClaims() jwt.MapClaims {
-	c := goodClaims()
-	c["email"] = "alice@example.org"
-	c["name"] = "Alice Example"
-	return c
-}
-
-// tokenServer returns a KC token endpoint that mints the given signed access
-// token as a password-grant response.
-func tokenServer(t *testing.T, accessToken string) *httptest.Server {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"access_token": accessToken, "refresh_token": "RT", "expires_in": 300,
-		})
-	}))
-	t.Cleanup(srv.Close)
-	return srv
-}
-
-func TestLogin_AdoptsFederatedUserAndStoresSession(t *testing.T) {
-	jwks, key := jwksServer(t, "k1")
-	at := sign(t, key, "k1", loginClaims())
-	kc := tokenServer(t, at)
-	fid := &fakeIdentity{adoptUser: &identityv1.User{Id: "usr-42"}}
-	h := &Handler{
-		Store:    NewMemStore(time.Hour),
-		KC:       NewKCClient(kc.URL, kc.URL+"/logout", testClient, "s3cret"),
-		Verifier: newTestVerifier(jwks.URL),
-		Identity: fid,
-		TTL:      time.Hour,
-	}
-
-	body, _ := json.Marshal(map[string]string{"username": "alice", "password": "good"})
-	rec := httptest.NewRecorder()
-	h.Login(rec, httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body)))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", rec.Code, rec.Body)
-	}
-	// The adopt call carried the verified subject + token email/name.
-	if fid.adoptReq == nil || fid.adoptReq.GetKeycloakSubject() != "kc-abc-123" ||
-		fid.adoptReq.GetEmail() != "alice@example.org" || fid.adoptReq.GetName() != "Alice Example" {
-		t.Fatalf("adopt request wrong: %+v", fid.adoptReq)
-	}
-	// Session carries the identity user id + subject, not the raw KC username.
-	var sid string
-	for _, c := range rec.Result().Cookies() {
-		if c.Name == CookieName {
-			sid = c.Value
-		}
-	}
-	if sid == "" {
-		t.Fatal("no session cookie")
-	}
-	sess, ok, _ := h.Store.Get(context.Background(), sid)
-	if !ok || sess.UserID != "usr-42" || sess.KeycloakSubject != "kc-abc-123" {
-		t.Fatalf("session not stored with identity id/subject: %+v ok=%v", sess, ok)
-	}
-}
-
-// kcTokenServerCheckingPassword mimics Keycloak's password-grant endpoint
-// closely enough to exercise both of grant()'s branches: it 400s (->
-// ErrInvalidCredentials, exactly like Keycloak's own invalid_grant response)
-// for any password other than goodPassword, and otherwise mints accessToken —
-// letting a single server back both the "wrong password" and "valid password,
-// bad token" cases below.
-func kcTokenServerCheckingPassword(t *testing.T, goodPassword, accessToken string) *httptest.Server {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = r.ParseForm()
-		if r.FormValue("password") != goodPassword {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"access_token": accessToken, "refresh_token": "RT", "expires_in": 300,
-		})
-	}))
-	t.Cleanup(srv.Close)
-	return srv
-}
-
-// TestLogin_KeycloakBackend_WrongPasswordVsUnverifiableToken covers the KC
-// path: a freshly-issued token that fails JWKS verification inside
-// kcVerifiedAuth.VerifyPassword must yield a DISTINCT 401 {"error":
-// "token_verify"}, separate from {"error": "invalid_credentials"} for a bad
-// password. Folding it into the generic ErrInvalidCredentials sentinel would
-// make a JWKS/issuer misconfig indistinguishable from a wrong password. This
-// proves both outcomes are distinct.
-func TestLogin_KeycloakBackend_WrongPasswordVsUnverifiableToken(t *testing.T) {
-	t.Run("wrong password is invalid_credentials", func(t *testing.T) {
-		jwks, key := jwksServer(t, "k1")
-		at := sign(t, key, "k1", loginClaims())
-		kc := kcTokenServerCheckingPassword(t, "good", at)
-		h := &Handler{
-			Store: NewMemStore(time.Hour), KC: NewKCClient(kc.URL, kc.URL+"/logout", testClient, "s3cret"),
-			Verifier: newTestVerifier(jwks.URL), Identity: &fakeIdentity{}, TTL: time.Hour,
-		}
-
-		body, _ := json.Marshal(map[string]string{"username": "alice", "password": "wrong"})
-		rec := httptest.NewRecorder()
-		h.Login(rec, httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body)))
-
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d body=%s", rec.Code, rec.Body)
-		}
-		var out map[string]string
-		_ = json.Unmarshal(rec.Body.Bytes(), &out)
-		if out["error"] != "invalid_credentials" {
-			t.Fatalf("expected error=invalid_credentials, got %+v", out)
-		}
-	})
-
-	t.Run("valid password but unverifiable token is token_verify, not invalid_credentials", func(t *testing.T) {
-		jwks, _ := jwksServer(t, "k1")         // JWKS serves a DIFFERENT key than...
-		_, otherKey := jwksServer(t, "unused") // ...the one that signs this token
-		at := sign(t, otherKey, "k1", loginClaims())
-		kc := kcTokenServerCheckingPassword(t, "good", at)
-		h := &Handler{
-			Store: NewMemStore(time.Hour), KC: NewKCClient(kc.URL, kc.URL+"/logout", testClient, "s3cret"),
-			Verifier: newTestVerifier(jwks.URL), Identity: &fakeIdentity{}, TTL: time.Hour,
-		}
-
-		body, _ := json.Marshal(map[string]string{"username": "alice", "password": "good"})
-		rec := httptest.NewRecorder()
-		h.Login(rec, httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body)))
-
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d body=%s", rec.Code, rec.Body)
-		}
-		var out map[string]string
-		_ = json.Unmarshal(rec.Body.Bytes(), &out)
-		if out["error"] != "token_verify" {
-			t.Fatalf("expected error=token_verify (distinct from invalid_credentials), got %+v", out)
-		}
-	})
-}
-
 func TestLogin_IdentityUnreachable_FailsClosed(t *testing.T) {
-	jwks, key := jwksServer(t, "k1")
-	kc := tokenServer(t, sign(t, key, "k1", loginClaims()))
+	kratos := newKratosLoginServer(t, defaultKratosLoginConfig())
 	fid := &fakeIdentity{adoptErr: errors.New("identity down")}
 	h := &Handler{
-		Store: NewMemStore(time.Hour), KC: NewKCClient(kc.URL, kc.URL+"/logout", testClient, "s3cret"),
-		Verifier: newTestVerifier(jwks.URL), Identity: fid, TTL: time.Hour,
+		Store: NewMemStore(time.Hour), Auth: NewKratosClient(kratos.URL, kratos.URL),
+		Identity: fid, TTL: time.Hour,
 	}
 	body, _ := json.Marshal(map[string]string{"username": "alice", "password": "good"})
 	rec := httptest.NewRecorder()
@@ -513,16 +370,15 @@ func TestLogin_IdentityUnreachable_FailsClosed(t *testing.T) {
 }
 
 func TestSessionActor_ResolvesIdentityActorContext(t *testing.T) {
-	jwks, key := jwksServer(t, "k1")
-	at := sign(t, key, "k1", loginClaims())
+	at := "opaque-session-token"
 	fid := &fakeIdentity{resolveRes: &identityv1.ResolveUserContextResponse{
 		User:       &identityv1.User{Id: "usr-42", IsRoot: false},
 		Roles:      []string{"user", "site-admin"},
 		GroupNames: []string{"Platform Team", "example-group"},
 	}}
-	h := &Handler{Store: NewMemStore(time.Hour), Verifier: newTestVerifier(jwks.URL), Identity: fid, TTL: time.Hour}
+	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour}
 
-	sess := Session{AccessToken: at, ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", UserID: "usr-42", KeycloakSubject: "kc-abc-123"}
+	sess := Session{AccessToken: at, ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", UserID: "usr-42", Subject: "kc-abc-123"}
 	_ = h.Store.Create(context.Background(), "sid1", sess)
 
 	ran := false
@@ -536,7 +392,7 @@ func TestSessionActor_ResolvesIdentityActorContext(t *testing.T) {
 	if rec.Code != http.StatusOK || !ran {
 		t.Fatalf("expected authed pass-through 200, got %d ran=%v body=%s", rec.Code, ran, rec.Body)
 	}
-	if fid.resolveReq == nil || fid.resolveReq.GetKeycloakSubject() != "kc-abc-123" {
+	if fid.resolveReq == nil || fid.resolveReq.GetSubject() != "kc-abc-123" {
 		t.Fatalf("ResolveUserContext not called with session subject: %+v", fid.resolveReq)
 	}
 }
@@ -570,11 +426,10 @@ func TestActorContext_FailsClosed(t *testing.T) {
 }
 
 func TestSessionActor_FailsClosedOnIdentityError(t *testing.T) {
-	jwks, key := jwksServer(t, "k1")
-	at := sign(t, key, "k1", loginClaims())
+	at := "opaque-session-token"
 	fid := &fakeIdentity{resolveErr: errors.New("identity down")}
-	h := &Handler{Store: NewMemStore(time.Hour), Verifier: newTestVerifier(jwks.URL), Identity: fid, TTL: time.Hour}
-	_ = h.Store.Create(context.Background(), "sid1", Session{AccessToken: at, ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", KeycloakSubject: "kc-abc-123"})
+	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour}
+	_ = h.Store.Create(context.Background(), "sid1", Session{AccessToken: at, ExpiresAt: time.Now().Add(time.Hour), CSRFToken: "csrf-1", Subject: "kc-abc-123"})
 
 	ran := false
 	req := httptest.NewRequest(http.MethodPost, "/graphql", nil)

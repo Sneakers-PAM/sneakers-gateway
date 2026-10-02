@@ -9,8 +9,8 @@
   act on the actor context the gateway sends, and the gateway talks to them over plaintext gRPC.
   Let only the gateway reach their gRPC ports (for example with a network policy), and keep those
   hops on a private network or behind a service mesh with mTLS.
-- **Set the secrets.** `KEYCLOAK_CLIENT_SECRET` has a dev default; set the real one (or use
-  `AUTH_BACKEND=kratos`). Set `POLIS_TENANT` and the other `POLIS_*` values if you use SSO.
+- **Point it at Ory.** Set `KRATOS_PUBLIC_URL` and `KRATOS_ADMIN_URL` for Ory Kratos, and
+  `POLIS_TENANT` and the other `POLIS_*` values if you use Ory Polis SSO.
 - **`SETUP_TOKEN` is logged at start** so the first admin can be created. Set it for the first
   run only, then remove it: with it unset, `/setup/bootstrap` and `/setup/seed` answer 503.
 - **Serve it over HTTPS** behind a reverse proxy that passes the original `Host` (or
@@ -24,6 +24,7 @@
 At start the gateway:
 
 1. reads its configuration from the environment ([configuration.md](configuration.md));
+   `AUTH_BACKEND` set to anything but `kratos` stops it;
 2. checks the Hydra settings: `HYDRA_ENABLED` with no `HYDRA_ISSUER` stops it;
 3. starts OpenTelemetry export to `OTEL_EXPORTER_OTLP_ENDPOINT`;
 4. sets up the gRPC clients for the six backends; they connect lazily, on the first call;

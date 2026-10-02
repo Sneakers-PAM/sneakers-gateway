@@ -65,7 +65,7 @@ cookie and the CSRF header.
 | `/auth/logout` | End the session. |
 | `/auth/reset/request`, `/auth/reset/confirm` | Self-service password reset (unauthenticated). |
 | `/auth/verify/request`, `/auth/verify/confirm` | Email verification (unauthenticated). |
-| `/auth/sso/login` (`GET`), `/auth/sso/callback` (`GET`) | SAML single sign-on through Polis, when configured. |
+| `/auth/sso/login` (`GET`), `/auth/sso/callback` (`GET`) | SAML single sign-on through Ory Polis, when configured. |
 
 The cookies are described in [cookies.md](cookies.md).
 

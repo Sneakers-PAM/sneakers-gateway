@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -162,51 +163,40 @@ func (p *sessionTTLProvider) refresh(ctx context.Context) (time.Duration, error)
 	return ttl, nil
 }
 
-// newRealAuthHandler builds the AUTH_MODE=real BFF: Keycloak client, JWKS
-// verifier (signature + iss + aud/azp + leeway), Redis-backed sessions, and the
+// checkAuthBackend refuses any AUTH_BACKEND other than kratos (or unset), so a
+// leftover setting fails at start instead of being ignored.
+func checkAuthBackend(v string) error {
+	switch v {
+	case "", "kratos":
+		return nil
+	case "keycloak":
+		return errors.New("AUTH_BACKEND=keycloak: Keycloak is not supported; Sneakers signs in with Ory Kratos (set AUTH_BACKEND=kratos or leave it unset)")
+	default:
+		return fmt.Errorf("AUTH_BACKEND=%q is not a known backend; the only backend is kratos", v)
+	}
+}
+
+// newRealAuthHandler builds the AUTH_MODE=real BFF: the Ory Kratos password
+// backend, Redis-backed sessions, the optional Ory Polis SSO leg, and the
 // identity client used to adopt/provision the user at login and resolve the
 // per-request ActorContext (roles + group names). ttlFn returns the current,
 // already-clamped session lifetime (admin-configured via vault SecuritySettings)
 // and is evaluated on every session write and cookie refresh, so the store
 // expiry and the sliding renewal always track the live setting.
 func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityServiceClient, ttlFn func() time.Duration, secure bool) (*bff.Handler, error) {
-	kcBase := env("KEYCLOAK_URL", "http://localhost:8080")
-	realmBase := kcBase + "/realms/" + env("KEYCLOAK_REALM", "sneakers")
-	clientID := env("KEYCLOAK_CLIENT_ID", "sneakers-gateway")
-	kc := bff.NewKCClient(realmBase+"/protocol/openid-connect/token", realmBase+"/protocol/openid-connect/logout",
-		clientID, env("KEYCLOAK_CLIENT_SECRET", "dev-gateway-secret"))
-
-	leeway := 30 * time.Second
-	if n, err := strconv.Atoi(env("JWT_LEEWAY_SECONDS", "")); err == nil {
-		leeway = time.Duration(n) * time.Second
-	}
-	verifier := bff.NewVerifier(
-		env("KEYCLOAK_JWKS_URL", realmBase+"/protocol/openid-connect/certs"),
-		env("KEYCLOAK_ISSUER", realmBase),
-		env("KEYCLOAK_AUDIENCE", clientID),
-		clientID, 10*time.Minute, leeway)
-
 	rc, err := bff.ParseRedisURL(ctx, env("REDIS_URL", "redis://localhost:26379/0"))
 	if err != nil {
 		return nil, err
 	}
 	// pendingTTL bounds the 2-step login window: after a successful password
-	// grant the tokens are parked for at most this long awaiting the second
+	// step the session token is parked for at most this long awaiting the second
 	// factor, then the record expires (Redis TTL) and the user restarts login.
 	pendingTTL := 5 * time.Minute
 	if d, derr := time.ParseDuration(env("MFA_PENDING_TTL", "")); derr == nil {
 		pendingTTL = d
 	}
-	// AUTH_BACKEND selects the local-login password backend: "keycloak" (the
-	// default, used when unset or any other value) or "kratos" (Ory Kratos),
-	// which sets h.Auth to a *KratosClient so Login/Logout/resolveSessionActor
-	// route through it via the auth()/backendToken() seam instead of
-	// h.KC/h.Verifier directly.
-	backend := env("AUTH_BACKEND", "keycloak")
 	h := &bff.Handler{
 		Store:      bff.NewRedisStore(rc, ttlFn),
-		KC:         kc,
-		Verifier:   verifier,
 		Identity:   identity,
 		Pending:    bff.NewRedisPendingStore(rc, pendingTTL),
 		OAuthStore: bff.NewRedisOAuthStore(rc),
@@ -216,13 +206,7 @@ func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityService
 		// only reach the enrollment endpoints. Set MFA_ENFORCED=0/false to make MFA
 		// optional (login proceeds; the client shows a setup-recommended banner).
 		MfaEnforced: env("MFA_ENFORCED", "true") != "false" && env("MFA_ENFORCED", "true") != "0",
-		Backend:     backend,
-	}
-	if backend == "kratos" {
-		kratosPublic := env("KRATOS_PUBLIC_URL", "http://sneakers-kratos:4433")
-		kratosAdmin := env("KRATOS_ADMIN_URL", "http://sneakers-kratos:4434")
-		kc2 := bff.NewKratosClient(kratosPublic, kratosAdmin)
-		h.Auth = kc2
+		Auth:        bff.NewKratosClient(env("KRATOS_PUBLIC_URL", "http://sneakers-kratos:4433"), env("KRATOS_ADMIN_URL", "http://sneakers-kratos:4434")),
 	}
 	if pub := env("POLIS_PUBLIC_URL", ""); pub != "" {
 		h.Polis = bff.NewPolisClient(
@@ -243,6 +227,9 @@ func main() {
 	defer stop()
 
 	logger := log.New(serviceName)
+	if err := checkAuthBackend(os.Getenv("AUTH_BACKEND")); err != nil {
+		logger.Fatal().Err(err).Msg("auth backend")
+	}
 	// reqLog is the neutral logger for request-scoped lines: its Ctx method
 	// adds the active span's trace and span ids.
 	reqLog := log.NewLogger(serviceName)
@@ -329,7 +316,7 @@ func main() {
 
 	// AUTH_MODE selects how the acting user is established:
 	//   noauth (DEFAULT): the X-Dev-User header (dev personas).
-	//   real: real Keycloak login via the BFF; the acting user comes from the
+	//   real: Ory Kratos login via the BFF; the acting user comes from the
 	//         authenticated session cookie, and /graphql fails closed (401) with
 	//         no valid session — never a silent fallback.
 	authMode := env("AUTH_MODE", "noauth")
@@ -431,7 +418,7 @@ func main() {
 			},
 		})
 		mux.Handle("/graphql", cors(graphqlWithWS(gql, bffH.SessionActor(gql))))
-		logger.Info().Str("auth_backend", env("AUTH_BACKEND", "keycloak")).Msg("auth mode: real (BFF, Redis sessions, 2-step MFA: totp+email+passkey; WS subscriptions cookie-authed)")
+		logger.Info().Str("auth_backend", "kratos").Msg("auth mode: real (BFF, Redis sessions, 2-step MFA: totp+email+passkey; WS subscriptions cookie-authed)")
 	} else {
 		// Subscriptions (WS) in no-auth dev: a browser can't set the X-Dev-User
 		// header on a WS upgrade, so the persona rides the connection_init payload

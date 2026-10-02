@@ -103,9 +103,9 @@ func (h *Handler) SSOCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := user.GetId()
-	subject := user.GetKeycloakSubject()
+	subject := user.GetSubject()
 	if subject == "" {
-		// A pre-provisioned SSO-only user may have no Keycloak/Kratos subject;
+		// A pre-provisioned SSO-only user may have no Kratos subject;
 		// the platform user id is the stable actor key.
 		subject = userID
 	}
@@ -121,7 +121,7 @@ func (h *Handler) SSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.issueSessionRedirect(w, r, Session{
-		UserID: userID, KeycloakSubject: subject,
+		UserID: userID, Subject: subject,
 		ExpiresAt: time.Now().Add(h.sessionTTL()),
 	})
 }
@@ -204,7 +204,7 @@ func (h *Handler) beginStepUpRedirect(w http.ResponseWriter, r *http.Request, us
 	// defaults to 0 and the promoted session is minted already-expired — a
 	// dead-on-arrival session killed by resolveSessionActor on the very next
 	// request. Seed it with the session TTL instead.
-	p := Pending{UserID: userID, KeycloakSubject: subject, Factors: kinds, ExpiresIn: int(h.sessionTTL().Seconds())}
+	p := Pending{UserID: userID, Subject: subject, Factors: kinds, ExpiresIn: int(h.sessionTTL().Seconds())}
 	if err := h.Pending.Create(r.Context(), pendingID, p); err != nil {
 		h.ssoReject(w, r, apperr.Coded(codePolisState, err), "state")
 		return

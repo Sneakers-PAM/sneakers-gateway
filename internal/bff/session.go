@@ -9,19 +9,25 @@ import (
 	"time"
 )
 
+// Tokens is a backend credential and its lifetime in seconds: a Kratos
+// session_token parked for the 2-step login, or a Polis access token.
+type Tokens struct {
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+}
+
 // Session is the server-side state behind an opaque session cookie: the
-// Keycloak tokens, the derived app actor, a CSRF token, and expiry. JSON-tagged
-// so it round-trips through the Redis store.
+// Kratos session_token, the derived app actor, a CSRF token, and expiry.
+// JSON-tagged so it round-trips through the Redis store.
 type Session struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	ExpiresAt    time.Time `json:"expires_at"`
-	CSRFToken    string    `json:"csrf_token"`
-	UserID       string    `json:"user_id"` // the sneakers identity user id (adopted/provisioned at login)
-	// KeycloakSubject is the token `sub`; the request gate re-resolves it to the
-	// live identity ActorContext (roles + group names) on every request so
-	// membership/role changes take effect without re-login.
-	KeycloakSubject string `json:"keycloak_subject"`
+	AccessToken string    `json:"access_token"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	CSRFToken   string    `json:"csrf_token"`
+	UserID      string    `json:"user_id"` // the sneakers identity user id (adopted/provisioned at login)
+	// Subject is the login subject (the Kratos identity id); the request gate
+	// re-resolves it to the live identity ActorContext (roles + group names) on
+	// every request so membership/role changes take effect without re-login.
+	Subject string `json:"subject"`
 	// MFAVerified records whether the session was issued after a verified second
 	// factor. Server-side marker only; set by the 2-step MFA flow.
 	MFAVerified bool `json:"mfa_verified"`

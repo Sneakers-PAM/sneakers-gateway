@@ -3,10 +3,10 @@
 
 package bff
 
-// Real Keycloak access-token verification for AUTH_MODE=real, kept
-// self-contained here (no identity-service round-trip). The actor is trusted
-// only after the token's signature, issuer, audience and time claims are
-// cryptographically verified.
+// JWT verification against a cached JWKS, used by the machine path for Ory
+// Hydra client-credentials tokens and kept self-contained here (no
+// identity-service round-trip). A token is trusted only after its signature,
+// issuer, audience and time claims are cryptographically verified.
 //
 // Besides the signature and time claims this checks `iss` and `aud`/`azp`
 // with a configurable clock-skew leeway.
@@ -36,7 +36,7 @@ type VerifiedClaims struct {
 	Username string // preferred_username (falls back to sub)
 	Email    string // email (used to adopt a pre-created local user by match)
 	Name     string // name / full name (falls back to preferred_username)
-	SID      string // Keycloak session id (sid), for session recording
+	SID      string // session id (sid), for session recording
 	// Scope is the OAuth2 granted scope: for a Hydra
 	// client-credentials token this is the client's granted scope,
 	// normalised to a space-delimited string exactly like an opaque
@@ -45,24 +45,22 @@ type VerifiedClaims struct {
 	// as either the standard OAuth2 `scope` claim (a space-delimited
 	// string) or, with JWTScopeFieldList (the v2.x default), as `scp` (a
 	// JSON array of strings) — scopeClaim below accepts either shape.
-	// Absent/empty for tokens that don't carry it (e.g. Keycloak human
-	// tokens); harmless there, since the human path never reads it.
+	// Absent/empty for tokens that don't carry it.
 	Scope string
 }
 
-// Verifier validates Keycloak JWTs against a cached JWKS.
+// Verifier validates JWTs against a cached JWKS.
 type Verifier struct {
 	cache    *jwksCache
 	issuer   string // expected iss (empty = skip)
 	audience string // expected aud entry (matched against aud[] or azp)
-	clientID string // expected azp (Keycloak sets azp = the client id)
+	clientID string // expected azp (empty = audience only)
 	leeway   time.Duration
 }
 
-// NewVerifier builds a Verifier. jwksURL is the realm certs endpoint; issuer is
-// the expected token issuer; audience/clientID gate the audience (a token is
-// accepted when its aud contains `audience` OR its azp equals `clientID` —
-// Keycloak's default aud is "account" with azp = the client).
+// NewVerifier builds a Verifier. jwksURL is the issuer's JWKS endpoint; issuer
+// is the expected token issuer; audience/clientID gate the audience (a token is
+// accepted when its aud contains `audience` OR its azp equals `clientID`).
 func NewVerifier(jwksURL, issuer, audience, clientID string, ttl, leeway time.Duration) *Verifier {
 	return &Verifier{
 		cache:    newJWKSCache(jwksURL, ttl),
@@ -170,9 +168,7 @@ func (v *Verifier) Verify(raw string) (VerifiedClaims, error) {
 }
 
 // checkAudience accepts the token when its azp equals the expected client id OR
-// its aud contains the expected audience. Keycloak's default access-token aud
-// is "account" with azp set to the authorized client, so azp is the reliable
-// binding to this gateway's confidential client.
+// its aud contains the expected audience.
 func (v *Verifier) checkAudience(mc jwt.MapClaims) error {
 	if v.audience == "" && v.clientID == "" {
 		return nil
@@ -207,7 +203,7 @@ func audienceList(v any) []string {
 
 // scopeClaim extracts the granted-scope claim in whichever shape the issuer
 // used, normalising to the single space-delimited string that is forwarded
-// to identity.ResolveServiceAccountByOidc: Keycloak/plain-OAuth2 issuers send `scope`
+// to identity.ResolveServiceAccountByOidc: plain OAuth2 issuers send `scope`
 // as a space-delimited string; Hydra (fosite) with JWTScopeFieldList — the
 // v2.x default — sends `scp` as a JSON array of strings instead. Mirrors
 // audienceList's shape tolerance above. Attacker-influenced input: a missing

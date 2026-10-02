@@ -66,7 +66,7 @@ func TestLogin_KratosBackend_UsernameIsResolvedToTheUsersEmail(t *testing.T) {
 		adoptUser:   &identityv1.User{Id: "usr-ada"},
 		searchUsers: []*identityv1.User{{Id: "usr-adam", Username: "adam", Email: "adam@example.org"}, {Id: "usr-ada", Username: "ada", Email: "ada@example.org"}},
 	}
-	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour, Auth: NewKratosClient(kratos.URL, kratos.URL), Backend: backendKratos}
+	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour, Auth: NewKratosClient(kratos.URL, kratos.URL)}
 
 	rec := postLogin(h, "Ada", "pw")
 	if rec.Code != http.StatusOK || submitted != "ada@example.org" {
@@ -78,7 +78,7 @@ func TestLogin_KratosBackend_EmailIsSubmittedAsIs(t *testing.T) {
 	var submitted string
 	kratos := identifierKratos(t, "ada@example.org", "pw", &submitted)
 	fid := &fakeIdentity{adoptUser: &identityv1.User{Id: "usr-ada"}}
-	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour, Auth: NewKratosClient(kratos.URL, kratos.URL), Backend: backendKratos}
+	h := &Handler{Store: NewMemStore(time.Hour), Identity: fid, TTL: time.Hour, Auth: NewKratosClient(kratos.URL, kratos.URL)}
 
 	if rec := postLogin(h, "ada@example.org", "pw"); rec.Code != http.StatusOK || submitted != "ada@example.org" {
 		t.Fatalf("status=%d submitted=%q", rec.Code, submitted)

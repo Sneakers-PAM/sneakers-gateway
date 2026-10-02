@@ -14,7 +14,7 @@ import (
 
 // Self-service password reset, public and unauthenticated. On every backend
 // identity mints, emails and verifies its own reset code and writes the new
-// password to the active directory (lldap, or the user's Kratos identity). A
+// password to the user's Ory Kratos identity. A
 // Kratos recovery flow is never used: its codes are bound to a browser flow a
 // headless gateway cannot complete.
 

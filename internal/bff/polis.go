@@ -99,14 +99,13 @@ func (c *PolisClient) CodeExchange(ctx context.Context, code, redirectURI string
 		return Tokens{}, apperr.Coded(codePolisCodeExchange, fmt.Errorf("polis: token status %d: %s", res.StatusCode, body))
 	}
 	var out struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int    `json:"expires_in"`
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&out); err != nil || out.AccessToken == "" {
 		return Tokens{}, apperr.Coded(codePolisCodeExchange, fmt.Errorf("polis: decode token: %w", err))
 	}
-	return Tokens{AccessToken: out.AccessToken, RefreshToken: out.RefreshToken, ExpiresIn: out.ExpiresIn}, nil
+	return Tokens{AccessToken: out.AccessToken, ExpiresIn: out.ExpiresIn}, nil
 }
 
 // UserInfo fetches the federated profile. A missing email is fatal (2217): the

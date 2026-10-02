@@ -22,13 +22,13 @@ import (
 // and an in-memory pending store.
 func mfaLoginHandler(t *testing.T, fid *fakeIdentity) (*Handler, *memPending) {
 	t.Helper()
-	jwks, key := jwksServer(t, "k1")
-	kc := tokenServer(t, sign(t, key, "k1", loginClaims()))
+	cfg := defaultKratosLoginConfig()
+	cfg.identityID = "kc-abc-123"
+	kratos := newKratosLoginServer(t, cfg)
 	pend := newMemPending()
 	h := &Handler{
 		Store:    NewMemStore(time.Hour),
-		KC:       NewKCClient(kc.URL, kc.URL+"/logout", testClient, "s3cret"),
-		Verifier: newTestVerifier(jwks.URL),
+		Auth:     NewKratosClient(kratos.URL, kratos.URL),
 		Identity: fid,
 		Pending:  pend,
 		TTL:      time.Hour,
@@ -76,7 +76,7 @@ func TestLogin_EnrolledUser_RequiresMFA(t *testing.T) {
 		t.Fatalf("expected mfaRequired + pendingId, got %+v", out)
 	}
 	p, ok, _ := pend.Get(context.Background(), out.PendingID)
-	if !ok || p.UserID != "usr-42" || p.KeycloakSubject != "kc-abc-123" || p.AccessToken == "" {
+	if !ok || p.UserID != "usr-42" || p.Subject != "kc-abc-123" || p.AccessToken == "" {
 		t.Fatalf("pending record not parked with tokens/user/subject: %+v ok=%v", p, ok)
 	}
 }
@@ -247,7 +247,7 @@ func TestVerifyOtp_Success(t *testing.T) {
 	fid := &fakeIdentity{verifyOk: true}
 	h, pend := mfaLoginHandler(t, fid)
 	_ = pend.Create(context.Background(), "pend-1", Pending{
-		AccessToken: "AT", RefreshToken: "RT", ExpiresIn: 300, UserID: "usr-42", KeycloakSubject: "kc-abc-123",
+		AccessToken: "AT", ExpiresIn: 300, UserID: "usr-42", Subject: "kc-abc-123",
 	})
 
 	rec := postJSON(h.VerifyOtp, "/auth/verify-otp", map[string]string{"pendingId": "pend-1", "code": "123456"})
@@ -262,7 +262,7 @@ func TestVerifyOtp_Success(t *testing.T) {
 		t.Fatal("expected a session cookie after verified factor")
 	}
 	sess, ok, _ := h.Store.Get(context.Background(), sid)
-	if !ok || sess.UserID != "usr-42" || sess.KeycloakSubject != "kc-abc-123" || !sess.MFAVerified {
+	if !ok || sess.UserID != "usr-42" || sess.Subject != "kc-abc-123" || !sess.MFAVerified {
 		t.Fatalf("session not MFA-verified/complete: %+v ok=%v", sess, ok)
 	}
 	if _, ok, _ := pend.Get(context.Background(), "pend-1"); ok {
@@ -473,8 +473,8 @@ func TestVerifyOtp_EmailKind_Success(t *testing.T) {
 	fid := &fakeIdentity{verifyEmailOk: true}
 	h, pend := mfaLoginHandler(t, fid)
 	_ = pend.Create(context.Background(), "pend-1", Pending{
-		AccessToken: "AT", RefreshToken: "RT", ExpiresIn: 300, UserID: "usr-42",
-		KeycloakSubject: "kc-abc-123", Factors: []string{"totp", "email"},
+		AccessToken: "AT", ExpiresIn: 300, UserID: "usr-42",
+		Subject: "kc-abc-123", Factors: []string{"totp", "email"},
 	})
 
 	rec := postJSON(h.VerifyOtp, "/auth/verify-otp", map[string]string{"pendingId": "pend-1", "code": "123456", "kind": "email"})
@@ -623,14 +623,14 @@ func TestMfaRemove_CSRFRequired(t *testing.T) {
 	}
 }
 
-// adminSession creates an authed session (with a Keycloak subject, needed for
+// adminSession creates an authed session (with a login subject, needed for
 // the admin path's ResolveUserContext) for the given acting user id.
 func adminSession(t *testing.T, h *Handler, userID, subject string) (string, string) {
 	t.Helper()
 	csrf := "csrf-admin"
 	sid := "sid-admin"
 	_ = h.Store.Create(context.Background(), sid, Session{
-		UserID: userID, KeycloakSubject: subject, CSRFToken: csrf, ExpiresAt: time.Now().Add(time.Hour),
+		UserID: userID, Subject: subject, CSRFToken: csrf, ExpiresAt: time.Now().Add(time.Hour),
 	})
 	return sid, csrf
 }
