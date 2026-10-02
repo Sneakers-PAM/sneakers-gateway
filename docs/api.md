@@ -18,9 +18,29 @@ authenticates, and where to read more.
 - Every call runs as the caller: the gateway passes an actor context (user id, roles, groups, and
   for machine callers the principal kind and token id) to the backend service, and the service
   makes the authorization decision and writes the audit record.
-- Errors carry the backend's gRPC status text, for example
-  `rpc error: code = PermissionDenied desc = ...`. There is no `extensions.code` yet, so match on
-  the gRPC code in that text, never on the description after `desc =`.
+- Errors from a backend carry its gRPC status text as the message, for example
+  `rpc error: code = PermissionDenied desc = ...`, and stable `extensions` on both endpoints:
+  - `code`: the canonical gRPC code name, such as `PERMISSION_DENIED` or `FAILED_PRECONDITION`;
+  - `reason`: present when the service gave a stable reason for the refusal, such as
+    `CHECKOUT_LEASE_HELD` (see "Refusal reasons" below);
+  - `metadata`: present when the reason carries details, such as `holder_user_id`.
+
+  Match on `code` and `reason`, never on the message text after `desc =`.
+
+### Refusal reasons
+
+The backends attach a `google.rpc.ErrorInfo` (domain `sneakers.vault` or `sneakers.workflow`) to
+the refusals a client should explain; the gateway passes its reason and metadata through
+unchanged, and drops details from any other domain. The check-out and check-in reasons are:
+
+| Mutation | `code` | `reason` | `metadata` | Meaning |
+|---|---|---|---|---|
+| `checkoutSecret` | `PERMISSION_DENIED` | `CHECKOUT_NO_ACCESS` | | The caller can't read the secret. |
+| `checkoutSecret` | `FAILED_PRECONDITION` | `CHECKOUT_TYPE_DISABLED` | | The secret's type doesn't allow check-out. |
+| `checkoutSecret` | `FAILED_PRECONDITION` | `CHECKOUT_LEASE_HELD` | `holder_user_id` | Someone already holds a lease on the secret. |
+| `checkinSecret` | `PERMISSION_DENIED` | `CHECKIN_NOT_HOLDER` | | Only the lease holder can check in. |
+
+The workflow service owns these reasons; a refusal without one still has its `code`.
 
 The human schema has about 45 queries (users and groups, folders, secrets and their rulesets,
 access requests and approvals, audit, notifications, tokens), about 70 mutations, and one
@@ -108,6 +128,21 @@ headers: the exact `Origin` is echoed with credentials allowed, and their `OPTIO
 answered for `Content-Type`, `X-Dev-User`, `X-CSRF-Token` and `Authorization`. Any other origin
 gets no CORS headers, so the browser keeps the response from it, and its preflight answers 403.
 With `AUTH_MODE=noauth` and no list set, any origin is echoed, for local development.
+
+## Service-to-service authentication
+
+Every gRPC call to vault, workflow, identity, audit, notify and the SSH broker carries the
+gateway's Kubernetes workload identity: the projected service-account token named by
+`WORKLOAD_TOKEN_FILE`, sent as `authorization: Bearer <token>` and read again on every call. Each
+backend verifies it and maps the service account `<namespace>/sneakers-gateway` to the caller
+`gateway`. The backends' allow-lists (sneakers-vault's `docs/api.md`) list the gateway as
+**on behalf** for every vault method except the connector pull-API and for every workflow method:
+it's the caller that passes the signed-in user's actor context.
+
+The client side is `internal/workloadauth`, a byte-for-byte copy of the canonical package in
+sneakers-vault at `SNEAKERS_VAULT_REF`. CI runs `scripts/workloadauth-check.sh` to compare them;
+to take a new version, bump the ref and copy the vault's `internal/workloadauth/` in the same
+change.
 
 ## Calling other services
 

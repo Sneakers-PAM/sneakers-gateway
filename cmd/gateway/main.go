@@ -28,15 +28,16 @@ import (
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	workflowv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/workflow/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/bff"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/gqlerr"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/gqllog"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/machineresolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/setup"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/workloadauth"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 const serviceName = "gateway"
@@ -242,43 +243,55 @@ func main() {
 		}
 	}()
 
+	// Every backend client sends the gateway's workload token; see backendDialOptions.
+	authMode := env("AUTH_MODE", "noauth")
+	backendOpts, err := backendDialOptions(authMode, os.Getenv)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("workload identity")
+	}
+	if os.Getenv(workloadauth.EnvTokenFile) == "" {
+		logger.Warn().Msg("workload identity: " + workloadauth.EnvTokenFile + " not set, calling the backends without a token (they must run with WORKLOAD_AUTH=disabled; local development only)")
+	} else {
+		logger.Info().Msg("workload identity: sending the projected service-account token to every backend")
+	}
+
 	// gRPC client spans to the vault (otel stats handler).
-	conn, err := grpc.NewClient(vaultAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otel.GRPCClientStatsHandler()))
+	conn, err := grpc.NewClient(vaultAddr, backendOpts...)
 	if err != nil {
 		logger.Fatal().Err(err).Str("vault", vaultAddr).Msg("dial vault")
 	}
 	defer func() { _ = conn.Close() }()
 	vaultClient := vaultv1.NewVaultServiceClient(conn)
 
-	idConn, err := grpc.NewClient(identityAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otel.GRPCClientStatsHandler()))
+	idConn, err := grpc.NewClient(identityAddr, backendOpts...)
 	if err != nil {
 		logger.Fatal().Err(err).Str("identity", identityAddr).Msg("dial identity")
 	}
 	defer func() { _ = idConn.Close() }()
 	identityClient := identityv1.NewIdentityServiceClient(idConn)
 
-	wfConn, err := grpc.NewClient(workflowAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otel.GRPCClientStatsHandler()))
+	wfConn, err := grpc.NewClient(workflowAddr, backendOpts...)
 	if err != nil {
 		logger.Fatal().Err(err).Str("workflow", workflowAddr).Msg("dial workflow")
 	}
 	defer func() { _ = wfConn.Close() }()
 	workflowClient := workflowv1.NewWorkflowServiceClient(wfConn)
 
-	auditConn, err := grpc.NewClient(auditAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otel.GRPCClientStatsHandler()))
+	auditConn, err := grpc.NewClient(auditAddr, backendOpts...)
 	if err != nil {
 		logger.Fatal().Err(err).Str("audit", auditAddr).Msg("dial audit")
 	}
 	defer func() { _ = auditConn.Close() }()
 	auditClient := auditv1.NewAuditServiceClient(auditConn)
 
-	nConn, err := grpc.NewClient(notifyAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otel.GRPCClientStatsHandler()))
+	nConn, err := grpc.NewClient(notifyAddr, backendOpts...)
 	if err != nil {
 		logger.Fatal().Err(err).Str("notify", notifyAddr).Msg("dial notify")
 	}
 	defer func() { _ = nConn.Close() }()
 	notifyClient := notifyv1.NewNotifyServiceClient(nConn)
 
-	sshbrokerConn, err := grpc.NewClient(sshbrokerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithStatsHandler(otel.GRPCClientStatsHandler()))
+	sshbrokerConn, err := grpc.NewClient(sshbrokerAddr, backendOpts...)
 	if err != nil {
 		logger.Fatal().Err(err).Str("sshbroker", sshbrokerAddr).Msg("dial sshbroker")
 	}
@@ -290,6 +303,7 @@ func main() {
 	gql.AddTransport(transport.POST{})
 	gql.Use(extension.Introspection{})
 	gql.Use(gqllog.ErrorLog{Log: reqLog, Actor: resolvers.CallerID})
+	gql.SetErrorPresenter(gqlerr.Present)
 
 	// Same-origin-only WebSocket upgrader for GraphQL subscriptions. A WS upgrade
 	// can't carry the CSRF double-submit header, so cross-origin sockets are
@@ -302,7 +316,6 @@ func main() {
 	//   real: Ory Kratos login via the BFF; the acting user comes from the
 	//         authenticated session cookie, and /graphql fails closed (401) with
 	//         no valid session — never a silent fallback.
-	authMode := env("AUTH_MODE", "noauth")
 	secureCookies, err := cookieSecure(authMode, os.Getenv("COOKIE_SECURE"))
 	if err != nil {
 		logger.Fatal().Err(err).Msg("cookie config")
@@ -443,6 +456,7 @@ func main() {
 	}))
 	machineGQL.AddTransport(transport.POST{})
 	machineGQL.Use(gqllog.ErrorLog{Log: reqLog, Actor: resolvers.CallerID})
+	machineGQL.SetErrorPresenter(gqlerr.Present)
 	mux.Handle("/machine/graphql", cors(machineH.MachineActor(machineGQL)))
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
