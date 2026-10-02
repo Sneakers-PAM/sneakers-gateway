@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -117,19 +116,5 @@ func TestSessionTTLProviderFallbackOnUnavailable(t *testing.T) {
 	}
 	if got2 != 45*time.Minute || p2.get() != 45*time.Minute {
 		t.Fatalf("retained TTL = %v (cached %v), want %v", got2, p2.get(), 45*time.Minute)
-	}
-}
-
-func TestCheckAuthBackend(t *testing.T) {
-	for _, ok := range []string{"", "kratos"} {
-		if err := checkAuthBackend(ok); err != nil {
-			t.Errorf("AUTH_BACKEND=%q: unexpected err: %v", ok, err)
-		}
-	}
-	if err := checkAuthBackend("keycloak"); err == nil || !strings.Contains(err.Error(), "Keycloak is not supported") {
-		t.Errorf("AUTH_BACKEND=keycloak: err = %v, want a Keycloak is not supported error", err)
-	}
-	if err := checkAuthBackend("ldap"); err == nil {
-		t.Error("AUTH_BACKEND=ldap: want an error for an unknown backend")
 	}
 }

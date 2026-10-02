@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -163,19 +162,6 @@ func (p *sessionTTLProvider) refresh(ctx context.Context) (time.Duration, error)
 	return ttl, nil
 }
 
-// checkAuthBackend refuses any AUTH_BACKEND other than kratos (or unset), so a
-// leftover setting fails at start instead of being ignored.
-func checkAuthBackend(v string) error {
-	switch v {
-	case "", "kratos":
-		return nil
-	case "keycloak":
-		return errors.New("AUTH_BACKEND=keycloak: Keycloak is not supported; Sneakers signs in with Ory Kratos (set AUTH_BACKEND=kratos or leave it unset)")
-	default:
-		return fmt.Errorf("AUTH_BACKEND=%q is not a known backend; the only backend is kratos", v)
-	}
-}
-
 // newRealAuthHandler builds the AUTH_MODE=real BFF: the Ory Kratos password
 // backend, Redis-backed sessions, the optional Ory Polis SSO leg, and the
 // identity client used to adopt/provision the user at login and resolve the
@@ -227,9 +213,6 @@ func main() {
 	defer stop()
 
 	logger := log.New(serviceName)
-	if err := checkAuthBackend(os.Getenv("AUTH_BACKEND")); err != nil {
-		logger.Fatal().Err(err).Msg("auth backend")
-	}
 	// reqLog is the neutral logger for request-scoped lines: its Ctx method
 	// adds the active span's trace and span ids.
 	reqLog := log.NewLogger(serviceName)
@@ -418,7 +401,7 @@ func main() {
 			},
 		})
 		mux.Handle("/graphql", cors(graphqlWithWS(gql, bffH.SessionActor(gql))))
-		logger.Info().Str("auth_backend", "kratos").Msg("auth mode: real (BFF, Redis sessions, 2-step MFA: totp+email+passkey; WS subscriptions cookie-authed)")
+		logger.Info().Msg("auth mode: real (BFF, Redis sessions, 2-step MFA: totp+email+passkey; WS subscriptions cookie-authed)")
 	} else {
 		// Subscriptions (WS) in no-auth dev: a browser can't set the X-Dev-User
 		// header on a WS upgrade, so the persona rides the connection_init payload

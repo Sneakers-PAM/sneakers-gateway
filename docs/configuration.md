@@ -47,7 +47,6 @@ and Ory Hydra for machine OAuth (below).
 |---|---|---|
 | `KRATOS_PUBLIC_URL` | `http://sneakers-kratos:4433` | Ory Kratos public API. |
 | `KRATOS_ADMIN_URL` | `http://sneakers-kratos:4434` | Ory Kratos admin API, for password reset. |
-| `AUTH_BACKEND` | `kratos` | Optional. `kratos` is the only backend; any other value stops the gateway at start. |
 | `JWT_LEEWAY_SECONDS` | `30` | Clock leeway for Ory Hydra token times. |
 
 ## Single sign-on (Ory Polis)

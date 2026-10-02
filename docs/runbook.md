@@ -24,7 +24,6 @@
 At start the gateway:
 
 1. reads its configuration from the environment ([configuration.md](configuration.md));
-   `AUTH_BACKEND` set to anything but `kratos` stops it;
 2. checks the Hydra settings: `HYDRA_ENABLED` with no `HYDRA_ISSUER` stops it;
 3. starts OpenTelemetry export to `OTEL_EXPORTER_OTLP_ENDPOINT`;
 4. sets up the gRPC clients for the six backends; they connect lazily, on the first call;
