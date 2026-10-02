@@ -3,10 +3,9 @@
 
 // Ory Kratos local-login backend.
 // Kratos runs HEADLESS here: the browser never talks to it directly — the
-// gateway BFF drives the API (not browser) login flow server-to-server,
-// exactly the same shape as KCClient's Keycloak ROPC grant, and hands back
-// the same backend-agnostic AuthResult. Selected behind AUTH_BACKEND=kratos
-// (cmd/gateway/main.go); Keycloak stays the unconditional default.
+// gateway BFF drives the API (not browser) login flow server-to-server and
+// hands back an AuthResult. It is the only password backend
+// (cmd/gateway/main.go).
 package bff
 
 import (

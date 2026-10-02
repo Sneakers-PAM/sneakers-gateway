@@ -5,7 +5,7 @@ package bff
 
 // MFA second-factor orchestration for the 2-step BFF login and the authed
 // user's TOTP enrollment. The password step is Login; when the user has a
-// confirmed TOTP factor the granted Keycloak tokens are parked server-side
+// confirmed TOTP factor the Kratos session_token is parked server-side
 // under a short-lived pending id and the session cookie is only issued after
 // the identity service verifies a code.
 //
@@ -86,12 +86,11 @@ func (h *Handler) beginStepUp(w http.ResponseWriter, r *http.Request, tok Tokens
 		return
 	}
 	p := Pending{
-		AccessToken:     tok.AccessToken,
-		RefreshToken:    tok.RefreshToken,
-		ExpiresIn:       tok.ExpiresIn,
-		UserID:          userID,
-		KeycloakSubject: subject,
-		Factors:         kinds,
+		AccessToken: tok.AccessToken,
+		ExpiresIn:   tok.ExpiresIn,
+		UserID:      userID,
+		Subject:     subject,
+		Factors:     kinds,
 	}
 	if err := h.Pending.Create(r.Context(), pendingID, p); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server"})
@@ -182,13 +181,12 @@ func (h *Handler) VerifyOtp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.issueSession(w, r, Session{
-		AccessToken:     final.AccessToken,
-		RefreshToken:    final.RefreshToken,
-		ExpiresAt:       time.Now().Add(time.Duration(final.ExpiresIn) * time.Second),
-		UserID:          final.UserID,
-		KeycloakSubject: final.KeycloakSubject,
-		MFAVerified:     true,
-		Enrolled:        true, // step-up only happens for users with a confirmed factor
+		AccessToken: final.AccessToken,
+		ExpiresAt:   time.Now().Add(time.Duration(final.ExpiresIn) * time.Second),
+		UserID:      final.UserID,
+		Subject:     final.Subject,
+		MFAVerified: true,
+		Enrolled:    true, // step-up only happens for users with a confirmed factor
 	})
 }
 
@@ -398,7 +396,7 @@ func (h *Handler) MfaEmailVerify(w http.ResponseWriter, r *http.Request) {
 // MfaRemove serves POST /auth/mfa/remove for the AUTHED user: self-service
 // removal of their own TOTP factor (a lost-device reset). Mirrors MfaEnroll:
 // session cookie + CSRF required. On success it INVALIDATES the current session
-// with the same teardown as Logout — revoke the Keycloak refresh token, drop the
+// with the same teardown as Logout — revoke the Kratos session, drop the
 // server-side session, expire the cookie — so the user is kicked out and must
 // sign in again (re-hitting the mandatory enroll wall when MFA is enforced). The
 // {signedOut:true} flag tells the SPA to route to the login screen.
@@ -414,10 +412,10 @@ func (h *Handler) MfaRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Same teardown as Logout: the factor that gated this session is gone, so the
-	// session must not survive. Best-effort Keycloak revoke, then hard-drop the
+	// session must not survive. Best-effort Kratos revoke, then hard-drop the
 	// server session and expire the cookie.
-	if h.KC != nil {
-		_ = h.KC.Logout(r.Context(), sess.RefreshToken)
+	if h.Auth != nil && sess.AccessToken != "" {
+		_ = h.Auth.Logout(r.Context(), sess.AccessToken)
 	}
 	_ = h.Store.Delete(r.Context(), sid)
 	h.setCookie(w, "", -1)
@@ -426,8 +424,8 @@ func (h *Handler) MfaRemove(w http.ResponseWriter, r *http.Request) {
 
 // requireAdminSession resolves the request's session cookie and enforces that
 // the acting user is a site-admin or root — authorization resolved the same way
-// the GraphQL data plane does (ResolveUserContext against the session's Keycloak
-// subject, never a JWT claim). CSRF is enforced only for state-changing callers
+// the GraphQL data plane does (ResolveUserContext against the session's login
+// subject, never a token claim). CSRF is enforced only for state-changing callers
 // (checkCSRF). It writes the failure response itself; callers branch on ok.
 func (h *Handler) requireAdminSession(w http.ResponseWriter, r *http.Request, checkCSRF bool) bool {
 	c, err := r.Cookie(CookieName)
@@ -445,7 +443,7 @@ func (h *Handler) requireAdminSession(w http.ResponseWriter, r *http.Request, ch
 		return false
 	}
 	resolved, err := h.Identity.ResolveUserContext(r.Context(), &identityv1.ResolveUserContextRequest{
-		KeycloakSubject: sess.KeycloakSubject,
+		Subject: sess.Subject,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "identity_unreachable"})

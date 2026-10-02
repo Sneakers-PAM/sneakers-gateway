@@ -1073,8 +1073,8 @@ func (r *queryResolver) GroupMembers(ctx context.Context, groupID string) ([]*Us
 	return out, nil
 }
 
-// UserAdGroups is the resolver for the userAdGroups field: the AD group names
-// synced onto a user from Keycloak federation.
+// UserAdGroups is the resolver for the userAdGroups field: retired, always
+// empty (identity no longer syncs AD groups).
 func (r *queryResolver) UserAdGroups(ctx context.Context, userID string) ([]string, error) {
 	resp, err := r.Identity.UserAdGroups(ctx, &identityv1.UserAdGroupsRequest{UserId: userID}) //nolint:staticcheck // kept until the UI drops its AD-groups section, then the field goes too
 	if err != nil {

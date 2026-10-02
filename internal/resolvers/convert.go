@@ -21,7 +21,7 @@ func gqlUser(u *identityv1.User) *User {
 	}
 	return &User{
 		ID: u.GetId(), Name: u.GetName(), Username: u.GetUsername(), Email: u.GetEmail(),
-		Roles: roles, IsRoot: u.GetIsRoot(), KeycloakSubject: u.GetKeycloakSubject(),
+		Roles: roles, IsRoot: u.GetIsRoot(), Subject: u.GetSubject(),
 		EmailVerified: u.GetEmailVerified(),
 		Disabled:      u.GetDisabledAtUnix() != 0,
 	}

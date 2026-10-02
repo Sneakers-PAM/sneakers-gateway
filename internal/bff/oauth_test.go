@@ -40,7 +40,7 @@ func newOAuthFixture(t *testing.T) *oauthFixture {
 	fx.h = &Handler{Store: NewMemStore(time.Hour), Identity: fx.fid, TTL: time.Hour}
 	fx.o = &OAuth{Handler: fx.h, Store: NewMemOAuthStore(), PublicURL: oauthUI, Now: func() time.Time { return fx.now }}
 	_ = fx.h.Store.Create(context.Background(), "sid-ada", Session{
-		UserID: "u-ada", KeycloakSubject: "kid-ada", CSRFToken: "csrf-ada", MFAVerified: true, ExpiresAt: time.Now().Add(time.Hour),
+		UserID: "u-ada", Subject: "kid-ada", CSRFToken: "csrf-ada", MFAVerified: true, ExpiresAt: time.Now().Add(time.Hour),
 	})
 	fx.fid.resolveRes = &identityv1.ResolveUserContextResponse{User: &identityv1.User{Id: "u-ada"}}
 	return fx

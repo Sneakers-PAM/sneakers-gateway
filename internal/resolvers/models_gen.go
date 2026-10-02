@@ -533,15 +533,15 @@ type UseGrantProgramInput struct {
 }
 
 type User struct {
-	ID              string   `json:"id"`
-	Name            string   `json:"name"`
-	Username        string   `json:"username"`
-	Email           string   `json:"email"`
-	Roles           []string `json:"roles"`
-	IsRoot          bool     `json:"isRoot"`
-	KeycloakSubject string   `json:"keycloakSubject"`
-	EmailVerified   bool     `json:"emailVerified"`
-	Disabled        bool     `json:"disabled"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Username      string   `json:"username"`
+	Email         string   `json:"email"`
+	Roles         []string `json:"roles"`
+	IsRoot        bool     `json:"isRoot"`
+	Subject       string   `json:"subject"`
+	EmailVerified bool     `json:"emailVerified"`
+	Disabled      bool     `json:"disabled"`
 }
 
 type UserLabel struct {

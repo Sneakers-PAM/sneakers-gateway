@@ -552,15 +552,15 @@ type ComplexityRoot struct {
 	}
 
 	User struct {
-		Disabled        func(childComplexity int) int
-		Email           func(childComplexity int) int
-		EmailVerified   func(childComplexity int) int
-		ID              func(childComplexity int) int
-		IsRoot          func(childComplexity int) int
-		KeycloakSubject func(childComplexity int) int
-		Name            func(childComplexity int) int
-		Roles           func(childComplexity int) int
-		Username        func(childComplexity int) int
+		Disabled      func(childComplexity int) int
+		Email         func(childComplexity int) int
+		EmailVerified func(childComplexity int) int
+		ID            func(childComplexity int) int
+		IsRoot        func(childComplexity int) int
+		Name          func(childComplexity int) int
+		Roles         func(childComplexity int) int
+		Subject       func(childComplexity int) int
+		Username      func(childComplexity int) int
 	}
 
 	UserLabel struct {
@@ -3559,12 +3559,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.IsRoot(childComplexity), true
-	case "User.keycloakSubject":
-		if e.ComplexityRoot.User.KeycloakSubject == nil {
-			break
-		}
-
-		return e.ComplexityRoot.User.KeycloakSubject(childComplexity), true
 	case "User.name":
 		if e.ComplexityRoot.User.Name == nil {
 			break
@@ -3577,6 +3571,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.Roles(childComplexity), true
+	case "User.subject":
+		if e.ComplexityRoot.User.Subject == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.Subject(childComplexity), true
 	case "User.username":
 		if e.ComplexityRoot.User.Username == nil {
 			break
@@ -4163,8 +4163,8 @@ input SecuritySettingsInput {
 }
 
 # A platform user. ` + "`" + `roles` + "`" + ` are elevated roles on top of the baseline; ` + "`" + `isRoot` + "`" + `
-# marks the protected bootstrap super-admin; ` + "`" + `keycloakSubject` + "`" + ` is the federated
-# identity's JWT ` + "`" + `sub` + "`" + ` (empty for pre-created local rows not yet adopted).
+# marks the protected bootstrap super-admin; ` + "`" + `subject` + "`" + ` is the login subject, the
+# user's Ory Kratos identity id (empty for pre-created local rows not yet adopted).
 type User {
   id: ID!
   name: String!
@@ -4172,7 +4172,7 @@ type User {
   email: String!
   roles: [String!]!
   isRoot: Boolean!
-  keycloakSubject: String!
+  subject: String!
   # Whether the account's email address has been confirmed via an emailed code.
   # false until then; login/admin are NOT gated on it.
   emailVerified: Boolean!
@@ -4442,7 +4442,7 @@ type Query {
   userGroups(userId: String!): [Group!]!
   # Users who are direct members of a group.
   groupMembers(groupId: String!): [User!]!
-  # AD group names synced onto a user from Keycloak federation (read-only here).
+  # Retired: always empty. Group membership is managed only in Sneakers.
   userAdGroups(userId: String!): [String!]!
   # Typeahead search over users, for picking RACI subjects / simulator actors.
   searchUsers(query: String!, limit: Int): [User!]!
@@ -4628,14 +4628,14 @@ type Mutation {
   addGroupMember(userId: String!, groupId: String!): Boolean!
   removeGroupMember(userId: String!, groupId: String!): Boolean!
 
-  # Create a directory group (lldap-backed). Admin-gated server-side (acting user
-  # must be site-admin or root). Returns the new group.
+  # Create a directory group. Admin-gated server-side (acting user must be
+  # site-admin or root). Returns the new group.
   createGroup(name: String!): Group!
 
-  # Create a local (lldap-backed) user account. Admin-gated server-side (acting
-  # user must be site-admin or root). The password is admin-supplied (typically
-  # client-generated); the user then signs in via Keycloak, which federates lldap
-  # read-only. Roles are assigned separately.
+  # Create a local user account, backed by an Ory Kratos identity. Admin-gated
+  # server-side (acting user must be site-admin or root). The password is
+  # admin-supplied (typically client-generated); the user then signs in through
+  # Ory Kratos. Roles are assigned separately.
   createLocalUser(username: String!, email: String!, name: String!, password: String!): User!
 
   # Email verification: confirm an account's email/username spelling.
@@ -4668,10 +4668,9 @@ type Mutation {
 
   # Edit a user's profile — display name, email, and username. Admin-gated
   # server-side. Fixes a misspelled account in place instead of delete + recreate.
-  # Changing the username is the careful path: the directory user is recreated
-  # (lldap uids can't be renamed), which drops the password, so the account is
-  # flagged unverified and a password-reset email is sent so the user can set a
-  # new one. Name/email-only edits never disturb the password. Returns the user.
+  # Ory Kratos signs users in by email, so a username change only updates the
+  # identity row; name/email changes also update the Kratos identity. The
+  # password is never disturbed. Returns the user.
   updateUser(userId: String!, name: String!, email: String!, username: String!): User!
 
   # Mark one of the acting user's notifications read.
@@ -5531,8 +5530,8 @@ func (ec *executionContext) childFields_User(ctx context.Context, field graphql.
 		return ec.fieldContext_User_roles(ctx, field)
 	case "isRoot":
 		return ec.fieldContext_User_isRoot(ctx, field)
-	case "keycloakSubject":
-		return ec.fieldContext_User_keycloakSubject(ctx, field)
+	case "subject":
+		return ec.fieldContext_User_subject(ctx, field)
 	case "emailVerified":
 		return ec.fieldContext_User_emailVerified(ctx, field)
 	case "disabled":
@@ -18959,16 +18958,16 @@ func (ec *executionContext) fieldContext_User_isRoot(_ context.Context, field gr
 	return graphql.NewScalarFieldContext("User", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
-func (ec *executionContext) _User_keycloakSubject(ctx context.Context, field graphql.CollectedField, obj *User) (ret graphql.Marshaler) {
+func (ec *executionContext) _User_subject(ctx context.Context, field graphql.CollectedField, obj *User) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_User_keycloakSubject(ctx, field)
+			return ec.fieldContext_User_subject(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.KeycloakSubject, nil
+			return obj.Subject, nil
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
@@ -18978,7 +18977,7 @@ func (ec *executionContext) _User_keycloakSubject(ctx context.Context, field gra
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_User_keycloakSubject(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_User_subject(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("User", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
@@ -25362,8 +25361,8 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "keycloakSubject":
-			out.Values[i] = ec._User_keycloakSubject(ctx, field, obj)
+		case "subject":
+			out.Values[i] = ec._User_subject(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

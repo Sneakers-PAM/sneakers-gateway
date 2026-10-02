@@ -90,7 +90,7 @@ func TestKratosClient_VerifyPassword_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VerifyPassword: %v", err)
 	}
-	if ar.AccessToken != "sess-tok-1" || ar.RefreshToken != "" || ar.Subject != "identity-1" || ar.Email != "alice@example.org" {
+	if ar.AccessToken != "sess-tok-1" || ar.Subject != "identity-1" || ar.Email != "alice@example.org" {
 		t.Fatalf("wrong AuthResult: %+v", ar)
 	}
 }

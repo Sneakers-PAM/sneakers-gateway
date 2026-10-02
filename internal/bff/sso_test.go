@@ -95,7 +95,7 @@ func callbackWithState(t *testing.T, h *Handler, code, state string) *httptest.R
 func TestSSOCallback_NotEnrolled_IssuesSessionCookieAndRedirectsToApp(t *testing.T) {
 	srv := ssoTestServer(t, "code-1", "at-1", "ada@example.org")
 	id := &fakeIdentity{
-		resolveByEmailResp: &identityv1.User{Id: "usr-1", Email: "ada@example.org", KeycloakSubject: "sub-1"},
+		resolveByEmailResp: &identityv1.User{Id: "usr-1", Email: "ada@example.org", Subject: "sub-1"},
 		mfaEnrolled:        false,
 	}
 	h := ssoHandler(t, srv.URL, id)
@@ -121,7 +121,7 @@ func TestSSOCallback_NotEnrolled_IssuesSessionCookieAndRedirectsToApp(t *testing
 func TestSSOCallback_Enrolled_ParksPendingAndRedirectsWithPendingId(t *testing.T) {
 	srv := ssoTestServer(t, "code-1", "at-1", "ada@example.org")
 	id := &fakeIdentity{
-		resolveByEmailResp: &identityv1.User{Id: "usr-1", Email: "ada@example.org", KeycloakSubject: "sub-1"},
+		resolveByEmailResp: &identityv1.User{Id: "usr-1", Email: "ada@example.org", Subject: "sub-1"},
 		mfaEnrolled:        true,
 		factors:            []string{"totp"},
 	}
@@ -154,7 +154,7 @@ func TestSSOCallback_Enrolled_ParksPendingAndRedirectsWithPendingId(t *testing.T
 func TestSSOCallback_EmailEnrolled_ParksPendingWithEmailFactor(t *testing.T) {
 	srv := ssoTestServer(t, "code-1", "at-1", "ada@example.org")
 	id := &fakeIdentity{
-		resolveByEmailResp: &identityv1.User{Id: "usr-1", Email: "ada@example.org", KeycloakSubject: "sub-1"},
+		resolveByEmailResp: &identityv1.User{Id: "usr-1", Email: "ada@example.org", Subject: "sub-1"},
 		mfaEnrolled:        true,
 		factors:            []string{"email"},
 	}
@@ -212,7 +212,7 @@ func TestSSOCallback_EnrolledMFA_PromotedSessionSurvivesFirstResolve(t *testing.
 	kratos := newKratosLoginServer(t, kratosCfg)
 
 	id := &fakeIdentity{
-		resolveByEmailResp: &identityv1.User{Id: "usr-1", Email: "ada@example.org", KeycloakSubject: "sub-1"},
+		resolveByEmailResp: &identityv1.User{Id: "usr-1", Email: "ada@example.org", Subject: "sub-1"},
 		mfaEnrolled:        true,
 		factors:            []string{"totp"},
 		verifyOk:           true,
@@ -224,7 +224,6 @@ func TestSSOCallback_EnrolledMFA_PromotedSessionSurvivesFirstResolve(t *testing.
 		Pending:         newMemPending(),
 		Identity:        id,
 		TTL:             ttl,
-		Backend:         backendKratos, // SSO's only supported posture
 		Auth:            NewKratosClient(kratos.URL, kratos.URL),
 		Polis:           NewPolisClient(polis.URL, polis.URL, "sneakers", "example.org"),
 		SSORedirectBase: "https://gw.example.org",

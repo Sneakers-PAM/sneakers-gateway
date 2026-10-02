@@ -407,8 +407,8 @@ input SecuritySettingsInput {
 }
 
 # A platform user. `roles` are elevated roles on top of the baseline; `isRoot`
-# marks the protected bootstrap super-admin; `keycloakSubject` is the federated
-# identity's JWT `sub` (empty for pre-created local rows not yet adopted).
+# marks the protected bootstrap super-admin; `subject` is the login subject, the
+# user's Ory Kratos identity id (empty for pre-created local rows not yet adopted).
 type User {
   id: ID!
   name: String!
@@ -416,7 +416,7 @@ type User {
   email: String!
   roles: [String!]!
   isRoot: Boolean!
-  keycloakSubject: String!
+  subject: String!
   # Whether the account's email address has been confirmed via an emailed code.
   # false until then; login/admin are NOT gated on it.
   emailVerified: Boolean!
@@ -686,7 +686,7 @@ type Query {
   userGroups(userId: String!): [Group!]!
   # Users who are direct members of a group.
   groupMembers(groupId: String!): [User!]!
-  # AD group names synced onto a user from Keycloak federation (read-only here).
+  # Retired: always empty. Group membership is managed only in Sneakers.
   userAdGroups(userId: String!): [String!]!
   # Typeahead search over users, for picking RACI subjects / simulator actors.
   searchUsers(query: String!, limit: Int): [User!]!
@@ -872,14 +872,14 @@ type Mutation {
   addGroupMember(userId: String!, groupId: String!): Boolean!
   removeGroupMember(userId: String!, groupId: String!): Boolean!
 
-  # Create a directory group (lldap-backed). Admin-gated server-side (acting user
-  # must be site-admin or root). Returns the new group.
+  # Create a directory group. Admin-gated server-side (acting user must be
+  # site-admin or root). Returns the new group.
   createGroup(name: String!): Group!
 
-  # Create a local (lldap-backed) user account. Admin-gated server-side (acting
-  # user must be site-admin or root). The password is admin-supplied (typically
-  # client-generated); the user then signs in via Keycloak, which federates lldap
-  # read-only. Roles are assigned separately.
+  # Create a local user account, backed by an Ory Kratos identity. Admin-gated
+  # server-side (acting user must be site-admin or root). The password is
+  # admin-supplied (typically client-generated); the user then signs in through
+  # Ory Kratos. Roles are assigned separately.
   createLocalUser(username: String!, email: String!, name: String!, password: String!): User!
 
   # Email verification: confirm an account's email/username spelling.
@@ -912,10 +912,9 @@ type Mutation {
 
   # Edit a user's profile — display name, email, and username. Admin-gated
   # server-side. Fixes a misspelled account in place instead of delete + recreate.
-  # Changing the username is the careful path: the directory user is recreated
-  # (lldap uids can't be renamed), which drops the password, so the account is
-  # flagged unverified and a password-reset email is sent so the user can set a
-  # new one. Name/email-only edits never disturb the password. Returns the user.
+  # Ory Kratos signs users in by email, so a username change only updates the
+  # identity row; name/email changes also update the Kratos identity. The
+  # password is never disturbed. Returns the user.
   updateUser(userId: String!, name: String!, email: String!, username: String!): User!
 
   # Mark one of the acting user's notifications read.

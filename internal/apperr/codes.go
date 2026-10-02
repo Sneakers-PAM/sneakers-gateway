@@ -40,8 +40,7 @@ var Registry = map[int]string{
 	DefaultCode: "unclassified internal error",
 	2001:        "sample coded error (apperr package tests)",
 
-	// Ory Kratos local-login backend (internal/bff/kratos.go), behind
-	// AUTH_BACKEND=kratos.
+	// Ory Kratos local-login backend (internal/bff/kratos.go).
 	2210: "Kratos login-flow init failed (GET self-service/login/api)",
 	2211: "Kratos password verify failed, non-credential (POST self-service/login)",
 	2212: "Kratos unreachable (transport-level failure)",
