@@ -43,7 +43,9 @@ unchanged, and drops details from any other domain. The check-out and check-in r
 | `checkoutSecret` | `FAILED_PRECONDITION` | `CHECKOUT_LEASE_HELD` | `holder_user_id` | Someone already holds a lease on the secret. |
 | `checkinSecret` | `PERMISSION_DENIED` | `CHECKIN_NOT_HOLDER` | | Only the lease holder can check in. |
 
-A reveal or check-out that needs a fresher second factor answers `FAILED_PRECONDITION` with
+`revealSecretVersionField` and `restoreSecretVersion` without the recovery role answer
+`PERMISSION_DENIED`, with the vault's reason. A reveal or check-out that needs a
+fresher second factor answers `FAILED_PRECONDITION` with
 reason `STEP_UP_REQUIRED` (domain `sneakers.vault`): the client runs a step-up and retries. A new
 group rule in `setFolderRuleset` or `setSecretRuleset` without `subjectId` is refused with
 `GROUP_ID_REQUIRED`.
@@ -85,6 +87,17 @@ reveal or check-out needs a step-up. Where a reveal needs one is set globally by
 `SecuritySettings.requireMfaForReveal` and per folder by `setFolderRevealStepUp(folderId, mode)`
 (`inherit`, `require` or `off`, shown as `Folder.revealStepUp`; inherited down the tree; site
 admins only). Machine callers never carry the time.
+
+### Recovery
+
+A secret's prior values are a separate recovery surface. `secretVersions` lists the versions and
+their field keys to any reader, never a value. `revealSecretVersionField` and
+`restoreSecretVersion(secretId, versionNo)`, which makes a prior version's fields the current ones
+as a new version, need the identity role `recovery` and a fresh second factor. The gateway sends
+the role as `is_recovery` on the vault actor, read from identity on every request, and the vault
+decides: `PERMISSION_DENIED` without the role, `STEP_UP_REQUIRED` without a fresh MFA, and a
+refusal while the secret is checked out or rotating. Only a site admin or root can grant or
+revoke the role (identity enforces it). Machine callers never get the recovery surface.
 
 ## Login and sessions (`AUTH_MODE=real`)
 

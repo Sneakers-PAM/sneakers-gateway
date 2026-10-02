@@ -270,6 +270,7 @@ type ComplexityRoot struct {
 		RequestEmailVerification func(childComplexity int, userID string) int
 		ResolveApproval          func(childComplexity int, id string, approve bool, grantHours *int) int
 		RestoreSecret            func(childComplexity int, id string) int
+		RestoreSecretVersion     func(childComplexity int, secretID string, versionNo int) int
 		RetireSecret             func(childComplexity int, id string) int
 		RevealSecretField        func(childComplexity int, id string, fieldKey string) int
 		RevealSecretVersionField func(childComplexity int, secretID string, versionNo int, fieldKey string) int
@@ -601,6 +602,7 @@ type MutationResolver interface {
 	UpdateSecret(ctx context.Context, id string, input UpdateSecretInput) (*Secret, error)
 	RevealSecretField(ctx context.Context, id string, fieldKey string) (string, error)
 	RevealSecretVersionField(ctx context.Context, secretID string, versionNo int, fieldKey string) (string, error)
+	RestoreSecretVersion(ctx context.Context, secretID string, versionNo int) (*Secret, error)
 	BreakGlassSecret(ctx context.Context, secretID string, reason string, code string) ([]*KeyValue, error)
 	CopySecret(ctx context.Context, id string) (*string, error)
 	RetireSecret(ctx context.Context, id string) (*Secret, error)
@@ -1970,6 +1972,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RestoreSecret(childComplexity, args["id"].(string)), true
+	case "Mutation.restoreSecretVersion":
+		if e.ComplexityRoot.Mutation.RestoreSecretVersion == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_restoreSecretVersion_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RestoreSecretVersion(childComplexity, args["secretId"].(string), args["versionNo"].(int)), true
 	case "Mutation.retireSecret":
 		if e.ComplexityRoot.Mutation.RetireSecret == nil {
 			break
@@ -4603,7 +4616,12 @@ type Mutation {
   # Reveals ONE sensitive field; audited + RBAC-gated server-side.
   revealSecretField(id: ID!, fieldKey: String!): String!
   # Reveals ONE field from a prior version; audited + RBAC-gated server-side.
+  # Prior values are the recovery view: the vault needs the recovery role and a
+  # fresh MFA (PERMISSION_DENIED, STEP_UP_REQUIRED) and audits each one.
   revealSecretVersionField(secretId: ID!, versionNo: Int!, fieldKey: String!): String!
+  # Make a prior version's fields the current ones, as a new version. Recovery
+  # role and a fresh MFA; refused while the secret is checked out or rotating.
+  restoreSecretVersion(secretId: ID!, versionNo: Int!): Secret!
   # Emergency access: bypasses checkout-lock/approval-pending for a
   # read-eligible actor. Requires a fresh TOTP code (MFA step-up); high-severity
   # audit, owner notify, and forced post-use rotation are triggered server-side.
@@ -6736,6 +6754,28 @@ func (ec *executionContext) field_Mutation_resolveApproval_args(ctx context.Cont
 		return nil, err
 	}
 	args["grantHours"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_restoreSecretVersion_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "secretId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["secretId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "versionNo",
+		func(ctx context.Context, v any) (int, error) {
+			return ec.unmarshalNInt2int(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["versionNo"] = arg1
 	return args, nil
 }
 
@@ -11339,6 +11379,50 @@ func (ec *executionContext) fieldContext_Mutation_revealSecretVersionField(ctx c
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_revealSecretVersionField_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_restoreSecretVersion(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_restoreSecretVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RestoreSecretVersion(ctx, fc.Args["secretId"].(string), fc.Args["versionNo"].(int))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Secret) graphql.Marshaler {
+			return ec.marshalNSecret2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecret(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_restoreSecretVersion(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Secret(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_restoreSecretVersion_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -22835,6 +22919,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "revealSecretVersionField":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_revealSecretVersionField(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "restoreSecretVersion":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_restoreSecretVersion(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++

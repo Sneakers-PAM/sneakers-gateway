@@ -813,7 +813,12 @@ type Mutation {
   # Reveals ONE sensitive field; audited + RBAC-gated server-side.
   revealSecretField(id: ID!, fieldKey: String!): String!
   # Reveals ONE field from a prior version; audited + RBAC-gated server-side.
+  # Prior values are the recovery view: the vault needs the recovery role and a
+  # fresh MFA (PERMISSION_DENIED, STEP_UP_REQUIRED) and audits each one.
   revealSecretVersionField(secretId: ID!, versionNo: Int!, fieldKey: String!): String!
+  # Make a prior version's fields the current ones, as a new version. Recovery
+  # role and a fresh MFA; refused while the secret is checked out or rotating.
+  restoreSecretVersion(secretId: ID!, versionNo: Int!): Secret!
   # Emergency access: bypasses checkout-lock/approval-pending for a
   # read-eligible actor. Requires a fresh TOTP code (MFA step-up); high-severity
   # audit, owner notify, and forced post-use rotation are triggered server-side.

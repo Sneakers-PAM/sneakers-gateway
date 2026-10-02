@@ -83,6 +83,20 @@ func infoFrom(ctx context.Context) actorInfo {
 	return i
 }
 
+type recoveryKey struct{}
+
+// WithActorRecovery records that the signed-in user holds the recovery role.
+// The vault trusts it only from the gateway, and needs it (with a fresh MFA)
+// for prior-version values and restore.
+func WithActorRecovery(ctx context.Context, recovery bool) context.Context {
+	return context.WithValue(ctx, recoveryKey{}, recovery)
+}
+
+func actorRecovery(ctx context.Context) bool {
+	r, _ := ctx.Value(recoveryKey{}).(bool)
+	return r
+}
+
 type mfaVerifiedAtKey struct{}
 
 // WithMFAVerifiedAt attaches when the human session last proved a second
@@ -115,6 +129,7 @@ func actorOf(ctx context.Context) *vaultv1.ActorContext {
 		IsRoot:            i.root,
 		GroupNames:        i.groups,
 		MfaVerifiedAtUnix: mfaUnix(ctx),
+		IsRecovery:        actorRecovery(ctx),
 	}
 }
 
