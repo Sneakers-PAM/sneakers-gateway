@@ -21,7 +21,8 @@ authenticates, and where to read more.
   and workflow actors also carry `mfa_verified_at_unix`, when the session last proved a second
   factor (see "Step-up" below); the workflow actor carries the admin flags and groups too, for the
   vault's access check on check-out. Both carry the user's directory group ids next to the names,
-  which group rules match on (the same applies to a personal token on the machine API).
+  which group rules match on; so do a personal token's and a service account's actor on the
+  machine API.
 - Identity's admin calls (users, groups, roles, factors, service accounts and tokens) name the
   signed-in user as `acting_user_id`, so the audit event identity records has an actor. A password
   Kratos rejects at `/auth/login` never reaches identity, so the gateway records it itself:

@@ -187,6 +187,7 @@ func MachineActorOf(ctx context.Context) *vaultv1.ActorContext {
 		PrincipalKind: vaultv1.PrincipalKind_PRINCIPAL_KIND_SERVICE_ACCOUNT,
 		PrincipalId:   m.principalID,
 		GroupNames:    append([]string(nil), m.groupNames...),
+		GroupIds:      append([]string(nil), m.groupIDs...),
 	}
 }
 

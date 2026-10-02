@@ -89,3 +89,34 @@ func TestUserToken_CarriesGroupIDs(t *testing.T) {
 		t.Fatalf("machine actor = %+v", actor)
 	}
 }
+
+func TestServiceAccountToken_CarriesGroupIDs(t *testing.T) {
+	fid := &fakeIdentity{verifyApiTokenResp: &identityv1.VerifyApiTokenResponse{
+		Valid: true, ServiceAccountId: "sa-42", GroupNames: []string{"Ops"}, GroupIds: []string{"g-ops"},
+	}}
+	h := &Handler{Identity: fid}
+	var actor *vaultv1.ActorContext
+	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { actor = resolvers.MachineActorOf(r.Context()) })
+	req := httptest.NewRequest(http.MethodPost, "/machine/graphql", nil)
+	req.Header.Set("Authorization", "Bearer sa-token-plaintext")
+	h.MachineActor(next).ServeHTTP(httptest.NewRecorder(), req)
+	if actor.GetPrincipalId() != "sa-42" || len(actor.GetGroupIds()) != 1 || actor.GetGroupIds()[0] != "g-ops" {
+		t.Fatalf("machine actor = %+v", actor)
+	}
+}
+
+func TestOidcServiceAccount_CarriesGroupIDs(t *testing.T) {
+	srv, key := jwksServer(t, "hk1")
+	fid := &fakeIdentity{resolveOidcResp: &identityv1.ResolveServiceAccountByOidcResponse{
+		Valid: true, ServiceAccountId: "sa-mcp-1", GroupNames: []string{"Ops"}, GroupIds: []string{"g-ops"},
+	}}
+	h := &Handler{Identity: fid, MachineOidcVerifier: newOidcTestVerifier(srv.URL), MachineOidcIssuer: oidcTestIssuer}
+	var actor *vaultv1.ActorContext
+	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { actor = resolvers.MachineActorOf(r.Context()) })
+	req := httptest.NewRequest(http.MethodPost, "/machine/graphql", nil)
+	req.Header.Set("Authorization", "Bearer "+sign(t, key, "hk1", oidcGoodClaims("hydra-client-abc", "Ops")))
+	h.MachineActor(next).ServeHTTP(httptest.NewRecorder(), req)
+	if actor.GetPrincipalId() != "sa-mcp-1" || len(actor.GetGroupIds()) != 1 || actor.GetGroupIds()[0] != "g-ops" {
+		t.Fatalf("machine actor = %+v", actor)
+	}
+}
