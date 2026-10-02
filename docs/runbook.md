@@ -5,10 +5,12 @@
 - **Never run `AUTH_MODE=noauth` where anyone else can reach it.** In that mode the caller is
   whoever the `X-Dev-User` header names, with no password. Use `AUTH_MODE=real` everywhere but a
   developer's own machine.
-- **The backends trust the gateway.** Identity, vault, workflow, audit, notify and the SSH broker
-  act on the actor context the gateway sends, and the gateway talks to them over plaintext gRPC.
-  Let only the gateway reach their gRPC ports (for example with a network policy), and keep those
-  hops on a private network or behind a service mesh with mTLS.
+- **The backends trust the gateway's identity.** Identity, vault, workflow, audit, notify and the
+  SSH broker act on the actor context the gateway sends, and accept it only from a caller whose
+  workload token says it's the gateway. Mount the gateway's projected service-account token
+  (audience `sneakers`) and set `WORKLOAD_TOKEN_FILE`; in `real` mode the gateway won't start
+  without it. The hops are plaintext gRPC, so keep them on a private network and let only the
+  callers in the call graph reach each port (network policies).
 - **Point it at Ory.** Set `KRATOS_PUBLIC_URL` and `KRATOS_ADMIN_URL` for Ory Kratos, and
   `POLIS_TENANT` and the other `POLIS_*` values if you use Ory Polis SSO.
 - **Set `SETUP_TOKEN` for the first run only**, then remove it: with it unset, `/setup/bootstrap`
@@ -30,7 +32,9 @@ At start the gateway:
 1. reads its configuration from the environment ([configuration.md](configuration.md));
 2. checks the Hydra settings: `HYDRA_ENABLED` with no `HYDRA_ISSUER` stops it;
 3. starts OpenTelemetry export to `OTEL_EXPORTER_OTLP_ENDPOINT`;
-4. sets up the gRPC clients for the six backends; they connect lazily, on the first call;
+4. checks `WORKLOAD_TOKEN_FILE`: in `real` mode it must be set, and a set path that can't be read
+   stops it; then sets up the gRPC clients for the six backends, which connect lazily, on the
+   first call;
 5. checks `COOKIE_SECURE`: a value that isn't a boolean stops it;
 6. in `real` mode, reads the session lifetime from the vault (falling back to 30 minutes if the
    vault doesn't answer) and connects to Redis: if Redis doesn't answer, it stops;
@@ -88,5 +92,6 @@ an existing, enabled user, or the browser lands on `SSO_APP_BASE` with `?sso_err
 | Login works, then every request is 401 | The browser drops the `Secure` cookie on plain http: serve HTTPS, or set `COOKIE_SECURE=false` for a test stack. |
 | Subscriptions never connect | The socket's `Origin` doesn't match the host the gateway sees: check the proxy passes `Host` or `X-Forwarded-Host`. |
 | Every GraphQL call fails with `Unavailable` | A backend address is wrong or the service is down; the start-up line lists the addresses. |
-| The gateway exits at start in `real` mode | Redis is unreachable, or `COOKIE_SECURE` isn't a boolean, or `HYDRA_ENABLED` is on without `HYDRA_ISSUER`. |
+| The gateway exits at start in `real` mode | Redis is unreachable, or `COOKIE_SECURE` isn't a boolean, or `HYDRA_ENABLED` is on without `HYDRA_ISSUER`, or `WORKLOAD_TOKEN_FILE` is unset or unreadable. |
+| Every GraphQL call fails with `Unauthenticated` or `PermissionDenied` | The backends refuse the gateway's workload token: check the token's audience is `sneakers`, the service account is `sneakers-gateway`, and the backend lists it in `WORKLOAD_ALLOWED_SERVICEACCOUNTS`. |
 | `/setup/bootstrap` answers 503 | `SETUP_TOKEN` is unset (expected once setup is done). |

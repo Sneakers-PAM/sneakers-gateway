@@ -29,6 +29,8 @@ human and machine schemas share no generated code or resolver.
 - `internal/apperr/` - the gateway's error-code table (the 2xxx range); the coded-error helpers
   come from `github.com/Bugs5382/go-apperr`.
 - `internal/safeconv/` - bounds-checked integer conversions.
+- `internal/workloadauth/` - service-to-service workload authentication, copied byte for byte
+  from sneakers-vault (`scripts/workloadauth-check.sh` compares it); never edit it here.
 - `docs/` - configuration, API, runbook and the topic pages.
 
 ## Build, test, lint

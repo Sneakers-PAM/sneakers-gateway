@@ -126,6 +126,21 @@ answered for `Content-Type`, `X-Dev-User`, `X-CSRF-Token` and `Authorization`. A
 gets no CORS headers, so the browser keeps the response from it, and its preflight answers 403.
 With `AUTH_MODE=noauth` and no list set, any origin is echoed, for local development.
 
+## Service-to-service authentication
+
+Every gRPC call to vault, workflow, identity, audit, notify and the SSH broker carries the
+gateway's Kubernetes workload identity: the projected service-account token named by
+`WORKLOAD_TOKEN_FILE`, sent as `authorization: Bearer <token>` and read again on every call. Each
+backend verifies it and maps the service account `<namespace>/sneakers-gateway` to the caller
+`gateway`. The backends' allow-lists (sneakers-vault's `docs/api.md`) list the gateway as
+**on behalf** for every vault method except the connector pull-API and for every workflow method:
+it's the caller that passes the signed-in user's actor context.
+
+The client side is `internal/workloadauth`, a byte-for-byte copy of the canonical package in
+sneakers-vault at `SNEAKERS_VAULT_REF`. CI runs `scripts/workloadauth-check.sh` to compare them;
+to take a new version, bump the ref and copy the vault's `internal/workloadauth/` in the same
+change.
+
 ## Calling other services
 
 The gateway never imports another service's Go module. It generates its own client stubs from each
