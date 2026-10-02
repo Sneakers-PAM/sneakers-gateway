@@ -125,3 +125,56 @@ func TestRestoreRotationRefusalReachesTheClient(t *testing.T) {
 		t.Fatalf("errors = %+v", errs)
 	}
 }
+
+type rotateVault struct {
+	vaultv1.VaultServiceClient
+	enqueued *vaultv1.EnqueueRotationRequest
+}
+
+func (f *rotateVault) EnqueueRotation(_ context.Context, in *vaultv1.EnqueueRotationRequest, _ ...grpc.CallOption) (*vaultv1.EnqueueRotationResponse, error) {
+	f.enqueued = in
+	return &vaultv1.EnqueueRotationResponse{}, nil
+}
+
+func rotateErrors(t *testing.T, fv vaultv1.VaultServiceClient, wf workflowv1.WorkflowServiceClient) []gqlErr {
+	t.Helper()
+	resp, err := restoreClient(fv, wf).RawPost(`mutation { rotateSecret(secretId: "s1") }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var errs []gqlErr
+	if len(resp.Errors) > 0 {
+		if err := json.Unmarshal(resp.Errors, &errs); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return errs
+}
+
+func TestRotateRefusedWhileCheckedOut(t *testing.T) {
+	fv := &rotateVault{}
+	errs := rotateErrors(t, fv, &leaseWorkflow{lease: &workflowv1.Lease{Id: "l-1", UserId: "u-2"}})
+	if len(errs) != 1 || errs[0].Extensions.Reason != "CHECKOUT_LEASE_HELD" || errs[0].Extensions.Metadata["holder_user_id"] != "u-2" || fv.enqueued != nil {
+		t.Fatalf("errors = %+v, enqueued = %+v", errs, fv.enqueued)
+	}
+}
+
+// A manual rotation doesn't run when the lease can't be checked: it would
+// invalidate a holder's credential.
+func TestRotateRefusedWhenTheLeaseCheckFails(t *testing.T) {
+	fv := &rotateVault{}
+	errs := rotateErrors(t, fv, &leaseWorkflow{err: status.Error(codes.Unavailable, "workflow down")})
+	if len(errs) != 1 || errs[0].Extensions.Code != "UNAVAILABLE" || fv.enqueued != nil {
+		t.Fatalf("errors = %+v, enqueued = %+v", errs, fv.enqueued)
+	}
+}
+
+func TestRotateRunsWithoutALease(t *testing.T) {
+	fv := &rotateVault{}
+	if errs := rotateErrors(t, fv, &leaseWorkflow{}); len(errs) != 0 {
+		t.Fatalf("errors = %+v", errs)
+	}
+	if fv.enqueued.GetSecretId() != "s1" || fv.enqueued.GetReason() != "manual" {
+		t.Fatalf("enqueued = %+v", fv.enqueued)
+	}
+}

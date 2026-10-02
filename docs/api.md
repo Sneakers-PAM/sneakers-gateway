@@ -50,6 +50,7 @@ unchanged, and drops details from any other domain. The check-out and check-in r
 | `checkoutSecret` | `FAILED_PRECONDITION` | `CHECKOUT_LEASE_HELD` | `holder_user_id` | Someone already holds a lease on the secret. |
 | `checkinSecret` | `PERMISSION_DENIED` | `CHECKIN_NOT_HOLDER` | | Only the lease holder can check in. |
 | `restoreSecretVersion` | `FAILED_PRECONDITION` | `CHECKOUT_LEASE_HELD` | `holder_user_id` | Someone holds a lease on the secret. The gateway checks this, since the vault can't see leases. |
+| `rotateSecret` | `FAILED_PRECONDITION` | `CHECKOUT_LEASE_HELD` | `holder_user_id` | Someone holds a lease on the secret; a manual rotation would replace their credential. |
 | `restoreSecretVersion` | `FAILED_PRECONDITION` | `ROTATION_IN_PROGRESS` | | The vault is rotating the secret. |
 
 `revealSecretVersionField` and `restoreSecretVersion` without the recovery role answer
@@ -60,7 +61,9 @@ group rule in `setFolderRuleset` or `setSecretRuleset` without `subjectId` is re
 `GROUP_ID_REQUIRED`.
 
 The workflow service owns the check-out and check-in reasons; a refusal without one still has its
-`code`.
+`code`. For `restoreSecretVersion` and `rotateSecret` the gateway looks up the lease itself, and if
+that lookup fails the change doesn't run: the client gets the workflow's code (`UNAVAILABLE` when it
+can't be reached).
 
 The human schema has about 45 queries (users and groups, folders, secrets and their rulesets,
 access requests and approvals, audit, notifications, tokens), about 70 mutations, and one

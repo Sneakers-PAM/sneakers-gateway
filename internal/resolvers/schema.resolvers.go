@@ -207,7 +207,7 @@ func (r *mutationResolver) RevealSecretVersionField(ctx context.Context, secretI
 
 // RestoreSecretVersion is the resolver for the restoreSecretVersion field.
 func (r *mutationResolver) RestoreSecretVersion(ctx context.Context, secretID string, versionNo int) (*Secret, error) {
-	if err := r.refuseWhileCheckedOut(ctx, secretID); err != nil {
+	if err := r.refuseWhileCheckedOut(ctx, secretID, "restore a version"); err != nil {
 		return nil, err
 	}
 	resp, err := r.Vault.RestoreSecretVersion(ctx, &vaultv1.RestoreSecretVersionRequest{
@@ -591,9 +591,8 @@ func (r *mutationResolver) RotateSecret(ctx context.Context, secretID string) (b
 	// A manual rotation must not run while the secret is checked out — it would
 	// invalidate the credential the active holder is using. (System rotate-on-
 	// check-in and break-glass forced rotation are separate paths.)
-	if lease, err := r.Workflow.GetActiveLease(ctx, &workflowv1.GetActiveLeaseRequest{SecretId: secretID}); err == nil &&
-		lease.GetLease() != nil && lease.GetLease().GetId() != "" {
-		return false, fmt.Errorf("cannot rotate while the secret is checked out")
+	if err := r.refuseWhileCheckedOut(ctx, secretID, "rotate"); err != nil {
+		return false, err
 	}
 	if _, err := r.Vault.EnqueueRotation(ctx, &vaultv1.EnqueueRotationRequest{
 		Actor: actorOf(ctx), SecretId: secretID, Reason: "manual",
