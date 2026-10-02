@@ -33,7 +33,7 @@ type AuthResult struct {
 }
 
 // backendKeycloak/backendKratos are the AUTH_BACKEND env values (see
-// cmd/server/main.go). Handler.Backend carries one of these;
+// cmd/gateway/main.go). Handler.Backend carries one of these;
 // backendToken branches on it.
 const (
 	backendKeycloak = "keycloak"

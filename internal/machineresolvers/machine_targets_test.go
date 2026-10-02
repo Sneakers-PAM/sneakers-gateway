@@ -45,7 +45,7 @@ func (f *targetVault) SaveTarget(_ context.Context, in *vaultv1.SaveTargetReques
 
 func (f *targetVault) SetSecretTargetForPrincipal(_ context.Context, in *vaultv1.SetSecretTargetForPrincipalRequest, _ ...grpc.CallOption) (*vaultv1.SetSecretTargetForPrincipalResponse, error) {
 	f.lastSet = in
-	return &vaultv1.SetSecretTargetForPrincipalResponse{Secret: &vaultv1.Secret{Id: in.GetSecretId(), Name: "morgan_da", TargetId: in.GetTargetId()}}, nil
+	return &vaultv1.SetSecretTargetForPrincipalResponse{Secret: &vaultv1.Secret{Id: in.GetSecretId(), Name: "admin-account", TargetId: in.GetTargetId()}}, nil
 }
 
 func newTargetClient(fv *targetVault) *gqlclient.Client {

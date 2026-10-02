@@ -518,7 +518,7 @@ func TestSessionActor_ResolvesIdentityActorContext(t *testing.T) {
 	fid := &fakeIdentity{resolveRes: &identityv1.ResolveUserContextResponse{
 		User:       &identityv1.User{Id: "usr-42", IsRoot: false},
 		Roles:      []string{"user", "site-admin"},
-		GroupNames: []string{"Platform Team", "Secops"},
+		GroupNames: []string{"Platform Team", "example-group"},
 	}}
 	h := &Handler{Store: NewMemStore(time.Hour), Verifier: newTestVerifier(jwks.URL), Identity: fid, TTL: time.Hour}
 

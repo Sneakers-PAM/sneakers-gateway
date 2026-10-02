@@ -59,18 +59,14 @@ func envTrue(k string) bool {
 }
 
 // newHydraVerifier builds the machine bearer-auth path's OIDC leg from env,
-// gated on HYDRA_ENABLED (default OFF) — deliberately NOT on HYDRA_ISSUER
-// alone. A deployment may ship HYDRA_ISSUER/HYDRA_JWKS_URL/HYDRA_AUDIENCE in
-// every environment even while Hydra itself is disabled (hydra.enabled:
-// false); gating on issuer-presence
-// would mean the OIDC path is never actually inert once deployed. Gating on
-// an explicit activation flag makes inertness hold by construction: while
-// HYDRA_ENABLED is unset/false this returns a nil verifier and performs NO
-// network I/O whatsoever (bff.NewVerifier's JWKS cache is lazy — it never
-// fetches until something calls Verify, and nothing does when the verifier is
-// nil). hydraIssuer is returned unconditionally — even when disabled — since
-// the human admin surface's LinkOidcClient mutation still needs the
-// configured issuer to link accounts ahead of activation.
+// gated on HYDRA_ENABLED (default OFF), an explicit activation flag, so
+// inertness holds by construction: while HYDRA_ENABLED is unset/false this
+// returns a nil verifier and performs NO network I/O whatsoever
+// (bff.NewVerifier's JWKS cache is lazy — it never fetches until something
+// calls Verify, and nothing does when the verifier is nil). hydraIssuer is
+// returned unconditionally — even when disabled — since the human admin
+// surface's LinkOidcClient mutation still needs the configured issuer to link
+// accounts ahead of activation.
 //
 // HYDRA_ENABLED=true with an empty HYDRA_ISSUER is refused at boot (Fatal),
 // not silently tolerated: jwt.WithIssuer is only added to the parser options
@@ -260,11 +256,8 @@ func main() {
 	otlp := env("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
 	// hydraVerifier/hydraIssuer: the machine path's OIDC leg.
 	// hydraIssuer is also used as the human admin surface's default OIDC
-	// issuer (LinkOidcClient). See newHydraVerifier: gated on HYDRA_ENABLED,
-	// NOT merely on HYDRA_ISSUER being set — a deployment may ship
-	// HYDRA_ISSUER/HYDRA_JWKS_URL/HYDRA_AUDIENCE in every environment even
-	// while Hydra itself is disabled, so gating on issuer-presence alone
-	// would never actually be inert in a deployed environment.
+	// issuer (LinkOidcClient). See newHydraVerifier: the OIDC leg is active
+	// only when HYDRA_ENABLED is true.
 	hydraVerifier, hydraIssuer := newHydraVerifier(logger)
 
 	// Observability from day one: traces + metrics via go-otel, structured logs

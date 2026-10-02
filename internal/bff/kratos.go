@@ -6,7 +6,7 @@
 // gateway BFF drives the API (not browser) login flow server-to-server,
 // exactly the same shape as KCClient's Keycloak ROPC grant, and hands back
 // the same backend-agnostic AuthResult. Selected behind AUTH_BACKEND=kratos
-// (cmd/server/main.go); Keycloak stays the unconditional default.
+// (cmd/gateway/main.go); Keycloak stays the unconditional default.
 package bff
 
 import (

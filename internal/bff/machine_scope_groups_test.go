@@ -52,7 +52,7 @@ func runOidcMachine(t *testing.T, scope string, resp *identityv1.ResolveServiceA
 // verified JWT scope claim is forwarded to identity unchanged, and the actor
 // holds exactly identity's group_names, spaces and all.
 func TestMachineActor_JWTBearer_ForwardsScopeAndUsesIdentityGroupNames(t *testing.T) {
-	code, groups, fid := runOidcMachine(t, "help-desk group-infra vault-admins", &identityv1.ResolveServiceAccountByOidcResponse{
+	code, groups, fid := runOidcMachine(t, "help-desk group-infra example-admins", &identityv1.ResolveServiceAccountByOidcResponse{
 		Valid: true, ServiceAccountId: "sa-mcp-1",
 		AllowedGroups: []string{"group-helpdesk", "group-infra"},
 		GroupNames:    []string{"Help Desk", "Infrastructure"},
@@ -60,7 +60,7 @@ func TestMachineActor_JWTBearer_ForwardsScopeAndUsesIdentityGroupNames(t *testin
 	if code != http.StatusOK {
 		t.Fatalf("code = %d, want 200", code)
 	}
-	if got := fid.resolveOidcReq.GetScope(); got != "help-desk group-infra vault-admins" {
+	if got := fid.resolveOidcReq.GetScope(); got != "help-desk group-infra example-admins" {
 		t.Fatalf("scope forwarded to identity = %q", got)
 	}
 	if want := []string{"Help Desk", "Infrastructure"}; !reflect.DeepEqual(groups, want) {

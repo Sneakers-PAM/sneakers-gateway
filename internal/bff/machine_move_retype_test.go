@@ -37,7 +37,7 @@ func (v *countingVault) ChangeSecretTypeForPrincipal(context.Context, *vaultv1.C
 }
 
 // machineEndpoint wires MachineActor in front of the real machine schema, as
-// cmd/server/main.go mounts /machine/graphql.
+// cmd/gateway/main.go mounts /machine/graphql.
 func machineEndpoint(h *Handler, v vaultv1.VaultServiceClient) http.Handler {
 	gql := handler.New(machineresolvers.NewExecutableSchema(machineresolvers.Config{
 		Resolvers: &machineresolvers.Resolver{Vault: v},

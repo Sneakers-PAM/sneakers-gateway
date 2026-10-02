@@ -35,7 +35,7 @@ func (f *automationVault) SetSecretAutomationForPrincipal(_ context.Context, in 
 		return nil, f.err
 	}
 	return &vaultv1.SetSecretAutomationForPrincipalResponse{Secret: &vaultv1.Secret{
-		Id: in.GetSecretId(), Name: "dsrm", FolderId: "f1", TypeId: "type-ad",
+		Id: in.GetSecretId(), Name: "svc-static", FolderId: "f1", TypeId: "type-ad",
 		RotationOptOut: in.GetDisableRotation(), HeartbeatOptOut: in.GetDisableHeartbeat(),
 	}}, nil
 }
@@ -117,7 +117,7 @@ func TestCreateSecretForPrincipal_ForwardsAutomationOptOuts(t *testing.T) {
 	fv := &automationVault{}
 	c := newAutomationClient(fv)
 	var resp struct{ CreateSecretForPrincipal optOutResp }
-	c.MustPost(`mutation { createSecretForPrincipal(folderId: "f1", typeId: "type-ad", name: "dsrm", fields: [], disableRotation: true, disableHeartbeat: true) { id rotationOptOut heartbeatOptOut } }`, &resp)
+	c.MustPost(`mutation { createSecretForPrincipal(folderId: "f1", typeId: "type-ad", name: "svc-static", fields: [], disableRotation: true, disableHeartbeat: true) { id rotationOptOut heartbeatOptOut } }`, &resp)
 	if !fv.lastCreate.GetDisableRotation() || !fv.lastCreate.GetDisableHeartbeat() {
 		t.Fatalf("opt-outs not forwarded: %+v", fv.lastCreate)
 	}
@@ -137,7 +137,7 @@ func TestGenerateSecretForPrincipal_ForwardsAutomationOptOuts(t *testing.T) {
 	var resp struct {
 		GenerateSecretForPrincipal struct{ Secret optOutResp }
 	}
-	c.MustPost(`mutation { generateSecretForPrincipal(folderId: "f1", typeId: "type-ad", name: "dsrm", fields: [], disableRotation: true, disableHeartbeat: false) { secret { id rotationOptOut heartbeatOptOut } } }`, &resp)
+	c.MustPost(`mutation { generateSecretForPrincipal(folderId: "f1", typeId: "type-ad", name: "svc-static", fields: [], disableRotation: true, disableHeartbeat: false) { secret { id rotationOptOut heartbeatOptOut } } }`, &resp)
 	if !fv.lastGenerate.GetDisableRotation() || fv.lastGenerate.GetDisableHeartbeat() {
 		t.Fatalf("opt-outs not forwarded: %+v", fv.lastGenerate)
 	}

@@ -1,6 +1,6 @@
 # gqlgen config for the Sneakers gateway's human GraphQL surface. The schema
-# lives in graphql/ in this repo. skip_mod_tidy keeps gqlgen from running
-# go mod tidy during generation.
+# is in graphql/. skip_mod_tidy keeps gqlgen from running go mod tidy during
+# generation.
 schema:
   - graphql/schema.graphqls
 exec:

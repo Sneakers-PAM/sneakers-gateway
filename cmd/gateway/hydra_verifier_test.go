@@ -3,13 +3,10 @@
 
 package main
 
-// newHydraVerifier must stay inert by construction even when a deployment
-// sets HYDRA_ISSUER/HYDRA_JWKS_URL/HYDRA_AUDIENCE in every environment while
-// hydra.enabled is false, so gating on issuer-presence alone would never
-// actually be inert once deployed. Gating on HYDRA_ENABLED (default off)
-// handles that: these tests prove BOTH the pure gating logic and the end-to-end effect on
-// MachineActor, including that no JWKS network fetch is even attempted while
-// disabled.
+// newHydraVerifier stays inert by construction unless HYDRA_ENABLED (default
+// off) is true: these tests prove BOTH the pure gating logic and the
+// end-to-end effect on MachineActor, including that no JWKS network fetch is
+// even attempted while disabled.
 
 import (
 	"crypto/rand"
