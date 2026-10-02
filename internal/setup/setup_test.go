@@ -47,7 +47,7 @@ func TestSeedHandler_ProvisionsSSOConnection(t *testing.T) {
 	prov := bff.NewJacksonProvisioner(jackson.URL, "k", "sneakers", "example.org", "https://gw", "https://idp/md")
 	h := setup.New(fakeSeedIdentity{}, fakeSeedVault{}, "setup-tok", prov)
 
-	body := `{"setupToken":"setup-tok"}`
+	body := `{"setupToken":"setup-tok","userId":"user-1"}`
 	req := httptest.NewRequest(http.MethodPost, "/setup/seed", strings.NewReader(body))
 	rec := httptest.NewRecorder()
 	h.SeedHandler()(rec, req)
@@ -96,7 +96,7 @@ func TestBootstrapHandler_TrimsSubmittedToken(t *testing.T) {
 func TestSeedHandler_TrimsConfiguredToken(t *testing.T) {
 	h := setup.New(fakeSeedIdentity{}, fakeSeedVault{}, "setup-tok\r\n", nil)
 	rec := httptest.NewRecorder()
-	h.SeedHandler()(rec, httptest.NewRequest(http.MethodPost, "/setup/seed", strings.NewReader(`{"setupToken":"setup-tok"}`)))
+	h.SeedHandler()(rec, httptest.NewRequest(http.MethodPost, "/setup/seed", strings.NewReader(`{"setupToken":"setup-tok","userId":"user-1"}`)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("seed status = %d body=%s", rec.Code, rec.Body.String())
 	}
