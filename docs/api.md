@@ -88,7 +88,7 @@ With `OAUTH_PUBLIC_URL` set, the gateway is an OAuth 2.0 authorization server fo
 | Route | Purpose |
 |---|---|
 | `GET /setup/state` | `{"needsSetup": true}` until the first admin exists. |
-| `POST /setup/bootstrap` | Create the first admin. Needs `setupToken` in the body to equal `SETUP_TOKEN`. |
+| `POST /setup/bootstrap` | Create the first admin. Needs `setupToken` in the body to equal `SETUP_TOKEN` (both trimmed of surrounding whitespace). |
 | `POST /setup/seed` | Install the vault's built-in types and baseline, after bootstrap. Same token. |
 
 These are outside the session gate, like `/health`.

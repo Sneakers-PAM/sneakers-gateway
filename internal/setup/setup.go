@@ -8,8 +8,10 @@
 package setup
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	log "github.com/Bugs5382/go-log"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
@@ -39,9 +41,17 @@ func (h *Handlers) logger() log.Logger {
 }
 
 // New returns a Handlers wired to identity + vault and guarded by setupToken.
-// ssoProv may be nil (SSO provisioning disabled, e.g. POLIS_ADMIN_URL unset).
+// Surrounding whitespace is trimmed from setupToken (a Secret made from a file
+// usually ends in a newline); a blank token leaves setup disabled. ssoProv may
+// be nil (SSO provisioning disabled, e.g. POLIS_ADMIN_URL unset).
 func New(identity identityv1.IdentityServiceClient, vault vaultv1.VaultServiceClient, setupToken string, ssoProv *bff.JacksonProvisioner) *Handlers {
-	return &Handlers{identity: identity, vault: vault, setupToken: setupToken, ssoProv: ssoProv}
+	return &Handlers{identity: identity, vault: vault, setupToken: strings.TrimSpace(setupToken), ssoProv: ssoProv}
+}
+
+// tokenMatches compares the submitted token, trimmed like the configured one,
+// in constant time.
+func (h *Handlers) tokenMatches(submitted string) bool {
+	return subtle.ConstantTimeCompare([]byte(strings.TrimSpace(submitted)), []byte(h.setupToken)) == 1
 }
 
 // StateHandler returns an http.HandlerFunc for GET /setup/state.
@@ -83,7 +93,7 @@ func (h *Handlers) BootstrapHandler() http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		if body.SetupToken != h.setupToken {
+		if !h.tokenMatches(body.SetupToken) {
 			writeErr(w, http.StatusForbidden, "invalid setup token")
 			return
 		}
@@ -133,7 +143,7 @@ func (h *Handlers) SeedHandler() http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		if body.SetupToken != h.setupToken {
+		if !h.tokenMatches(body.SetupToken) {
 			writeErr(w, http.StatusForbidden, "invalid setup token")
 			return
 		}
