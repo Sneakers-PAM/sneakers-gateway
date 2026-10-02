@@ -42,6 +42,7 @@ func workflowActorOf(ctx context.Context) *workflowv1.ActorContext {
 		UserId:            actorFrom(ctx),
 		MfaVerifiedAtUnix: mfaUnix(ctx),
 		GroupNames:        i.groups,
+		GroupIds:          ActorGroupIDs(ctx),
 		IsSiteAdmin:       i.siteAdmin,
 		IsRoot:            i.root,
 	}
@@ -83,6 +84,20 @@ func infoFrom(ctx context.Context) actorInfo {
 	return i
 }
 
+type groupIDsKey struct{}
+
+// WithActorGroupIDs attaches the signed-in user's directory group ids (the
+// same groups as WithActorInfo's names), which GROUP rules match on.
+func WithActorGroupIDs(ctx context.Context, ids []string) context.Context {
+	return context.WithValue(ctx, groupIDsKey{}, ids)
+}
+
+// ActorGroupIDs returns the signed-in user's directory group ids.
+func ActorGroupIDs(ctx context.Context) []string {
+	ids, _ := ctx.Value(groupIDsKey{}).([]string)
+	return ids
+}
+
 type mfaVerifiedAtKey struct{}
 
 // WithMFAVerifiedAt attaches when the human session last proved a second
@@ -114,6 +129,7 @@ func actorOf(ctx context.Context) *vaultv1.ActorContext {
 		IsSiteAdmin:       i.siteAdmin,
 		IsRoot:            i.root,
 		GroupNames:        i.groups,
+		GroupIds:          ActorGroupIDs(ctx),
 		MfaVerifiedAtUnix: mfaUnix(ctx),
 	}
 }
@@ -131,6 +147,7 @@ type machineActor struct {
 	groupNames  []string
 	userID      string
 	tokenID     string
+	groupIDs    []string
 }
 
 type machineActorKey struct{}
@@ -163,6 +180,7 @@ func MachineActorOf(ctx context.Context) *vaultv1.ActorContext {
 			UserId:        m.userID,
 			TokenId:       m.tokenID,
 			GroupNames:    append([]string(nil), m.groupNames...),
+			GroupIds:      append([]string(nil), m.groupIDs...),
 		}
 	}
 	return &vaultv1.ActorContext{
@@ -177,6 +195,17 @@ func MachineActorOf(ctx context.Context) *vaultv1.ActorContext {
 // roles; vault enforces the remaining personal-token limits.
 func WithUserTokenActor(ctx context.Context, userID, tokenID string, groupNames []string) context.Context {
 	return context.WithValue(ctx, machineActorKey{}, machineActor{userID: userID, tokenID: tokenID, groupNames: groupNames})
+}
+
+// WithMachineGroupIDs adds the directory group ids (the same groups as the
+// machine actor's names) to the machine actor already on ctx.
+func WithMachineGroupIDs(ctx context.Context, ids []string) context.Context {
+	m, ok := machineActorFrom(ctx)
+	if !ok {
+		return ctx
+	}
+	m.groupIDs = ids
+	return context.WithValue(ctx, machineActorKey{}, m)
 }
 
 // CallerID names the caller for logs: the signed-in user, a personal token's

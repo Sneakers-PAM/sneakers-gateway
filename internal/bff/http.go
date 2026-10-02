@@ -111,6 +111,9 @@ type IdentityClient interface {
 type Handler struct {
 	Store    SessionStore
 	Identity IdentityClient
+	// Audit records the sign-ins identity never sees (a rejected password).
+	// nil records nothing.
+	Audit AuditRecorder
 	// Pending parks the session token between the password step and a verified
 	// second factor (the 2-step login seam). Required when MFA is wired.
 	Pending PendingStore
@@ -210,6 +213,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	ar, err := h.Auth.VerifyPassword(r.Context(), h.loginIdentifier(r.Context(), in.Username), in.Password)
 	if errors.Is(err, ErrInvalidCredentials) {
+		h.recordRejectedSignIn(r.Context(), in.Username)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_credentials"})
 		return
 	}
@@ -468,6 +472,7 @@ func (h *Handler) actorContext(ctx context.Context, subject string) (context.Con
 	}
 	ctx = resolvers.WithActor(ctx, a.userID)
 	ctx = resolvers.WithActorInfo(ctx, a.siteAdmin, a.root, a.groups)
+	ctx = resolvers.WithActorGroupIDs(ctx, a.groupIDs)
 	return ctx, nil
 }
 
@@ -477,6 +482,7 @@ type actorAttrs struct {
 	siteAdmin bool
 	root      bool
 	groups    []string
+	groupIDs  []string
 }
 
 // actorAttrsFrom maps identity's ResolveUserContext response into the vault
@@ -491,7 +497,7 @@ func actorAttrsFrom(resp *identityv1.ResolveUserContextResponse) (actorAttrs, er
 	if user.GetDisabledAtUnix() != 0 {
 		return actorAttrs{}, errAccountDisabled
 	}
-	a := actorAttrs{userID: user.GetId(), root: user.GetIsRoot(), groups: resp.GetGroupNames()}
+	a := actorAttrs{userID: user.GetId(), root: user.GetIsRoot(), groups: resp.GetGroupNames(), groupIDs: resp.GetGroupIds()}
 	for _, role := range resp.GetRoles() {
 		if role == roleSiteAdmin || role == roleAdmin {
 			a.siteAdmin = true

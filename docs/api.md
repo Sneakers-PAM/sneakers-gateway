@@ -20,7 +20,13 @@ authenticates, and where to read more.
   makes the authorization decision and writes the audit record. For a signed-in person the vault
   and workflow actors also carry `mfa_verified_at_unix`, when the session last proved a second
   factor (see "Step-up" below); the workflow actor carries the admin flags and groups too, for the
-  vault's access check on check-out.
+  vault's access check on check-out. Both carry the user's directory group ids next to the names,
+  which group rules match on (the same applies to a personal token on the machine API).
+- Identity's admin calls (users, groups, roles, factors, service accounts and tokens) name the
+  signed-in user as `acting_user_id`, so the audit event identity records has an actor. A password
+  Kratos rejects at `/auth/login` never reaches identity, so the gateway records it itself:
+  `auth.signin` with `step: password`, `outcome: rejected` and the typed `identifier` (cut to 254
+  characters), never the password. That write is best effort and never changes the 401.
 - Errors from a backend carry its gRPC status text as the message, for example
   `rpc error: code = PermissionDenied desc = ...`, and stable `extensions` on both endpoints:
   - `code`: the canonical gRPC code name, such as `PERMISSION_DENIED` or `FAILED_PRECONDITION`;

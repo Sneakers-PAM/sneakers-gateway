@@ -209,3 +209,13 @@ func TestSecuritySettingsRequireMfaForReveal(t *testing.T) {
 		t.Fatalf("request = %+v, resp = %+v", fv.settingsReq, resp)
 	}
 }
+
+func TestActorsCarryGroupIDs(t *testing.T) {
+	ctx := WithActorGroupIDs(WithActorInfo(WithActor(context.Background(), "u-1"), false, false, []string{"Ops"}), []string{"g-ops"})
+	if ids := actorOf(ctx).GetGroupIds(); len(ids) != 1 || ids[0] != "g-ops" {
+		t.Fatalf("vault actor group_ids = %v", ids)
+	}
+	if ids := workflowActorOf(ctx).GetGroupIds(); len(ids) != 1 || ids[0] != "g-ops" {
+		t.Fatalf("workflow actor group_ids = %v", ids)
+	}
+}

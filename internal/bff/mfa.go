@@ -409,7 +409,7 @@ func (h *Handler) MfaRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.Identity.RemoveFactor(r.Context(), &identityv1.RemoveFactorRequest{
-		UserId: sess.UserID, Kind: factorTotp,
+		UserId: sess.UserID, Kind: factorTotp, ActingUserId: sess.UserID,
 	}); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "identity_unreachable"})
 		return
@@ -430,34 +430,35 @@ func (h *Handler) MfaRemove(w http.ResponseWriter, r *http.Request) {
 // the GraphQL data plane does (ResolveUserContext against the session's login
 // subject, never a token claim). CSRF is enforced only for state-changing callers
 // (checkCSRF). It writes the failure response itself; callers branch on ok.
-func (h *Handler) requireAdminSession(w http.ResponseWriter, r *http.Request, checkCSRF bool) bool {
+// adminID is the acting admin's user id.
+func (h *Handler) requireAdminSession(w http.ResponseWriter, r *http.Request, checkCSRF bool) (adminID string, ok bool) {
 	c, err := r.Cookie(CookieName)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "no_session"})
-		return false
+		return "", false
 	}
-	sess, ok, err := h.Store.Get(r.Context(), c.Value)
-	if err != nil || !ok {
+	sess, found, err := h.Store.Get(r.Context(), c.Value)
+	if err != nil || !found {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "no_session"})
-		return false
+		return "", false
 	}
 	if checkCSRF && !CSRFEqual(r.Header.Get("X-CSRF-Token"), sess.CSRFToken) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "csrf"})
-		return false
+		return "", false
 	}
 	resolved, err := h.Identity.ResolveUserContext(r.Context(), &identityv1.ResolveUserContextRequest{
 		Subject: sess.Subject,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "identity_unreachable"})
-		return false
+		return "", false
 	}
 	attrs, aerr := actorAttrsFrom(resolved)
 	if aerr != nil || (!attrs.siteAdmin && !attrs.root) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin_required"})
-		return false
+		return "", false
 	}
-	return true
+	return attrs.userID, true
 }
 
 // MfaAdminRemoveTotp serves POST /auth/mfa/admin/remove-totp {userId} for a
@@ -468,7 +469,8 @@ func (h *Handler) requireAdminSession(w http.ResponseWriter, r *http.Request, ch
 // and forced to re-enroll on next sign-in. A non-admin acting session is
 // rejected fail-closed with 403 before the target user id is even read.
 func (h *Handler) MfaAdminRemoveTotp(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdminSession(w, r, true) {
+	adminID, ok := h.requireAdminSession(w, r, true)
+	if !ok {
 		return
 	}
 	var in struct {
@@ -479,7 +481,7 @@ func (h *Handler) MfaAdminRemoveTotp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.Identity.RemoveFactor(r.Context(), &identityv1.RemoveFactorRequest{
-		UserId: in.UserID, Kind: factorTotp,
+		UserId: in.UserID, Kind: factorTotp, ActingUserId: adminID,
 	}); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "identity_unreachable"})
 		return
@@ -496,7 +498,7 @@ func (h *Handler) MfaAdminRemoveTotp(w http.ResponseWriter, r *http.Request) {
 // so the admin UI can disable "remove authenticator" when there is nothing to
 // remove. A safe read — session + admin required, but no CSRF (GET).
 func (h *Handler) MfaAdminStatus(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdminSession(w, r, false) {
+	if _, ok := h.requireAdminSession(w, r, false); !ok {
 		return
 	}
 	userID := r.URL.Query().Get("userId")
