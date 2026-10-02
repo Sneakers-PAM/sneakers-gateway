@@ -17,7 +17,8 @@ a real deployment.
 ## Backend services
 
 Every address is a gRPC `host:port`, dialled in plaintext. Connections are lazy: the gateway starts
-without the services, and a call fails until its service answers.
+without the services, and a call fails until its service answers. Every call carries the gateway's
+workload identity (see [api.md](api.md), "Service-to-service authentication").
 
 | Variable | Default | Service |
 |---|---|---|
@@ -27,6 +28,10 @@ without the services, and a call fails until its service answers.
 | `AUDIT_ADDR` | `localhost:9194` | audit |
 | `NOTIFY_ADDR` | `localhost:9195` | notify |
 | `SSHBROKER_ADDR` | `localhost:9096` | SSH broker |
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `WORKLOAD_TOKEN_FILE` | (none) | The gateway's projected service-account token (audience `sneakers`), for example `/var/run/secrets/sneakers/token`. It's sent to every backend as `authorization: Bearer <token>` gRPC metadata and read again on every call, so a rotated token is picked up. A set path that can't be read stops the gateway at start. Required with `AUTH_MODE=real`; unset (noauth only) sends no token, which only backends running with `WORKLOAD_AUTH=disabled` accept. |
 
 ## Sessions (`AUTH_MODE=real`)
 
