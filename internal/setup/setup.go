@@ -122,11 +122,11 @@ func (h *Handlers) BootstrapHandler() http.HandlerFunc {
 }
 
 // SeedHandler returns an http.HandlerFunc for POST /setup/seed. Expects JSON
-// {setupToken, userId?}. Guards with SETUP_TOKEN (503 if unconfigured, 403 on
+// {setupToken, userId}. Guards with SETUP_TOKEN (503 if unconfigured, 403 on
 // mismatch), then calls vault.SeedBuiltins with an admin actor to install the
 // built-in baseline (types/folders/policies/connections) into the fresh, empty
-// vault. The wizard passes the userId returned by /setup/bootstrap so the new
-// admin's personal folder is created for them. Idempotent — safe to retry.
+// vault. userId is required: the id /setup/bootstrap returned, the admin the
+// seed acts as and whose personal folder is created (400 without it). Idempotent — safe to retry.
 // Success → 200 {"types", "connections", "folders"} (totals present after seed).
 func (h *Handlers) SeedHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -147,11 +147,13 @@ func (h *Handlers) SeedHandler() http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "invalid setup token")
 			return
 		}
-		// The setup actor is a full admin: SeedBuiltins is a privileged, gated
-		// install. UserId (when present) is whose personal folder to ensure.
-		userID := body.UserID
+		// The setup actor is the bootstrap admin, a human site admin and root:
+		// SeedBuiltins is a privileged, gated install, and its personal folder is
+		// created for that user.
+		userID := strings.TrimSpace(body.UserID)
 		if userID == "" {
-			userID = "system"
+			writeErr(w, http.StatusBadRequest, "userId is required: pass the id /setup/bootstrap returned")
+			return
 		}
 		resp, err := h.vault.SeedBuiltins(r.Context(), &vaultv1.SeedBuiltinsRequest{
 			Actor: &vaultv1.ActorContext{UserId: userID, IsRoot: true, IsSiteAdmin: true},

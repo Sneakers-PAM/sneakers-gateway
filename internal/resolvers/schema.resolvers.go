@@ -205,6 +205,17 @@ func (r *mutationResolver) RevealSecretVersionField(ctx context.Context, secretI
 	return resp.GetValue(), nil
 }
 
+// RestoreSecretVersion is the resolver for the restoreSecretVersion field.
+func (r *mutationResolver) RestoreSecretVersion(ctx context.Context, secretID string, versionNo int) (*Secret, error) {
+	resp, err := r.Vault.RestoreSecretVersion(ctx, &vaultv1.RestoreSecretVersionRequest{
+		Actor: actorOf(ctx), SecretId: secretID, VersionNo: safeconv.Int32(versionNo),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return gqlSecret(resp.GetSecret()), nil
+}
+
 // BreakGlassSecret is the resolver for the breakGlassSecret field: a TOTP MFA
 // step-up in front of the vault's emergency-access reveal. The vault call is
 // only made once the acting user's current code has been verified against

@@ -33,6 +33,8 @@ const CookieName = "sneakers_sid"
 const (
 	roleSiteAdmin = "site-admin"
 	roleAdmin     = "admin"
+	// roleRecovery grants the vault's recovery view (prior versions, restore).
+	roleRecovery = "recovery"
 )
 
 // IdentityClient is the narrow identity-service surface the real-login flow
@@ -473,6 +475,7 @@ func (h *Handler) actorContext(ctx context.Context, subject string) (context.Con
 	ctx = resolvers.WithActor(ctx, a.userID)
 	ctx = resolvers.WithActorInfo(ctx, a.siteAdmin, a.root, a.groups)
 	ctx = resolvers.WithActorGroupIDs(ctx, a.groupIDs)
+	ctx = resolvers.WithActorRecovery(ctx, a.recovery)
 	return ctx, nil
 }
 
@@ -483,6 +486,7 @@ type actorAttrs struct {
 	root      bool
 	groups    []string
 	groupIDs  []string
+	recovery  bool
 }
 
 // actorAttrsFrom maps identity's ResolveUserContext response into the vault
@@ -499,9 +503,11 @@ func actorAttrsFrom(resp *identityv1.ResolveUserContextResponse) (actorAttrs, er
 	}
 	a := actorAttrs{userID: user.GetId(), root: user.GetIsRoot(), groups: resp.GetGroupNames(), groupIDs: resp.GetGroupIds()}
 	for _, role := range resp.GetRoles() {
-		if role == roleSiteAdmin || role == roleAdmin {
+		switch role {
+		case roleSiteAdmin, roleAdmin:
 			a.siteAdmin = true
-			break
+		case roleRecovery:
+			a.recovery = true
 		}
 	}
 	return a, nil
