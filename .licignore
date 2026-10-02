@@ -6,3 +6,11 @@
 !*.go
 !*.proto
 !*.sql
+
+# ...except the files gqlgen rewrites on every generate, which would drop a header.
+internal/resolvers/generated.go
+internal/resolvers/models_gen.go
+internal/resolvers/schema.resolvers.go
+internal/machineresolvers/generated.go
+internal/machineresolvers/models_gen.go
+internal/machineresolvers/machine.resolvers.go
