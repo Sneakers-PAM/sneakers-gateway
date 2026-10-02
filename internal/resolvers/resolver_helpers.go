@@ -188,15 +188,28 @@ func folderParent(byID map[string]*vaultv1.Folder, f *vaultv1.Folder) *vaultv1.F
 	return byID[f.GetParentId()]
 }
 
-// simActorAttrs resolves the site-admin/root attributes of userID for the
-// RACI simulation resolvers (SimulateFolder/SimulateSecret).
-func (r *Resolver) simActorAttrs(ctx context.Context, userID string) (simIsSiteAdmin, simIsRoot bool, err error) {
+// simActorAttrs resolves the site-admin/root attributes and directory group
+// membership of userID for the RACI simulation resolvers
+// (SimulateFolder/SimulateSecret). Both the group names and ids are
+// resolved, so simulation matches a GROUP rule the same way the real actor
+// path does, whether the rule carries a subject_id or only a legacy name.
+func (r *Resolver) simActorAttrs(ctx context.Context, userID string) (simIsSiteAdmin, simIsRoot bool, groupNames, groupIDs []string, err error) {
 	resp, err := r.Identity.GetUser(ctx, &identityv1.GetUserRequest{Id: userID})
 	if err != nil {
-		return false, false, err
+		return false, false, nil, nil, err
 	}
 	u := resp.GetUser()
-	return slices.Contains(u.GetRoles(), "site-admin") || slices.Contains(u.GetRoles(), "admin"), u.GetIsRoot(), nil
+	groupsResp, err := r.Identity.ListUserGroups(ctx, &identityv1.ListUserGroupsRequest{UserId: userID})
+	if err != nil {
+		return false, false, nil, nil, err
+	}
+	names := make([]string, 0, len(groupsResp.GetGroups()))
+	ids := make([]string, 0, len(groupsResp.GetGroups()))
+	for _, g := range groupsResp.GetGroups() {
+		names = append(names, g.GetName())
+		ids = append(ids, g.GetId())
+	}
+	return slices.Contains(u.GetRoles(), "site-admin") || slices.Contains(u.GetRoles(), "admin"), u.GetIsRoot(), names, ids, nil
 }
 
 // requireAdmin gates a mutation to the acting user being a site-admin or root
