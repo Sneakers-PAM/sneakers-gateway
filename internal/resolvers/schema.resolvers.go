@@ -42,7 +42,13 @@ func (r *mutationResolver) DeleteConnection(ctx context.Context, id string) (boo
 
 // SaveTarget is the resolver for the saveTarget field.
 func (r *mutationResolver) SaveTarget(ctx context.Context, input TargetInput) (*Target, error) {
-	resp, err := r.Vault.SaveTarget(ctx, &vaultv1.SaveTargetRequest{Actor: actorOf(ctx), Target: protoTargetInput(input)})
+	t := protoTargetInput(input)
+	keys, err := HostKeysForSave(ctx, r.Vault, actorOf(ctx), t.GetId(), input.SSHHostKeys)
+	if err != nil {
+		return nil, err
+	}
+	t.SshHostKeys = keys
+	resp, err := r.Vault.SaveTarget(ctx, &vaultv1.SaveTargetRequest{Actor: actorOf(ctx), Target: t})
 	if err != nil {
 		return nil, err
 	}
@@ -854,7 +860,7 @@ func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string) 
 	if targetID == "" {
 		return nil, fmt.Errorf("secret has no target host")
 	}
-	host, port, err := r.resolveSSHEndpoint(ctx, targetID)
+	host, port, hostKeys, err := r.resolveSSHEndpoint(ctx, targetID)
 	if err != nil {
 		return nil, err
 	}
@@ -878,6 +884,7 @@ func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string) 
 		SecretId:    secretID,
 		TargetId:    targetID,
 		TtlSeconds:  30,
+		HostKeys:    hostKeys,
 		Actor: &sshbrokerv1.ActorContext{
 			UserId:      actor.GetUserId(),
 			IsSiteAdmin: actor.GetIsSiteAdmin(),

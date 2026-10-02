@@ -241,5 +241,6 @@ func targetOf(t *vaultv1.Target) *MachineTarget {
 		ID: t.GetId(), Name: t.GetName(), Hostname: t.GetHostname(), Kind: t.GetKind(), Domain: t.GetDomain(),
 		Realm: t.GetRealm(), ConnectionID: t.GetConnectionId(), Description: t.GetDescription(),
 		OwnerUserID: t.GetOwnerUserId(), SecretCount: int(t.GetSecretCount()),
+		SSHHostKeys: append([]string{}, t.GetSshHostKeys()...),
 	}
 }

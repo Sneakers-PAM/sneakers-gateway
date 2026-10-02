@@ -10,11 +10,11 @@ require (
 	github.com/Bugs5382/go-log v1.3.0
 	github.com/Bugs5382/go-otel v1.3.2
 	github.com/Bugs5382/go-redis v1.2.0
-	github.com/Sneakers-PAM/sneakers-audit v0.0.0-20261002005742-3950d2af099c
-	github.com/Sneakers-PAM/sneakers-identity v0.0.0-20261002024530-c321a225a012
-	github.com/Sneakers-PAM/sneakers-notify v0.0.0-20261002022617-d8b0361fee49
-	github.com/Sneakers-PAM/sneakers-sshbroker v0.0.0-20261002051756-b26ceacd36b6
-	github.com/Sneakers-PAM/sneakers-vault v0.0.0-20261002051248-af0f5fe4fa74
+	github.com/Sneakers-PAM/sneakers-audit v0.0.0-20261002074856-31fe7af87c02
+	github.com/Sneakers-PAM/sneakers-identity v0.0.0-20261002074839-f11ac8f2da02
+	github.com/Sneakers-PAM/sneakers-notify v0.0.0-20261002075504-e1877c1cdb89
+	github.com/Sneakers-PAM/sneakers-sshbroker v0.0.0-20261002080703-085e00c40935
+	github.com/Sneakers-PAM/sneakers-vault v0.0.0-20261002080415-2b057f80f2d3
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/redis/go-redis/v9 v9.22.0
@@ -56,7 +56,7 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d // indirect

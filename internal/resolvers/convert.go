@@ -335,6 +335,7 @@ func gqlTarget(t *vaultv1.Target) *Target {
 		Kind: strPtr(t.GetKind()), Domain: strPtr(t.GetDomain()), Realm: strPtr(t.GetRealm()),
 		ConnectionID: t.GetConnectionId(), Description: strPtr(t.GetDescription()),
 		SecretCount: int(t.GetSecretCount()), OwnerUserID: strPtr(t.GetOwnerUserId()),
+		SSHHostKeys: append([]string{}, t.GetSshHostKeys()...),
 	}
 }
 func protoConnInput(in ConnectionInput) *vaultv1.Connection {
@@ -348,6 +349,7 @@ func protoTargetInput(in TargetInput) *vaultv1.Target {
 		Id: deref(in.ID), Name: in.Name, Hostname: in.Hostname,
 		Kind: deref(in.Kind), Domain: deref(in.Domain), Realm: deref(in.Realm),
 		ConnectionId: in.ConnectionID, Description: deref(in.Description),
+		SshHostKeys: in.SSHHostKeys,
 	}
 }
 

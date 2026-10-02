@@ -17,6 +17,10 @@
 - `PrincipalFolder` on those results is the folder's entry from `foldersForPrincipal`, so `path` is the full path the principal can see (`Infrastructure/AD`). The gateway reads it with a second vault call, the principal folder listing, which vault audits as `folder.list.principal`. If that listing fails or does not include the folder, `path` falls back to the folder's own name.
 - The listing is a separate read after the mutation, so a change made in between (such as another rename) shows in the result.
 
+## Targets
+
+`targetsForPrincipal(query, connectionId)` lists the targets the caller can see, each with `sshHostKeys` (the pinned SSH host keys; `[]` when not pinned). `saveTargetForPrincipal(input)` creates or updates one; `sshHostKeys` in the input is the whole pin list, left out to keep the current pins. Changing the pins needs a human site admin, so a token gets `PermissionDenied` if it sends a different list. See [api.md](api.md#targets-and-ssh-host-keys).
+
 ## Change type
 
 `changeSecretTypeForPrincipal(id, newTypeId, fieldMapping, fields)` needs Author on the secret and returns `TypeChangedSecret { secret, fieldKeys, movedToNotesKeys, automation }`. `movedToNotesKeys` lists the old field keys (never values) whose values had no field in the new type and were appended to its notes field. Vault applies the value rules: nothing is dropped, sensitive values only move into sensitive fields, and the prior values stay in version history. Any type may be converted into or out of any other, including rotation/heartbeat types (AD, Windows, database accounts) and the certificate type. Dropping checkout from a plain checkout type is still refused.

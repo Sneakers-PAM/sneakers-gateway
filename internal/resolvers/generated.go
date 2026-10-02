@@ -528,6 +528,7 @@ type ComplexityRoot struct {
 		Name         func(childComplexity int) int
 		OwnerUserID  func(childComplexity int) int
 		Realm        func(childComplexity int) int
+		SSHHostKeys  func(childComplexity int) int
 		SecretCount  func(childComplexity int) int
 	}
 
@@ -3435,6 +3436,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Target.Realm(childComplexity), true
+	case "Target.sshHostKeys":
+		if e.ComplexityRoot.Target.SSHHostKeys == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Target.SSHHostKeys(childComplexity), true
 	case "Target.secretCount":
 		if e.ComplexityRoot.Target.SecretCount == nil {
 			break
@@ -4080,6 +4087,10 @@ type Target {
   # Output-only: empty = shared (admin-owned); set = personal, owned by this user.
   # Server-assigned from the actor on create; never settable via TargetInput.
   ownerUserId: String
+  # SSH host keys the broker accepts for this target, one OpenSSH public key
+  # per entry ("ssh-ed25519 AAAA... comment"). Empty = not pinned: SSH
+  # sessions to it are refused.
+  sshHostKeys: [String!]!
 }
 input TargetInput {
   id: ID
@@ -4090,6 +4101,9 @@ input TargetInput {
   realm: String
   connectionId: String!
   description: String
+  # The full pin list (site admin only to change). Omit to keep the target's
+  # current pins; [] clears them.
+  sshHostKeys: [String!]
 }
 
 enum PwStartClass { any letter digit symbol }
@@ -5459,6 +5473,8 @@ func (ec *executionContext) childFields_Target(ctx context.Context, field graphq
 		return ec.fieldContext_Target_secretCount(ctx, field)
 	case "ownerUserId":
 		return ec.fieldContext_Target_ownerUserId(ctx, field)
+	case "sshHostKeys":
+		return ec.fieldContext_Target_sshHostKeys(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Target", field.Name)
 }
@@ -18474,6 +18490,29 @@ func (ec *executionContext) fieldContext_Target_ownerUserId(_ context.Context, f
 	return graphql.NewScalarFieldContext("Target", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _Target_sshHostKeys(ctx context.Context, field graphql.CollectedField, obj *Target) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Target_sshHostKeys(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SSHHostKeys, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Target_sshHostKeys(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Target", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _UseGrant_id(ctx context.Context, field graphql.CollectedField, obj *UseGrant) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -20902,7 +20941,7 @@ func (ec *executionContext) unmarshalInputTargetInput(ctx context.Context, obj a
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id", "name", "hostname", "kind", "domain", "realm", "connectionId", "description"}
+	fieldsInOrder := [...]string{"id", "name", "hostname", "kind", "domain", "realm", "connectionId", "description", "sshHostKeys"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -20965,6 +21004,13 @@ func (ec *executionContext) unmarshalInputTargetInput(ctx context.Context, obj a
 				return it, err
 			}
 			it.Description = data
+		case "sshHostKeys":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sshHostKeys"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SSHHostKeys = data
 		}
 	}
 	return it, nil
@@ -25117,6 +25163,11 @@ func (ec *executionContext) _Target(ctx context.Context, sel ast.SelectionSet, o
 			}
 		case "ownerUserId":
 			out.Values[i] = ec._Target_ownerUserId(ctx, field, obj)
+		case "sshHostKeys":
+			out.Values[i] = ec._Target_sshHostKeys(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

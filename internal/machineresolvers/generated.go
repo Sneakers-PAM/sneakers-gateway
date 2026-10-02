@@ -66,6 +66,7 @@ type ComplexityRoot struct {
 		Name         func(childComplexity int) int
 		OwnerUserID  func(childComplexity int) int
 		Realm        func(childComplexity int) int
+		SSHHostKeys  func(childComplexity int) int
 		SecretCount  func(childComplexity int) int
 	}
 
@@ -343,6 +344,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.MachineTarget.Realm(childComplexity), true
+	case "MachineTarget.sshHostKeys":
+		if e.ComplexityRoot.MachineTarget.SSHHostKeys == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MachineTarget.SSHHostKeys(childComplexity), true
 	case "MachineTarget.secretCount":
 		if e.ComplexityRoot.MachineTarget.SecretCount == nil {
 			break
@@ -1145,10 +1152,15 @@ type MachineTarget {
   description: String!
   ownerUserId: String!
   secretCount: Int!
+  # SSH host keys the broker accepts for this target, one OpenSSH public key
+  # per entry. Empty = not pinned: SSH sessions to it are refused.
+  sshHostKeys: [String!]!
 }
 
 # Create (no id) or update a target. A token's new target is personal to its
 # user; editing a shared target needs a site admin (not a token).
+# sshHostKeys is the full pin list; changing it needs a site admin, so a
+# token can only send the pins the target already has. Omit it to keep them.
 input MachineTargetInput {
   id: ID
   name: String!
@@ -1158,6 +1170,7 @@ input MachineTargetInput {
   realm: String
   connectionId: ID!
   description: String
+  sshHostKeys: [String!]
 }
 
 # The last credential check of a secret against its target. result is OK,
@@ -1365,6 +1378,8 @@ func (ec *executionContext) childFields_MachineTarget(ctx context.Context, field
 		return ec.fieldContext_MachineTarget_ownerUserId(ctx, field)
 	case "secretCount":
 		return ec.fieldContext_MachineTarget_secretCount(ctx, field)
+	case "sshHostKeys":
+		return ec.fieldContext_MachineTarget_sshHostKeys(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type MachineTarget", field.Name)
 }
@@ -2753,6 +2768,29 @@ func (ec *executionContext) _MachineTarget_secretCount(ctx context.Context, fiel
 }
 func (ec *executionContext) fieldContext_MachineTarget_secretCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("MachineTarget", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _MachineTarget_sshHostKeys(ctx context.Context, field graphql.CollectedField, obj *MachineTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_MachineTarget_sshHostKeys(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SSHHostKeys, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_MachineTarget_sshHostKeys(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("MachineTarget", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _Mutation_revealSecretFieldForPrincipal(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -5994,7 +6032,7 @@ func (ec *executionContext) unmarshalInputMachineTargetInput(ctx context.Context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id", "name", "hostname", "kind", "domain", "realm", "connectionId", "description"}
+	fieldsInOrder := [...]string{"id", "name", "hostname", "kind", "domain", "realm", "connectionId", "description", "sshHostKeys"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -6057,6 +6095,13 @@ func (ec *executionContext) unmarshalInputMachineTargetInput(ctx context.Context
 				return it, err
 			}
 			it.Description = data
+		case "sshHostKeys":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sshHostKeys"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SSHHostKeys = data
 		}
 	}
 	return it, nil
@@ -6319,6 +6364,11 @@ func (ec *executionContext) _MachineTarget(ctx context.Context, sel ast.Selectio
 			}
 		case "secretCount":
 			out.Values[i] = ec._MachineTarget_secretCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sshHostKeys":
+			out.Values[i] = ec._MachineTarget_sshHostKeys(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

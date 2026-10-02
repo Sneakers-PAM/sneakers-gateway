@@ -28,6 +28,23 @@ subscription. The machine schema is a smaller, principal-scoped surface:
 [machine-graphql.md](machine-graphql.md) and [machine-automation.md](machine-automation.md)
 describe it.
 
+### Targets and SSH host keys
+
+`Target.sshHostKeys` (human schema) and `MachineTarget.sshHostKeys` (machine schema) list the SSH
+host keys the broker accepts for the target, one OpenSSH public key per entry in authorized_keys
+form (`ssh-ed25519 AAAA... comment`). An empty list means the target isn't pinned.
+
+- `saveTarget(input: TargetInput)` and `saveTargetForPrincipal(input: MachineTargetInput)` take
+  `sshHostKeys` as the whole list. Leave it out on an edit to keep the current pins (the gateway
+  reads them from the vault and sends them back, since the vault replaces the list on every save);
+  send `[]` to clear them. The vault checks every key and lets only a human site admin change the
+  pins, so a token can save a target only with the pins it already has. The vault's rules are in
+  [sneakers-vault docs/api.md](https://github.com/Sneakers-PAM/sneakers-vault/blob/main/docs/api.md).
+- `openSshSession(secretId)` sends the target's pins to the broker with the session. The ticket
+  comes back either way; for an unpinned target, or a host that presents another key, the broker
+  refuses the connection and closes the WebSocket with code 1008 and the reason
+  (`host key not pinned for this target` or `host key mismatch`), which the client can show.
+
 ## Login and sessions (`AUTH_MODE=real`)
 
 All are JSON over `POST` unless noted. Endpoints that act for a signed-in user need the session

@@ -178,9 +178,15 @@ func (r *mutationResolver) RequestSecretCheck(ctx context.Context, secretID stri
 
 // SaveTargetForPrincipal is the resolver for the saveTargetForPrincipal field.
 func (r *mutationResolver) SaveTargetForPrincipal(ctx context.Context, input MachineTargetInput) (*MachineTarget, error) {
-	resp, err := r.Vault.SaveTarget(ctx, &vaultv1.SaveTargetRequest{Actor: resolvers.MachineActorOf(ctx), Target: &vaultv1.Target{
+	actor := resolvers.MachineActorOf(ctx)
+	keys, err := resolvers.HostKeysForSave(ctx, r.Vault, actor, deref(input.ID), input.SSHHostKeys)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.Vault.SaveTarget(ctx, &vaultv1.SaveTargetRequest{Actor: actor, Target: &vaultv1.Target{
 		Id: deref(input.ID), Name: input.Name, Hostname: input.Hostname, Kind: deref(input.Kind), Domain: deref(input.Domain),
 		Realm: deref(input.Realm), ConnectionId: input.ConnectionID, Description: deref(input.Description),
+		SshHostKeys: keys,
 	}})
 	if err != nil {
 		return nil, err

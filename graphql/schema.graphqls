@@ -331,6 +331,10 @@ type Target {
   # Output-only: empty = shared (admin-owned); set = personal, owned by this user.
   # Server-assigned from the actor on create; never settable via TargetInput.
   ownerUserId: String
+  # SSH host keys the broker accepts for this target, one OpenSSH public key
+  # per entry ("ssh-ed25519 AAAA... comment"). Empty = not pinned: SSH
+  # sessions to it are refused.
+  sshHostKeys: [String!]!
 }
 input TargetInput {
   id: ID
@@ -341,6 +345,9 @@ input TargetInput {
   realm: String
   connectionId: String!
   description: String
+  # The full pin list (site admin only to change). Omit to keep the target's
+  # current pins; [] clears them.
+  sshHostKeys: [String!]
 }
 
 enum PwStartClass { any letter digit symbol }

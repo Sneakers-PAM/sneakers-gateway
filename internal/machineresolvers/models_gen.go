@@ -35,27 +35,29 @@ type MachinePrincipal struct {
 }
 
 type MachineTarget struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Hostname     string `json:"hostname"`
-	Kind         string `json:"kind"`
-	Domain       string `json:"domain"`
-	Realm        string `json:"realm"`
-	ConnectionID string `json:"connectionId"`
-	Description  string `json:"description"`
-	OwnerUserID  string `json:"ownerUserId"`
-	SecretCount  int    `json:"secretCount"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Hostname     string   `json:"hostname"`
+	Kind         string   `json:"kind"`
+	Domain       string   `json:"domain"`
+	Realm        string   `json:"realm"`
+	ConnectionID string   `json:"connectionId"`
+	Description  string   `json:"description"`
+	OwnerUserID  string   `json:"ownerUserId"`
+	SecretCount  int      `json:"secretCount"`
+	SSHHostKeys  []string `json:"sshHostKeys"`
 }
 
 type MachineTargetInput struct {
-	ID           *string `json:"id,omitempty"`
-	Name         string  `json:"name"`
-	Hostname     string  `json:"hostname"`
-	Kind         *string `json:"kind,omitempty"`
-	Domain       *string `json:"domain,omitempty"`
-	Realm        *string `json:"realm,omitempty"`
-	ConnectionID string  `json:"connectionId"`
-	Description  *string `json:"description,omitempty"`
+	ID           *string  `json:"id,omitempty"`
+	Name         string   `json:"name"`
+	Hostname     string   `json:"hostname"`
+	Kind         *string  `json:"kind,omitempty"`
+	Domain       *string  `json:"domain,omitempty"`
+	Realm        *string  `json:"realm,omitempty"`
+	ConnectionID string   `json:"connectionId"`
+	Description  *string  `json:"description,omitempty"`
+	SSHHostKeys  []string `json:"sshHostKeys,omitempty"`
 }
 
 type Mutation struct {

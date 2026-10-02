@@ -464,27 +464,29 @@ type Subscription struct {
 }
 
 type Target struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Hostname     string  `json:"hostname"`
-	Kind         *string `json:"kind,omitempty"`
-	Domain       *string `json:"domain,omitempty"`
-	Realm        *string `json:"realm,omitempty"`
-	ConnectionID string  `json:"connectionId"`
-	Description  *string `json:"description,omitempty"`
-	SecretCount  int     `json:"secretCount"`
-	OwnerUserID  *string `json:"ownerUserId,omitempty"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Hostname     string   `json:"hostname"`
+	Kind         *string  `json:"kind,omitempty"`
+	Domain       *string  `json:"domain,omitempty"`
+	Realm        *string  `json:"realm,omitempty"`
+	ConnectionID string   `json:"connectionId"`
+	Description  *string  `json:"description,omitempty"`
+	SecretCount  int      `json:"secretCount"`
+	OwnerUserID  *string  `json:"ownerUserId,omitempty"`
+	SSHHostKeys  []string `json:"sshHostKeys"`
 }
 
 type TargetInput struct {
-	ID           *string `json:"id,omitempty"`
-	Name         string  `json:"name"`
-	Hostname     string  `json:"hostname"`
-	Kind         *string `json:"kind,omitempty"`
-	Domain       *string `json:"domain,omitempty"`
-	Realm        *string `json:"realm,omitempty"`
-	ConnectionID string  `json:"connectionId"`
-	Description  *string `json:"description,omitempty"`
+	ID           *string  `json:"id,omitempty"`
+	Name         string   `json:"name"`
+	Hostname     string   `json:"hostname"`
+	Kind         *string  `json:"kind,omitempty"`
+	Domain       *string  `json:"domain,omitempty"`
+	Realm        *string  `json:"realm,omitempty"`
+	ConnectionID string   `json:"connectionId"`
+	Description  *string  `json:"description,omitempty"`
+	SSHHostKeys  []string `json:"sshHostKeys,omitempty"`
 }
 
 type UpdateSecretInput struct {
