@@ -139,6 +139,7 @@ type Folder struct {
 	SubtreeSecretCount *int        `json:"subtreeSecretCount,omitempty"`
 	Owners             []string    `json:"owners,omitempty"`
 	CanManage          bool        `json:"canManage"`
+	RevealStepUp       StepUpMode  `json:"revealStepUp"`
 }
 
 type FolderAccess struct {
@@ -298,6 +299,7 @@ type RaciRule struct {
 	Order       int              `json:"order"`
 	SubjectKind SubjectKind      `json:"subjectKind"`
 	SubjectName string           `json:"subjectName"`
+	SubjectID   *string          `json:"subjectId,omitempty"`
 	Grants      []*RaciRuleGrant `json:"grants"`
 }
 
@@ -314,6 +316,7 @@ type RaciRuleGrantInput struct {
 type RaciRuleInput struct {
 	SubjectKind SubjectKind           `json:"subjectKind"`
 	SubjectName string                `json:"subjectName"`
+	SubjectID   *string               `json:"subjectId,omitempty"`
 	Grants      []*RaciRuleGrantInput `json:"grants"`
 }
 
@@ -431,6 +434,7 @@ type SecuritySettings struct {
 	AllowAPIForSensitive           bool    `json:"allowApiForSensitive"`
 	RequestHistoryRetentionDays    *int    `json:"requestHistoryRetentionDays,omitempty"`
 	SessionTTLSeconds              *int    `json:"sessionTtlSeconds,omitempty"`
+	RequireMfaForReveal            bool    `json:"requireMfaForReveal"`
 }
 
 type SecuritySettingsInput struct {
@@ -439,6 +443,7 @@ type SecuritySettingsInput struct {
 	AllowAPIForSensitive           *bool   `json:"allowApiForSensitive,omitempty"`
 	RequestHistoryRetentionDays    *int    `json:"requestHistoryRetentionDays,omitempty"`
 	SessionTTLSeconds              *int    `json:"sessionTtlSeconds,omitempty"`
+	RequireMfaForReveal            *bool   `json:"requireMfaForReveal,omitempty"`
 }
 
 type ServiceAccount struct {
@@ -802,10 +807,12 @@ func (e FolderScope) MarshalJSON() ([]byte, error) {
 type HeartbeatResult string
 
 const (
-	HeartbeatResultOk          HeartbeatResult = "ok"
-	HeartbeatResultFailed      HeartbeatResult = "failed"
-	HeartbeatResultUnreachable HeartbeatResult = "unreachable"
-	HeartbeatResultUnknown     HeartbeatResult = "unknown"
+	HeartbeatResultOk               HeartbeatResult = "ok"
+	HeartbeatResultFailed           HeartbeatResult = "failed"
+	HeartbeatResultUnreachable      HeartbeatResult = "unreachable"
+	HeartbeatResultUnknown          HeartbeatResult = "unknown"
+	HeartbeatResultHostKeyNotPinned HeartbeatResult = "hostKeyNotPinned"
+	HeartbeatResultHostKeyMismatch  HeartbeatResult = "hostKeyMismatch"
 )
 
 var AllHeartbeatResult = []HeartbeatResult{
@@ -813,11 +820,13 @@ var AllHeartbeatResult = []HeartbeatResult{
 	HeartbeatResultFailed,
 	HeartbeatResultUnreachable,
 	HeartbeatResultUnknown,
+	HeartbeatResultHostKeyNotPinned,
+	HeartbeatResultHostKeyMismatch,
 }
 
 func (e HeartbeatResult) IsValid() bool {
 	switch e {
-	case HeartbeatResultOk, HeartbeatResultFailed, HeartbeatResultUnreachable, HeartbeatResultUnknown:
+	case HeartbeatResultOk, HeartbeatResultFailed, HeartbeatResultUnreachable, HeartbeatResultUnknown, HeartbeatResultHostKeyNotPinned, HeartbeatResultHostKeyMismatch:
 		return true
 	}
 	return false
@@ -1199,6 +1208,63 @@ func (e *RotationState) UnmarshalJSON(b []byte) error {
 }
 
 func (e RotationState) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type StepUpMode string
+
+const (
+	StepUpModeInherit StepUpMode = "inherit"
+	StepUpModeRequire StepUpMode = "require"
+	StepUpModeOff     StepUpMode = "off"
+)
+
+var AllStepUpMode = []StepUpMode{
+	StepUpModeInherit,
+	StepUpModeRequire,
+	StepUpModeOff,
+}
+
+func (e StepUpMode) IsValid() bool {
+	switch e {
+	case StepUpModeInherit, StepUpModeRequire, StepUpModeOff:
+		return true
+	}
+	return false
+}
+
+func (e StepUpMode) String() string {
+	return string(e)
+}
+
+func (e *StepUpMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = StepUpMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid StepUpMode", str)
+	}
+	return nil
+}
+
+func (e StepUpMode) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *StepUpMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e StepUpMode) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

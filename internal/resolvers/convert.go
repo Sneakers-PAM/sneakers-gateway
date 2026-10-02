@@ -151,6 +151,10 @@ func heartbeatGQL(h vaultv1.HeartbeatResult) *HeartbeatResult {
 		v = HeartbeatResultUnknown
 	case vaultv1.HeartbeatResult_HEARTBEAT_RESULT_UNREACHABLE:
 		v = HeartbeatResultUnreachable
+	case vaultv1.HeartbeatResult_HEARTBEAT_RESULT_HOST_KEY_NOT_PINNED:
+		v = HeartbeatResultHostKeyNotPinned
+	case vaultv1.HeartbeatResult_HEARTBEAT_RESULT_HOST_KEY_MISMATCH:
+		v = HeartbeatResultHostKeyMismatch
 	default:
 		return nil
 	}
@@ -290,6 +294,29 @@ func gqlFolder(f *vaultv1.Folder) *Folder {
 		SubtreeSecretCount: intPtr(int(f.GetSubtreeSecretCount())),
 		Owners:             f.GetOwners(),
 		CanManage:          f.GetCanManage(),
+		RevealStepUp:       stepUpModeGQL(f.GetRevealStepUp()),
+	}
+}
+
+func stepUpModeGQL(m vaultv1.StepUpMode) StepUpMode {
+	switch m {
+	case vaultv1.StepUpMode_STEP_UP_MODE_REQUIRE:
+		return StepUpModeRequire
+	case vaultv1.StepUpMode_STEP_UP_MODE_OFF:
+		return StepUpModeOff
+	default:
+		return StepUpModeInherit
+	}
+}
+
+func stepUpModeProto(m StepUpMode) vaultv1.StepUpMode {
+	switch m {
+	case StepUpModeRequire:
+		return vaultv1.StepUpMode_STEP_UP_MODE_REQUIRE
+	case StepUpModeOff:
+		return vaultv1.StepUpMode_STEP_UP_MODE_OFF
+	default:
+		return vaultv1.StepUpMode_STEP_UP_MODE_UNSPECIFIED
 	}
 }
 
@@ -418,6 +445,7 @@ func gqlSettings(s *vaultv1.SecuritySettings) *SecuritySettings {
 		AllowAPIForSensitive:           s.GetAllowApiForSensitive(),
 		RequestHistoryRetentionDays:    intPtr(int(s.GetRequestHistoryRetentionDays())),
 		SessionTTLSeconds:              intPtr(int(s.GetSessionTtlSeconds())),
+		RequireMfaForReveal:            s.GetRequireMfaForReveal(),
 	}
 }
 
@@ -504,7 +532,7 @@ func gqlRaciRule(r *vaultv1.RaciRule) *RaciRule {
 	return &RaciRule{
 		ID: r.GetId(), FolderID: r.GetFolderId(), Order: int(r.GetOrder()),
 		SubjectKind: subjectKindGQL(r.GetSubjectKind()), SubjectName: r.GetSubjectName(),
-		Grants: gqlRaciGrants(r.GetGrants()),
+		SubjectID: strPtr(r.GetSubjectId()), Grants: gqlRaciGrants(r.GetGrants()),
 	}
 }
 
@@ -521,7 +549,7 @@ func protoRaciRuleInput(in *RaciRuleInput) *vaultv1.RaciRule {
 		}
 	}
 	return &vaultv1.RaciRule{
-		SubjectKind: subjectKindProto(in.SubjectKind), SubjectName: in.SubjectName, Grants: grants,
+		SubjectKind: subjectKindProto(in.SubjectKind), SubjectName: in.SubjectName, SubjectId: deref(in.SubjectID), Grants: grants,
 	}
 }
 

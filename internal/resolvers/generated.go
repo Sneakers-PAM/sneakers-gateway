@@ -138,6 +138,7 @@ type ComplexityRoot struct {
 		OwnerUserID        func(childComplexity int) int
 		Owners             func(childComplexity int) int
 		ParentID           func(childComplexity int) int
+		RevealStepUp       func(childComplexity int) int
 		Role               func(childComplexity int) int
 		Scope              func(childComplexity int) int
 		SubtreeSecretCount func(childComplexity int) int
@@ -281,6 +282,7 @@ type ComplexityRoot struct {
 		SavePasswordPolicy       func(childComplexity int, input PasswordPolicyInput) int
 		SaveTarget               func(childComplexity int, input TargetInput) int
 		SendMfaEmailCode         func(childComplexity int) int
+		SetFolderRevealStepUp    func(childComplexity int, folderID string, mode StepUpMode) int
 		SetFolderRuleset         func(childComplexity int, folderID string, owners []string, rules []*RaciRuleInput) int
 		SetSecretAutomation      func(childComplexity int, secretID string, disableRotation bool, disableHeartbeat bool) int
 		SetSecretRuleset         func(childComplexity int, secretID string, rules []*RaciRuleInput) int
@@ -394,6 +396,7 @@ type ComplexityRoot struct {
 		Grants      func(childComplexity int) int
 		ID          func(childComplexity int) int
 		Order       func(childComplexity int) int
+		SubjectID   func(childComplexity int) int
 		SubjectKind func(childComplexity int) int
 		SubjectName func(childComplexity int) int
 	}
@@ -491,6 +494,7 @@ type ComplexityRoot struct {
 		AllowAPIForSensitive           func(childComplexity int) int
 		DefaultPasswordPolicyID        func(childComplexity int) int
 		RequestHistoryRetentionDays    func(childComplexity int) int
+		RequireMfaForReveal            func(childComplexity int) int
 		RequireMfaForSensitiveCheckout func(childComplexity int) int
 		SessionTTLSeconds              func(childComplexity int) int
 	}
@@ -614,6 +618,7 @@ type MutationResolver interface {
 	AddFolderRule(ctx context.Context, folderID string, subjectKind SubjectKind, subjectID string, role FolderRole) (*FolderAccessRule, error)
 	RemoveFolderRule(ctx context.Context, id string) (bool, error)
 	SetFolderRuleset(ctx context.Context, folderID string, owners []string, rules []*RaciRuleInput) (*FolderRuleset, error)
+	SetFolderRevealStepUp(ctx context.Context, folderID string, mode StepUpMode) (*Folder, error)
 	SetSecretRuleset(ctx context.Context, secretID string, rules []*RaciRuleInput) (*SecretRuleset, error)
 	CheckoutSecret(ctx context.Context, secretID string, hours *int) (*Lease, error)
 	CheckinSecret(ctx context.Context, secretID string) (bool, error)
@@ -1169,6 +1174,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Folder.ParentID(childComplexity), true
+	case "Folder.revealStepUp":
+		if e.ComplexityRoot.Folder.RevealStepUp == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Folder.RevealStepUp(childComplexity), true
 	case "Folder.role":
 		if e.ComplexityRoot.Folder.Role == nil {
 			break
@@ -2086,6 +2097,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SendMfaEmailCode(childComplexity), true
+	case "Mutation.setFolderRevealStepUp":
+		if e.ComplexityRoot.Mutation.SetFolderRevealStepUp == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setFolderRevealStepUp_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetFolderRevealStepUp(childComplexity, args["folderId"].(string), args["mode"].(StepUpMode)), true
 	case "Mutation.setFolderRuleset":
 		if e.ComplexityRoot.Mutation.SetFolderRuleset == nil {
 			break
@@ -2853,6 +2875,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RaciRule.Order(childComplexity), true
+	case "RaciRule.subjectId":
+		if e.ComplexityRoot.RaciRule.SubjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RaciRule.SubjectID(childComplexity), true
 	case "RaciRule.subjectKind":
 		if e.ComplexityRoot.RaciRule.SubjectKind == nil {
 			break
@@ -3282,6 +3310,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecuritySettings.RequestHistoryRetentionDays(childComplexity), true
+	case "SecuritySettings.requireMfaForReveal":
+		if e.ComplexityRoot.SecuritySettings.RequireMfaForReveal == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecuritySettings.RequireMfaForReveal(childComplexity), true
 	case "SecuritySettings.requireMfaForSensitiveCheckout":
 		if e.ComplexityRoot.SecuritySettings.RequireMfaForSensitiveCheckout == nil {
 			break
@@ -3767,7 +3801,9 @@ enum TypeOrigin { system extension custom }
 enum FolderScope { personal group role }
 enum FolderRole { read write delete bulk owner }
 enum SubjectKind { group user everyone }
-enum HeartbeatResult { ok failed unreachable unknown }
+# hostKeyNotPinned: an SSH target without host-key pins (the connector doesn't
+# connect); hostKeyMismatch: the host offered a key that isn't pinned.
+enum HeartbeatResult { ok failed unreachable unknown hostKeyNotPinned hostKeyMismatch }
 enum RotationState { ok failed degraded rotating unknown }
 
 type SecretFieldDef {
@@ -3818,6 +3854,10 @@ type Folder {
   owners: [String!]
   # whether the current actor may manage/create-under this folder — authoritative, from the vault
   canManage: Boolean!
+  # Step-up MFA before a reveal in this folder and below. inherit takes the
+  # nearest ancestor's setting, and at the top the global
+  # SecuritySettings.requireMfaForReveal.
+  revealStepUp: StepUpMode!
 }
 
 type FolderAccessRule {
@@ -3839,6 +3879,9 @@ type InheritedFolderRule {
 # manage (create/edit/rotate); A = approve checkout/access requests;
 # I = informed (see the secret exists / metadata, no reveal).
 enum RaciAction { C I A R }
+
+# A folder's step-up-on-reveal override.
+enum StepUpMode { inherit require off }
 # Tri-state grant per action cell: allow, deny, or blank (fall through).
 enum RaciGrant { allow deny }
 
@@ -3858,6 +3901,9 @@ type RaciRule {
   subjectKind: SubjectKind!
   # group name or user id; empty for everyone.
   subjectName: String!
+  # group rules: the directory group id the rule matches on. subjectName is
+  # then the display name only.
+  subjectId: String
   grants: [RaciRuleGrant!]!
 }
 
@@ -3904,6 +3950,9 @@ input RaciRuleGrantInput {
 input RaciRuleInput {
   subjectKind: SubjectKind!
   subjectName: String!
+  # Required for a new group rule: the directory group id. The vault refuses
+  # a group rule without it (GROUP_ID_REQUIRED).
+  subjectId: String
   grants: [RaciRuleGrantInput!]!
 }
 
@@ -4152,6 +4201,8 @@ type SecuritySettings {
   # each sliding renewal. Unset resolves to 1800 (30m); the gateway clamps the
   # effective value to [900, 3600] (15m-60m).
   sessionTtlSeconds: Int
+  # Global default for step-up MFA before a reveal; folders override it.
+  requireMfaForReveal: Boolean!
 }
 # Partial update: only the fields provided are changed.
 input SecuritySettingsInput {
@@ -4160,6 +4211,7 @@ input SecuritySettingsInput {
   allowApiForSensitive: Boolean
   requestHistoryRetentionDays: Int
   sessionTtlSeconds: Int
+  requireMfaForReveal: Boolean
 }
 
 # A platform user. ` + "`" + `roles` + "`" + ` are elevated roles on top of the baseline; ` + "`" + `isRoot` + "`" + `
@@ -4597,6 +4649,9 @@ type Mutation {
 
   # Replace a folder's entire firewall-RACI ruleset (owners + ordered rules).
   setFolderRuleset(folderId: String!, owners: [String!]!, rules: [RaciRuleInput!]!): FolderRuleset!
+  # Set a folder's step-up-on-reveal override. Human site admin only (the
+  # vault decides).
+  setFolderRevealStepUp(folderId: String!, mode: StepUpMode!): Folder!
   # Replace a secret's entire firewall-RACI ruleset (ordered rules).
   setSecretRuleset(secretId: String!, rules: [RaciRuleInput!]!): SecretRuleset!
 
@@ -4946,6 +5001,8 @@ func (ec *executionContext) childFields_Folder(ctx context.Context, field graphq
 		return ec.fieldContext_Folder_owners(ctx, field)
 	case "canManage":
 		return ec.fieldContext_Folder_canManage(ctx, field)
+	case "revealStepUp":
+		return ec.fieldContext_Folder_revealStepUp(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Folder", field.Name)
 }
@@ -5212,6 +5269,8 @@ func (ec *executionContext) childFields_RaciRule(ctx context.Context, field grap
 		return ec.fieldContext_RaciRule_subjectKind(ctx, field)
 	case "subjectName":
 		return ec.fieldContext_RaciRule_subjectName(ctx, field)
+	case "subjectId":
+		return ec.fieldContext_RaciRule_subjectId(ctx, field)
 	case "grants":
 		return ec.fieldContext_RaciRule_grants(ctx, field)
 	}
@@ -5408,6 +5467,8 @@ func (ec *executionContext) childFields_SecuritySettings(ctx context.Context, fi
 		return ec.fieldContext_SecuritySettings_requestHistoryRetentionDays(ctx, field)
 	case "sessionTtlSeconds":
 		return ec.fieldContext_SecuritySettings_sessionTtlSeconds(ctx, field)
+	case "requireMfaForReveal":
+		return ec.fieldContext_SecuritySettings_requireMfaForReveal(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecuritySettings", field.Name)
 }
@@ -6875,6 +6936,28 @@ func (ec *executionContext) field_Mutation_saveTarget_args(ctx context.Context, 
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setFolderRevealStepUp_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "folderId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["folderId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "mode",
+		func(ctx context.Context, v any) (StepUpMode, error) {
+			return ec.unmarshalNStepUpMode2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐStepUpMode(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["mode"] = arg1
 	return args, nil
 }
 
@@ -9453,6 +9536,29 @@ func (ec *executionContext) fieldContext_Folder_canManage(_ context.Context, fie
 	return graphql.NewScalarFieldContext("Folder", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _Folder_revealStepUp(ctx context.Context, field graphql.CollectedField, obj *Folder) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Folder_revealStepUp(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RevealStepUp, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v StepUpMode) graphql.Marshaler {
+			return ec.marshalNStepUpMode2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐStepUpMode(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Folder_revealStepUp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Folder", field, false, false, errors.New("field of type StepUpMode does not have child fields"))
+}
+
 func (ec *executionContext) _FolderAccess_read(ctx context.Context, field graphql.CollectedField, obj *FolderAccess) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11981,6 +12087,50 @@ func (ec *executionContext) fieldContext_Mutation_setFolderRuleset(ctx context.C
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_setFolderRuleset_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setFolderRevealStepUp(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_setFolderRevealStepUp(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetFolderRevealStepUp(ctx, fc.Args["folderId"].(string), fc.Args["mode"].(StepUpMode))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Folder) graphql.Marshaler {
+			return ec.marshalNFolder2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFolder(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_setFolderRevealStepUp(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Folder(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setFolderRevealStepUp_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -16259,6 +16409,29 @@ func (ec *executionContext) fieldContext_RaciRule_subjectName(_ context.Context,
 	return graphql.NewScalarFieldContext("RaciRule", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _RaciRule_subjectId(ctx context.Context, field graphql.CollectedField, obj *RaciRule) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RaciRule_subjectId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RaciRule_subjectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RaciRule", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _RaciRule_grants(ctx context.Context, field graphql.CollectedField, obj *RaciRule) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -17926,6 +18099,29 @@ func (ec *executionContext) _SecuritySettings_sessionTtlSeconds(ctx context.Cont
 }
 func (ec *executionContext) fieldContext_SecuritySettings_sessionTtlSeconds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SecuritySettings", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _SecuritySettings_requireMfaForReveal(ctx context.Context, field graphql.CollectedField, obj *SecuritySettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecuritySettings_requireMfaForReveal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RequireMfaForReveal, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecuritySettings_requireMfaForReveal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecuritySettings", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _ServiceAccount_id(ctx context.Context, field graphql.CollectedField, obj *ServiceAccount) (ret graphql.Marshaler) {
@@ -20666,7 +20862,7 @@ func (ec *executionContext) unmarshalInputRaciRuleInput(ctx context.Context, obj
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"subjectKind", "subjectName", "grants"}
+	fieldsInOrder := [...]string{"subjectKind", "subjectName", "subjectId", "grants"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -20687,6 +20883,13 @@ func (ec *executionContext) unmarshalInputRaciRuleInput(ctx context.Context, obj
 				return it, err
 			}
 			it.SubjectName = data
+		case "subjectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("subjectId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SubjectID = data
 		case "grants":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("grants"))
 			data, err := ec.unmarshalNRaciRuleGrantInput2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐRaciRuleGrantInputᚄ(ctx, v)
@@ -20882,7 +21085,7 @@ func (ec *executionContext) unmarshalInputSecuritySettingsInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"defaultPasswordPolicyId", "requireMfaForSensitiveCheckout", "allowApiForSensitive", "requestHistoryRetentionDays", "sessionTtlSeconds"}
+	fieldsInOrder := [...]string{"defaultPasswordPolicyId", "requireMfaForSensitiveCheckout", "allowApiForSensitive", "requestHistoryRetentionDays", "sessionTtlSeconds", "requireMfaForReveal"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -20924,6 +21127,13 @@ func (ec *executionContext) unmarshalInputSecuritySettingsInput(ctx context.Cont
 				return it, err
 			}
 			it.SessionTTLSeconds = data
+		case "requireMfaForReveal":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requireMfaForReveal"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequireMfaForReveal = data
 		}
 	}
 	return it, nil
@@ -21854,6 +22064,11 @@ func (ec *executionContext) _Folder(ctx context.Context, sel ast.SelectionSet, o
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "revealStepUp":
+			out.Values[i] = ec._Folder_revealStepUp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -22736,6 +22951,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "setFolderRuleset":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_setFolderRuleset(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setFolderRevealStepUp":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setFolderRevealStepUp(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -24378,6 +24600,8 @@ func (ec *executionContext) _RaciRule(ctx context.Context, sel ast.SelectionSet,
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "subjectId":
+			out.Values[i] = ec._RaciRule_subjectId(ctx, field, obj)
 		case "grants":
 			out.Values[i] = ec._RaciRule_grants(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -24946,6 +25170,11 @@ func (ec *executionContext) _SecuritySettings(ctx context.Context, sel ast.Selec
 			out.Values[i] = ec._SecuritySettings_requestHistoryRetentionDays(ctx, field, obj)
 		case "sessionTtlSeconds":
 			out.Values[i] = ec._SecuritySettings_sessionTtlSeconds(ctx, field, obj)
+		case "requireMfaForReveal":
+			out.Values[i] = ec._SecuritySettings_requireMfaForReveal(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -26957,6 +27186,16 @@ func (ec *executionContext) marshalNSshSessionTicket2ᚖgithubᚗcomᚋSneakers�
 		return graphql.Null
 	}
 	return ec._SshSessionTicket(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNStepUpMode2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐStepUpMode(ctx context.Context, v any) (StepUpMode, error) {
+	var res StepUpMode
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNStepUpMode2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐStepUpMode(ctx context.Context, sel ast.SelectionSet, v StepUpMode) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {

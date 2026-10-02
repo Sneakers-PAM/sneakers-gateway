@@ -33,10 +33,18 @@ type Resolver struct {
 	HydraIssuer string
 }
 
-// workflowActorOf forwards the no-auth dev identity to the workflow service
-// (its ActorContext is a distinct type from the vault's).
+// workflowActorOf is the acting user for the workflow service (its
+// ActorContext is a distinct type from the vault's). The access fields feed
+// the vault's RACI decision on check-out.
 func workflowActorOf(ctx context.Context) *workflowv1.ActorContext {
-	return &workflowv1.ActorContext{UserId: actorFrom(ctx)}
+	i := infoFrom(ctx)
+	return &workflowv1.ActorContext{
+		UserId:            actorFrom(ctx),
+		MfaVerifiedAtUnix: mfaUnix(ctx),
+		GroupNames:        i.groups,
+		IsSiteAdmin:       i.siteAdmin,
+		IsRoot:            i.root,
+	}
 }
 
 // actorKey carries the no-auth dev identity (X-Dev-User) through the request
@@ -90,13 +98,23 @@ func MFAVerifiedAt(ctx context.Context) time.Time {
 	return t
 }
 
+// mfaUnix is MFAVerifiedAt in Unix seconds, 0 when unknown.
+func mfaUnix(ctx context.Context) int64 {
+	t := MFAVerifiedAt(ctx)
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
+
 func actorOf(ctx context.Context) *vaultv1.ActorContext {
 	i := infoFrom(ctx)
 	return &vaultv1.ActorContext{
-		UserId:      actorFrom(ctx),
-		IsSiteAdmin: i.siteAdmin,
-		IsRoot:      i.root,
-		GroupNames:  i.groups,
+		UserId:            actorFrom(ctx),
+		IsSiteAdmin:       i.siteAdmin,
+		IsRoot:            i.root,
+		GroupNames:        i.groups,
+		MfaVerifiedAtUnix: mfaUnix(ctx),
 	}
 }
 

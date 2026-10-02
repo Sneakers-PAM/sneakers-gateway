@@ -181,10 +181,10 @@ func (h *Handler) VerifyOtp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.issueSession(w, r, Session{
-		AccessToken: final.AccessToken,
-		ExpiresAt:   time.Now().Add(time.Duration(final.ExpiresIn) * time.Second),
-		UserID:      final.UserID,
-		Subject:     final.Subject,
+		AccessToken:   final.AccessToken,
+		ExpiresAt:     time.Now().Add(time.Duration(final.ExpiresIn) * time.Second),
+		UserID:        final.UserID,
+		Subject:       final.Subject,
 		MFAVerified:   true,
 		MFAVerifiedAt: time.Now(),
 		Enrolled:      true, // step-up only happens for users with a confirmed factor
