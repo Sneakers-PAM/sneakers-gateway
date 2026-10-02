@@ -205,3 +205,20 @@ func TestSshSessionReturnsBrokerTicket(t *testing.T) {
 		t.Fatalf("ticket not surfaced correctly: %+v", got)
 	}
 }
+
+// The broker refuses any principal but a person, so it must be told which kind
+// the gateway authenticated, with the same numbers as the vault's enum.
+func TestBrokerActorCarriesThePrincipalKind(t *testing.T) {
+	cases := map[vaultv1.PrincipalKind]sshbrokerv1.PrincipalKind{
+		vaultv1.PrincipalKind_PRINCIPAL_KIND_HUMAN:           sshbrokerv1.PrincipalKind_PRINCIPAL_KIND_HUMAN,
+		vaultv1.PrincipalKind_PRINCIPAL_KIND_SERVICE_ACCOUNT: sshbrokerv1.PrincipalKind_PRINCIPAL_KIND_SERVICE_ACCOUNT,
+		vaultv1.PrincipalKind_PRINCIPAL_KIND_WORKLOAD:        sshbrokerv1.PrincipalKind_PRINCIPAL_KIND_WORKLOAD,
+		vaultv1.PrincipalKind_PRINCIPAL_KIND_USER_TOKEN:      sshbrokerv1.PrincipalKind_PRINCIPAL_KIND_USER_TOKEN,
+	}
+	for in, want := range cases {
+		got := brokerActor(&vaultv1.ActorContext{UserId: "u-1", IsSiteAdmin: true, GroupNames: []string{"ops"}, PrincipalKind: in})
+		if got.GetPrincipalKind() != want || got.GetUserId() != "u-1" || !got.GetIsSiteAdmin() || len(got.GetGroupNames()) != 1 {
+			t.Fatalf("%v: broker actor = %+v", in, got)
+		}
+	}
+}
