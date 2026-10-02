@@ -897,12 +897,7 @@ func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string) 
 		TargetId:    targetID,
 		TtlSeconds:  30,
 		HostKeys:    hostKeys,
-		Actor: &sshbrokerv1.ActorContext{
-			UserId:      actor.GetUserId(),
-			IsSiteAdmin: actor.GetIsSiteAdmin(),
-			IsRoot:      actor.GetIsRoot(),
-			GroupNames:  actor.GetGroupNames(),
-		},
+		Actor:       brokerActor(actor),
 	})
 	if err != nil {
 		return nil, err

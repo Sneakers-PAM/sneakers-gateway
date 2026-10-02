@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	sshbrokerv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/sshbroker/v1"
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 )
 
@@ -62,4 +63,17 @@ func HostKeysForSave(ctx context.Context, v vaultv1.VaultServiceClient, actor *v
 		}
 	}
 	return nil, nil
+}
+
+// brokerActor is the vault actor in the broker's form. The broker passes it
+// through to the vault and refuses every principal kind but a person; the two
+// PrincipalKind enums share names and numbers.
+func brokerActor(actor *vaultv1.ActorContext) *sshbrokerv1.ActorContext {
+	return &sshbrokerv1.ActorContext{
+		UserId:        actor.GetUserId(),
+		IsSiteAdmin:   actor.GetIsSiteAdmin(),
+		IsRoot:        actor.GetIsRoot(),
+		GroupNames:    actor.GetGroupNames(),
+		PrincipalKind: sshbrokerv1.PrincipalKind(actor.GetPrincipalKind()),
+	}
 }

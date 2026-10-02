@@ -72,6 +72,9 @@ form (`ssh-ed25519 AAAA... comment`). An empty list means the target isn't pinne
   comes back either way; for an unpinned target, or a host that presents another key, the broker
   refuses the connection and closes the WebSocket with code 1008 and the reason
   (`host key not pinned for this target` or `host key mismatch`), which the client can show.
+- `openSshSession` sends the broker the caller's actor context with its principal kind (the same
+  values as the vault's). The broker refuses every kind but a person, and passes the actor
+  through to the vault when it reveals the key.
 
 ### Step-up
 
