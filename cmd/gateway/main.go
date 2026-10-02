@@ -382,6 +382,11 @@ func main() {
 		mux.Handle("/auth/mfa/webauthn/register/finish", cors(http.HandlerFunc(bffH.EnrollWebauthnFinish)))
 		mux.Handle("/auth/mfa/email/send", cors(http.HandlerFunc(bffH.MfaEmailSend)))
 		mux.Handle("/auth/mfa/email/verify", cors(http.HandlerFunc(bffH.MfaEmailVerify)))
+		// Step-up: a signed-in user proves a factor again so the vault sees a
+		// fresh second factor for a sensitive reveal or check-out.
+		mux.Handle("/auth/mfa/step-up", cors(http.HandlerFunc(bffH.MfaStepUp)))
+		mux.Handle("/auth/mfa/step-up/email/send", cors(http.HandlerFunc(bffH.MfaStepUpEmailSend)))
+		mux.Handle("/auth/mfa/step-up/passkey/begin", cors(http.HandlerFunc(bffH.MfaStepUpPasskeyBegin)))
 		// TOTP self/admin removal: the authed user resets their own factor (lost
 		// device); a site-admin/root removes another user's factor as account
 		// recovery. Both call identity's generalized RemoveFactor(kind=totp).

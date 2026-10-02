@@ -4,6 +4,8 @@
 package bff
 
 import (
+	"time"
+
 	"encoding/json"
 	"net/http"
 
@@ -102,6 +104,7 @@ func (h *Handler) EnrollWebauthnFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess.MFAVerified = true
+	sess.MFAVerifiedAt = time.Now()
 	sess.Enrolled = true
 	_ = h.Store.Save(r.Context(), sid, sess)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

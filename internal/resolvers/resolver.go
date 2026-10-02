@@ -5,6 +5,7 @@ package resolvers
 
 import (
 	"context"
+	"time"
 
 	auditv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/audit/v1"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
@@ -72,6 +73,21 @@ func WithActorInfo(ctx context.Context, siteAdmin, root bool, groups []string) c
 func infoFrom(ctx context.Context) actorInfo {
 	i, _ := ctx.Value(actorInfoKey{}).(actorInfo)
 	return i
+}
+
+type mfaVerifiedAtKey struct{}
+
+// WithMFAVerifiedAt attaches when the human session last proved a second
+// factor (set by the session gate; never for machine callers).
+func WithMFAVerifiedAt(ctx context.Context, t time.Time) context.Context {
+	return context.WithValue(ctx, mfaVerifiedAtKey{}, t)
+}
+
+// MFAVerifiedAt returns the session's last second-factor proof, or the zero
+// time when there is none.
+func MFAVerifiedAt(ctx context.Context) time.Time {
+	t, _ := ctx.Value(mfaVerifiedAtKey{}).(time.Time)
+	return t
 }
 
 func actorOf(ctx context.Context) *vaultv1.ActorContext {
