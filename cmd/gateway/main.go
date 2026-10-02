@@ -369,6 +369,7 @@ func main() {
 			logger.Fatal().Err(err).Msg("auth setup")
 		}
 		bffH.Log = reqLog
+		bffH.Audit = auditClient
 		// MCP /login: the OAuth native-app authorization server that issues
 		// personal tokens. Mounted only when the env's public UI URL is set.
 		if pub := env("OAUTH_PUBLIC_URL", ""); pub != "" {

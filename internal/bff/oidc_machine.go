@@ -29,7 +29,15 @@ import (
 // never from splitting a raw scope string here: identity owns the groups
 // table and the admin bounds, and names may contain spaces.
 type machineVerifier interface {
-	verify(ctx context.Context, token string) (principalID string, groupNames []string, ok bool)
+	verify(ctx context.Context, token string) (p machinePrincipal, ok bool)
+}
+
+// machinePrincipal is a verified service account and the groups identity
+// resolved for it: names and ids of the same groups, in the same order.
+type machinePrincipal struct {
+	id         string
+	groupNames []string
+	groupIDs   []string
 }
 
 // saTokenVerifier is the opaque service-account API token path:
@@ -39,12 +47,12 @@ type saTokenVerifier struct {
 	identity IdentityClient
 }
 
-func (s saTokenVerifier) verify(ctx context.Context, token string) (string, []string, bool) {
+func (s saTokenVerifier) verify(ctx context.Context, token string) (machinePrincipal, bool) {
 	resp, err := s.identity.VerifyApiToken(ctx, &identityv1.VerifyApiTokenRequest{Token: token})
 	if err != nil || !resp.GetValid() {
-		return "", nil, false
+		return machinePrincipal{}, false
 	}
-	return resp.GetServiceAccountId(), resp.GetGroupNames(), true
+	return machinePrincipal{id: resp.GetServiceAccountId(), groupNames: resp.GetGroupNames(), groupIDs: resp.GetGroupIds()}, true
 }
 
 // oidcVerifier resolves a Hydra-issued OIDC/OAuth2 JWT: jwt.Verify checks the
@@ -65,18 +73,18 @@ type oidcVerifier struct {
 	issuer   string
 }
 
-func (o oidcVerifier) verify(ctx context.Context, raw string) (string, []string, bool) {
+func (o oidcVerifier) verify(ctx context.Context, raw string) (machinePrincipal, bool) {
 	claims, err := o.jwt.Verify(raw)
 	if err != nil {
-		return "", nil, false
+		return machinePrincipal{}, false
 	}
 	resp, err := o.identity.ResolveServiceAccountByOidc(ctx, &identityv1.ResolveServiceAccountByOidcRequest{
 		OidcIssuer: o.issuer, OidcSubject: claims.Subject, Scope: claims.Scope,
 	})
 	if err != nil || !resp.GetValid() {
-		return "", nil, false
+		return machinePrincipal{}, false
 	}
-	return resp.GetServiceAccountId(), resp.GetGroupNames(), true
+	return machinePrincipal{id: resp.GetServiceAccountId(), groupNames: resp.GetGroupNames(), groupIDs: resp.GetGroupIds()}, true
 }
 
 // looksLikeJWT reports whether token has the three dot-separated segments of
