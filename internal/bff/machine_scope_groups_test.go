@@ -18,8 +18,8 @@ import (
 	"reflect"
 	"testing"
 
+	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
-	identityv1 "github.com/Sneakers-PAM/sneakers-identity/gen/go/sneakers/identity/v1"
 )
 
 // runMachine drives MachineActor with bearer against h and returns the HTTP

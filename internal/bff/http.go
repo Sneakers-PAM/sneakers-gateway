@@ -19,8 +19,8 @@ import (
 	"time"
 
 	log "github.com/Bugs5382/go-log"
+	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
-	identityv1 "github.com/Sneakers-PAM/sneakers-identity/gen/go/sneakers/identity/v1"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"

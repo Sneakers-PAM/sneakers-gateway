@@ -38,8 +38,9 @@ human and machine schemas share no generated code or resolver.
   else is needed.
 - Lint: `task lint`.
 - Generated code: `go tool gqlgen generate --config gqlgen.yml` and
-  `go tool gqlgen generate --config gqlgen-machine.yml` after a schema change; CI checks it is
-  current.
+  `go tool gqlgen generate --config gqlgen-machine.yml` after a schema change, and
+  `scripts/proto-generate.sh` (buf, with the plugin versions pinned in
+  `.github/workflows/job-go-lang-ci.yaml`) after a pin change; CI checks both are current.
 - License headers: `task license` (golic, the Apache-2.0 SPDX header in `.golic.yaml`).
 
 ## Logging
@@ -65,8 +66,9 @@ Follow the logging rules in `CLAUDE.md`. In short:
 - Every commit carries a DCO sign-off (`git commit -s`); the `checks / scrub` job fails without it.
 - No real identifiers anywhere: fixtures use example.org, 192.0.2.0/24, 2001:db8::/32 and invented
   names.
-- The service APIs come from `github.com/Sneakers-PAM/sneakers-identity`, `sneakers-vault` (vault
-  and workflow), `sneakers-audit`, `sneakers-notify` and `sneakers-sshbroker` as pseudo-versions.
+- The service client stubs in `gen/go/thirdparty/` (identity, vault, workflow, audit, notify and
+  sshbroker) are generated from the commits pinned in `proto-refs.env` (see docs/api.md, "Calling
+  other services"); never import another service's Go module.
 - Request-scoped logging goes through a go-log `Logger` passed in (`Log` fields, `Ctx(ctx)` for
   trace ids); never the deprecated package-level `log.Ctx`.
 - Never edit `generated.go` or `models_gen.go` by hand; gqlgen keeps resolver bodies in

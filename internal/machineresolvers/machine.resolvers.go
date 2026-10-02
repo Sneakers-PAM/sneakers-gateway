@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"strings"
 
+	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/safeconv"
-	vaultv1 "github.com/Sneakers-PAM/sneakers-vault/gen/go/sneakers/vault/v1"
 )
 
 // RevealSecretFieldForPrincipal is the resolver for the revealSecretFieldForPrincipal field.

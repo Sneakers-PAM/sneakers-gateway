@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
+	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
+	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
-	identityv1 "github.com/Sneakers-PAM/sneakers-identity/gen/go/sneakers/identity/v1"
-	vaultv1 "github.com/Sneakers-PAM/sneakers-vault/gen/go/sneakers/vault/v1"
 	"github.com/golang-jwt/jwt/v5"
 )
 

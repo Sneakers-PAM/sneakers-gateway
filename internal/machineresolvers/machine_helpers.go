@@ -13,9 +13,9 @@ import (
 	"slices"
 	"strings"
 
+	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/safeconv"
-	vaultv1 "github.com/Sneakers-PAM/sneakers-vault/gen/go/sneakers/vault/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

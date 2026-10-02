@@ -12,8 +12,8 @@ import (
 
 	grpc "google.golang.org/grpc"
 
-	identityv1 "github.com/Sneakers-PAM/sneakers-identity/gen/go/sneakers/identity/v1"
-	vaultv1 "github.com/Sneakers-PAM/sneakers-vault/gen/go/sneakers/vault/v1"
+	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
+	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/bff"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/setup"

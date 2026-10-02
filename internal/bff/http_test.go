@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	identityv1 "github.com/Sneakers-PAM/sneakers-identity/gen/go/sneakers/identity/v1"
+	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc"
 )

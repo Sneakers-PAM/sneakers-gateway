@@ -18,8 +18,8 @@ import (
 	"net/http"
 	"strings"
 
+	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
-	identityv1 "github.com/Sneakers-PAM/sneakers-identity/gen/go/sneakers/identity/v1"
 )
 
 const bearerPrefix = "Bearer "

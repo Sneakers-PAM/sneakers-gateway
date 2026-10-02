@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	identityv1 "github.com/Sneakers-PAM/sneakers-identity/gen/go/sneakers/identity/v1"
+	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 )
 
 // fakeRefreshAuth is a minimal authClient test double used to drive

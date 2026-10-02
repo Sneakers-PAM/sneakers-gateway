@@ -8,16 +8,6 @@ github.com/Bugs5382/go-otel v1.3.2 h1:RNedETq9P9RFpxfJf8VWYQlBkqdf0RA8is8Oh8RdyT
 github.com/Bugs5382/go-otel v1.3.2/go.mod h1:UY0zaCYcarZQwgG+LONwwv224wpVueE6Yr2uuO3+7TU=
 github.com/Bugs5382/go-redis v1.2.0 h1:86yqK9NlZNhnglRaxFZdNV9o58+kAgwyfaoIW9WjaVc=
 github.com/Bugs5382/go-redis v1.2.0/go.mod h1:yyz0EuremryinY7TqW49ViZZX/Vbdvjvri1w1n9vthY=
-github.com/Sneakers-PAM/sneakers-audit v0.0.0-20261002074856-31fe7af87c02 h1:cLzEI+rclmXdbTPTS6uQwk4uw6Vn43XbFkM/3lSAqAw=
-github.com/Sneakers-PAM/sneakers-audit v0.0.0-20261002074856-31fe7af87c02/go.mod h1:BMYyWSeooMrbrqxkVFMszV6Qzxvysz69E20Jntz0x8w=
-github.com/Sneakers-PAM/sneakers-identity v0.0.0-20261002074839-f11ac8f2da02 h1:DOKOU9pj3SA0w81eGykBKVYT0jTy2keJVJBxPrwTHoE=
-github.com/Sneakers-PAM/sneakers-identity v0.0.0-20261002074839-f11ac8f2da02/go.mod h1:+oEWU5q3jbWgTx9DWSMlz8438+OlmuIUYOkxeoWxwZo=
-github.com/Sneakers-PAM/sneakers-notify v0.0.0-20261002075504-e1877c1cdb89 h1:AVaySWr5wQAZJ7gS5NRu5K9p9eFpYaLxHKXPIwPXxD0=
-github.com/Sneakers-PAM/sneakers-notify v0.0.0-20261002075504-e1877c1cdb89/go.mod h1:BGZZbVAjllu2KwS2y8qTDmHIOT2Kh+B00mkEUZ5a2Fk=
-github.com/Sneakers-PAM/sneakers-sshbroker v0.0.0-20261002080703-085e00c40935 h1:uj/TKqYs840i+dUkcYpPOaNOedGR+vQxQ1sivV51FpU=
-github.com/Sneakers-PAM/sneakers-sshbroker v0.0.0-20261002080703-085e00c40935/go.mod h1:HCuLd4KXKrGwfEucLCrLz6gf42rdWu7Fl1p2y8t+PZ4=
-github.com/Sneakers-PAM/sneakers-vault v0.0.0-20261002080415-2b057f80f2d3 h1:3lTk3yVR7QKSRWMPWllDXmxZ+ibY1QE5AAh3xjO0PVw=
-github.com/Sneakers-PAM/sneakers-vault v0.0.0-20261002080415-2b057f80f2d3/go.mod h1:iPDTkilj3lz0rcrd20SrMlX6m2qjCplPnAyS0hG+j84=
 github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=
 github.com/agnivade/levenshtein v1.2.1/go.mod h1:QVVI16kDrtSuwcpd0p1+xMC6Z/VfhtCyDIjcwga4/DU=
 github.com/alicebob/miniredis/v2 v2.38.0 h1:nZAzCR+Lj+Vxk4ZXzm2NuKq2O33RXj1XxJ2e2uP9jiw=

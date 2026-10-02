@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	identityv1 "github.com/Sneakers-PAM/sneakers-identity/gen/go/sneakers/identity/v1"
+	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 )
 
 // Email verification — public, unauthenticated, mirroring the password

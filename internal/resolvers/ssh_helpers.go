@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	vaultv1 "github.com/Sneakers-PAM/sneakers-vault/gen/go/sneakers/vault/v1"
+	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 )
 
 // resolveSSHEndpoint turns a targetId into host + port, plus the target's

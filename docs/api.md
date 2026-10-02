@@ -103,3 +103,29 @@ backends.
 Every route echoes the request `Origin` with credentials allowed, and answers `OPTIONS` preflights
 for `Content-Type`, `X-Dev-User`, `X-CSRF-Token` and `Authorization`. Put the gateway behind a
 reverse proxy that serves only your UI's origin.
+
+## Calling other services
+
+The gateway never imports another service's Go module. It generates its own client stubs from each
+callee's protos, pinned by commit:
+
+- `proto-refs.env` pins each callee: `SNEAKERS_AUDIT_REF=<commit>` for
+  `Sneakers-PAM/sneakers-audit`, `SNEAKERS_IDENTITY_REF=<commit>` for
+  `Sneakers-PAM/sneakers-identity`, `SNEAKERS_NOTIFY_REF=<commit>` for
+  `Sneakers-PAM/sneakers-notify`, `SNEAKERS_SSHBROKER_REF=<commit>` for
+  `Sneakers-PAM/sneakers-sshbroker` and `SNEAKERS_VAULT_REF=<commit>` for
+  `Sneakers-PAM/sneakers-vault`.
+- `scripts/proto-generate.sh` downloads only the callee's `proto/` at that commit into `.protos/`
+  (git-ignored) and runs `buf generate`. The stubs land in `gen/go/thirdparty/audit/v1`,
+  `gen/go/thirdparty/identity/v1`, `gen/go/thirdparty/notify/v1`, `gen/go/thirdparty/sshbroker/v1`,
+  `gen/go/thirdparty/vault/v1` and `gen/go/thirdparty/workflow/v1`, inside this module, so they
+  can't collide with the owner's Go packages. The stubs are committed, so a build needs no network;
+  the protos never are.
+- To try an unmerged proto change, point `SNEAKERS_AUDIT_PROTO_DIR`, `SNEAKERS_IDENTITY_PROTO_DIR`,
+  `SNEAKERS_NOTIFY_PROTO_DIR`, `SNEAKERS_SSHBROKER_PROTO_DIR` and `SNEAKERS_VAULT_PROTO_DIR` at a
+  local `proto/` directory and run the script.
+- To move to a newer callee, change its ref, run the script and commit `proto-refs.env` and `gen/`
+  together. Build & Test fails when `gen/` doesn't match the pins.
+- The `proto-sync` check (from `Sneakers-PAM/.github`) fails a PR whose pin isn't on the owner's
+  `main` or that the owner's `main` breaks, and warns when `main` has moved on. On a schedule it
+  opens a PR that bumps stale pins.
