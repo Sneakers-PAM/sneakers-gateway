@@ -24,16 +24,29 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # gqlgen is a go.mod tool, so this runs the pinned version.
+      - name: Generated GraphQL code is current
+        run: |
+          go tool gqlgen generate --config gqlgen.yml
+          go tool gqlgen generate --config gqlgen-machine.yml
+          git diff --exit-code -- internal
+          test -z "$(git status --porcelain -- internal)"
       - name: gofmt
         run: |
           unformatted="$(gofmt -l .)"
           if [ -n "$unformatted" ]; then
             echo "gofmt needed on:"; echo "$unformatted"; exit 1
           fi
+      - name: go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
       - name: Build
         run: go build ./...
+      - name: Vet
+        run: go vet ./...
       - name: Test
-        run: go test ./... -cover
+        run: go test -count=1 ./... -cover
   lint:
     name: 🧹 GolangCI
     if: github.event.pull_request.draft == false
