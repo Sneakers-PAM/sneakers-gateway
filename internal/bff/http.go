@@ -320,6 +320,9 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 	out["mfaEnrollmentRequired"] = enrollReq
 	out["mfaSetupRecommended"] = setupRec
 	out["enrolled"] = sess.Enrolled
+	if !sess.MFAVerifiedAt.IsZero() {
+		out["mfaVerifiedAt"] = sess.MFAVerifiedAt.Unix()
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -429,7 +432,7 @@ func (h *Handler) resolveSessionActor(ctx context.Context, sid string) (context.
 	if aerr != nil {
 		return nil, Session{}, errors.New("actor_unresolved")
 	}
-	return actorCtx, sess, nil
+	return resolvers.WithMFAVerifiedAt(actorCtx, sess.MFAVerifiedAt), sess, nil
 }
 
 // refreshSession re-validates the session's Kratos session_token via

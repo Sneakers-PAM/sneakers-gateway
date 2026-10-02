@@ -181,12 +181,13 @@ func (h *Handler) VerifyOtp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.issueSession(w, r, Session{
-		AccessToken: final.AccessToken,
-		ExpiresAt:   time.Now().Add(time.Duration(final.ExpiresIn) * time.Second),
-		UserID:      final.UserID,
-		Subject:     final.Subject,
-		MFAVerified: true,
-		Enrolled:    true, // step-up only happens for users with a confirmed factor
+		AccessToken:   final.AccessToken,
+		ExpiresAt:     time.Now().Add(time.Duration(final.ExpiresIn) * time.Second),
+		UserID:        final.UserID,
+		Subject:       final.Subject,
+		MFAVerified:   true,
+		MFAVerifiedAt: time.Now(),
+		Enrolled:      true, // step-up only happens for users with a confirmed factor
 	})
 }
 
@@ -327,6 +328,7 @@ func (h *Handler) MfaConfirm(w http.ResponseWriter, r *http.Request) {
 	// Both flags flip: the session is verified (lifts the enforcement gate) and
 	// the user is now enrolled (clears the not-enforced setup banner).
 	sess.MFAVerified = true
+	sess.MFAVerifiedAt = time.Now()
 	sess.Enrolled = true
 	_ = h.Store.Save(r.Context(), sid, sess)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -388,6 +390,7 @@ func (h *Handler) MfaEmailVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess.MFAVerified = true
+	sess.MFAVerifiedAt = time.Now()
 	sess.Enrolled = true
 	_ = h.Store.Save(r.Context(), sid, sess)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

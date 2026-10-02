@@ -11,7 +11,9 @@ enum TypeOrigin { system extension custom }
 enum FolderScope { personal group role }
 enum FolderRole { read write delete bulk owner }
 enum SubjectKind { group user everyone }
-enum HeartbeatResult { ok failed unreachable unknown }
+# hostKeyNotPinned: an SSH target without host-key pins (the connector doesn't
+# connect); hostKeyMismatch: the host offered a key that isn't pinned.
+enum HeartbeatResult { ok failed unreachable unknown hostKeyNotPinned hostKeyMismatch }
 enum RotationState { ok failed degraded rotating unknown }
 
 type SecretFieldDef {
@@ -62,6 +64,10 @@ type Folder {
   owners: [String!]
   # whether the current actor may manage/create-under this folder — authoritative, from the vault
   canManage: Boolean!
+  # Step-up MFA before a reveal in this folder and below. inherit takes the
+  # nearest ancestor's setting, and at the top the global
+  # SecuritySettings.requireMfaForReveal.
+  revealStepUp: StepUpMode!
 }
 
 type FolderAccessRule {
@@ -83,6 +89,9 @@ type InheritedFolderRule {
 # manage (create/edit/rotate); A = approve checkout/access requests;
 # I = informed (see the secret exists / metadata, no reveal).
 enum RaciAction { C I A R }
+
+# A folder's step-up-on-reveal override.
+enum StepUpMode { inherit require off }
 # Tri-state grant per action cell: allow, deny, or blank (fall through).
 enum RaciGrant { allow deny }
 
@@ -102,6 +111,9 @@ type RaciRule {
   subjectKind: SubjectKind!
   # group name or user id; empty for everyone.
   subjectName: String!
+  # group rules: the directory group id the rule matches on. subjectName is
+  # then the display name only.
+  subjectId: String
   grants: [RaciRuleGrant!]!
 }
 
@@ -148,6 +160,9 @@ input RaciRuleGrantInput {
 input RaciRuleInput {
   subjectKind: SubjectKind!
   subjectName: String!
+  # Required for a new group rule: the directory group id. The vault refuses
+  # a group rule without it (GROUP_ID_REQUIRED).
+  subjectId: String
   grants: [RaciRuleGrantInput!]!
 }
 
@@ -396,6 +411,8 @@ type SecuritySettings {
   # each sliding renewal. Unset resolves to 1800 (30m); the gateway clamps the
   # effective value to [900, 3600] (15m-60m).
   sessionTtlSeconds: Int
+  # Global default for step-up MFA before a reveal; folders override it.
+  requireMfaForReveal: Boolean!
 }
 # Partial update: only the fields provided are changed.
 input SecuritySettingsInput {
@@ -404,6 +421,7 @@ input SecuritySettingsInput {
   allowApiForSensitive: Boolean
   requestHistoryRetentionDays: Int
   sessionTtlSeconds: Int
+  requireMfaForReveal: Boolean
 }
 
 # A platform user. `roles` are elevated roles on top of the baseline; `isRoot`
@@ -841,6 +859,9 @@ type Mutation {
 
   # Replace a folder's entire firewall-RACI ruleset (owners + ordered rules).
   setFolderRuleset(folderId: String!, owners: [String!]!, rules: [RaciRuleInput!]!): FolderRuleset!
+  # Set a folder's step-up-on-reveal override. Human site admin only (the
+  # vault decides).
+  setFolderRevealStepUp(folderId: String!, mode: StepUpMode!): Folder!
   # Replace a secret's entire firewall-RACI ruleset (ordered rules).
   setSecretRuleset(secretId: String!, rules: [RaciRuleInput!]!): SecretRuleset!
 

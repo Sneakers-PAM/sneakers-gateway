@@ -31,6 +31,13 @@ type Session struct {
 	// MFAVerified records whether the session was issued after a verified second
 	// factor. Server-side marker only; set by the 2-step MFA flow.
 	MFAVerified bool `json:"mfa_verified"`
+	// MFAVerifiedAt is when this session last proved a second factor: at
+	// login, at enrollment, or through a step-up. The vault decides whether it
+	// is fresh enough for a sensitive action.
+	MFAVerifiedAt time.Time `json:"mfa_verified_at,omitzero"`
+	// StepUpFailures counts wrong step-up proofs since the last good one; at
+	// maxPendingAttempts the session is revoked.
+	StepUpFailures int `json:"step_up_failures,omitempty"`
 	// Enrolled records whether the user has a confirmed MFA factor. Captured at
 	// login (from identity's GetMfaStatus) and flipped true when this session
 	// completes enrollment, so the not-enforced setup banner reflects reality

@@ -90,6 +90,7 @@ func (r *mutationResolver) UpdateSecuritySettings(ctx context.Context, input Sec
 	req.AllowApiForSensitive = input.AllowAPIForSensitive
 	req.RequestHistoryRetentionDays = intToI32Ptr(input.RequestHistoryRetentionDays)
 	req.SessionTtlSeconds = intToI32Ptr(input.SessionTTLSeconds)
+	req.RequireMfaForReveal = input.RequireMfaForReveal
 	resp, err := r.Vault.UpdateSecuritySettings(ctx, req)
 	if err != nil {
 		return nil, err
@@ -425,6 +426,17 @@ func (r *mutationResolver) SetFolderRuleset(ctx context.Context, folderID string
 		return nil, err
 	}
 	return r.buildFolderRuleset(ctx, folderID)
+}
+
+// SetFolderRevealStepUp is the resolver for the setFolderRevealStepUp field.
+func (r *mutationResolver) SetFolderRevealStepUp(ctx context.Context, folderID string, mode StepUpMode) (*Folder, error) {
+	resp, err := r.Vault.SetFolderRevealStepUp(ctx, &vaultv1.SetFolderRevealStepUpRequest{
+		Actor: actorOf(ctx), FolderId: folderID, Mode: stepUpModeProto(mode),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return gqlFolder(resp.GetFolder()), nil
 }
 
 // SetSecretRuleset is the resolver for the setSecretRuleset field: it replaces a

@@ -17,7 +17,10 @@ authenticates, and where to read more.
 - Introspection is on for `/graphql`.
 - Every call runs as the caller: the gateway passes an actor context (user id, roles, groups, and
   for machine callers the principal kind and token id) to the backend service, and the service
-  makes the authorization decision and writes the audit record.
+  makes the authorization decision and writes the audit record. For a signed-in person the vault
+  and workflow actors also carry `mfa_verified_at_unix`, when the session last proved a second
+  factor (see "Step-up" below); the workflow actor carries the admin flags and groups too, for the
+  vault's access check on check-out.
 - Errors from a backend carry its gRPC status text as the message, for example
   `rpc error: code = PermissionDenied desc = ...`, and stable `extensions` on both endpoints:
   - `code`: the canonical gRPC code name, such as `PERMISSION_DENIED` or `FAILED_PRECONDITION`;
@@ -39,6 +42,11 @@ unchanged, and drops details from any other domain. The check-out and check-in r
 | `checkoutSecret` | `FAILED_PRECONDITION` | `CHECKOUT_TYPE_DISABLED` | | The secret's type doesn't allow check-out. |
 | `checkoutSecret` | `FAILED_PRECONDITION` | `CHECKOUT_LEASE_HELD` | `holder_user_id` | Someone already holds a lease on the secret. |
 | `checkinSecret` | `PERMISSION_DENIED` | `CHECKIN_NOT_HOLDER` | | Only the lease holder can check in. |
+
+A reveal or check-out that needs a fresher second factor answers `FAILED_PRECONDITION` with
+reason `STEP_UP_REQUIRED` (domain `sneakers.vault`): the client runs a step-up and retries. A new
+group rule in `setFolderRuleset` or `setSecretRuleset` without `subjectId` is refused with
+`GROUP_ID_REQUIRED`.
 
 The workflow service owns these reasons; a refusal without one still has its `code`.
 
@@ -68,6 +76,16 @@ form (`ssh-ed25519 AAAA... comment`). An empty list means the target isn't pinne
   values as the vault's). The broker refuses every kind but a person, and passes the actor
   through to the vault when it reveals the key.
 
+### Step-up
+
+The session remembers when it last proved a second factor: at sign-in, at enrollment, or through
+`POST /auth/mfa/step-up`. The gateway sends that time to the vault and the workflow as
+`mfa_verified_at_unix` on every call; the vault owns the freshness window and decides when a
+reveal or check-out needs a step-up. Where a reveal needs one is set globally by
+`SecuritySettings.requireMfaForReveal` and per folder by `setFolderRevealStepUp(folderId, mode)`
+(`inherit`, `require` or `off`, shown as `Folder.revealStepUp`; inherited down the tree; site
+admins only). Machine callers never carry the time.
+
 ## Login and sessions (`AUTH_MODE=real`)
 
 All are JSON over `POST` unless noted. Endpoints that act for a signed-in user need the session
@@ -82,9 +100,11 @@ cookie and the CSRF header.
 | `/auth/mfa/enroll`, `/auth/mfa/confirm` | Enroll TOTP for the signed-in user. |
 | `/auth/mfa/webauthn/register/begin`, `/auth/mfa/webauthn/register/finish` | Enroll a passkey. |
 | `/auth/mfa/email/verify` | Prove the email factor. |
+| `/auth/mfa/step-up` | Step-up: prove a factor again (`{kind: totp\|email, code}` or `{kind: passkey, credentialJson, webauthnSessionId}`) so the vault sees a fresh second factor. Answers `{mfaVerifiedAt}` (Unix seconds); a wrong proof is 401 `invalid_code`, and after 5 wrong proofs the session is revoked (401 `session_revoked`). |
+| `/auth/mfa/step-up/email/send`, `/auth/mfa/step-up/passkey/begin` | Email a step-up code; start a passkey assertion (returns `options` and `webauthnSessionId`). |
 | `/auth/mfa/remove` | Remove your own TOTP factor. |
 | `/auth/mfa/admin/remove-totp`, `/auth/mfa/admin/status` | Admin: remove another user's TOTP, read their MFA status. |
-| `/auth/session` (`GET`) | The current session: whether signed in, the CSRF token, MFA posture. |
+| `/auth/session` (`GET`) | The current session: whether signed in, the CSRF token, MFA posture, and `mfaVerifiedAt` (Unix seconds) once a factor has been proved. |
 | `/auth/logout` | End the session. |
 | `/auth/reset/request`, `/auth/reset/confirm` | Self-service password reset (unauthenticated). |
 | `/auth/verify/request`, `/auth/verify/confirm` | Email verification (unauthenticated). |

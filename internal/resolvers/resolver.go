@@ -5,6 +5,7 @@ package resolvers
 
 import (
 	"context"
+	"time"
 
 	auditv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/audit/v1"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
@@ -32,10 +33,18 @@ type Resolver struct {
 	HydraIssuer string
 }
 
-// workflowActorOf forwards the no-auth dev identity to the workflow service
-// (its ActorContext is a distinct type from the vault's).
+// workflowActorOf is the acting user for the workflow service (its
+// ActorContext is a distinct type from the vault's). The access fields feed
+// the vault's RACI decision on check-out.
 func workflowActorOf(ctx context.Context) *workflowv1.ActorContext {
-	return &workflowv1.ActorContext{UserId: actorFrom(ctx)}
+	i := infoFrom(ctx)
+	return &workflowv1.ActorContext{
+		UserId:            actorFrom(ctx),
+		MfaVerifiedAtUnix: mfaUnix(ctx),
+		GroupNames:        i.groups,
+		IsSiteAdmin:       i.siteAdmin,
+		IsRoot:            i.root,
+	}
 }
 
 // actorKey carries the no-auth dev identity (X-Dev-User) through the request
@@ -74,13 +83,38 @@ func infoFrom(ctx context.Context) actorInfo {
 	return i
 }
 
+type mfaVerifiedAtKey struct{}
+
+// WithMFAVerifiedAt attaches when the human session last proved a second
+// factor (set by the session gate; never for machine callers).
+func WithMFAVerifiedAt(ctx context.Context, t time.Time) context.Context {
+	return context.WithValue(ctx, mfaVerifiedAtKey{}, t)
+}
+
+// MFAVerifiedAt returns the session's last second-factor proof, or the zero
+// time when there is none.
+func MFAVerifiedAt(ctx context.Context) time.Time {
+	t, _ := ctx.Value(mfaVerifiedAtKey{}).(time.Time)
+	return t
+}
+
+// mfaUnix is MFAVerifiedAt in Unix seconds, 0 when unknown.
+func mfaUnix(ctx context.Context) int64 {
+	t := MFAVerifiedAt(ctx)
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
+
 func actorOf(ctx context.Context) *vaultv1.ActorContext {
 	i := infoFrom(ctx)
 	return &vaultv1.ActorContext{
-		UserId:      actorFrom(ctx),
-		IsSiteAdmin: i.siteAdmin,
-		IsRoot:      i.root,
-		GroupNames:  i.groups,
+		UserId:            actorFrom(ctx),
+		IsSiteAdmin:       i.siteAdmin,
+		IsRoot:            i.root,
+		GroupNames:        i.groups,
+		MfaVerifiedAtUnix: mfaUnix(ctx),
 	}
 }
 
