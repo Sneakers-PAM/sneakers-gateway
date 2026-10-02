@@ -4,8 +4,9 @@
 // Polis (BoxyHQ SAML Jackson) OAuth-façade client for single-domain SSO over
 // ONE static connection: tenant and product are baked into the client at
 // construction, not passed per authorize call. Jackson exposes SAML behind an OAuth2/OIDC
-// code flow with a fixed dummy client id/secret (CLIENT_SECRET_VERIFIER=dummy
-// on the Jackson side); connection selection is by tenant+product only.
+// code flow with the fixed client id "dummy" and a client secret Jackson checks
+// against its CLIENT_SECRET_VERIFIER; connection selection is by tenant+product
+// only.
 package bff
 
 import (
@@ -21,6 +22,8 @@ import (
 	apperr "github.com/Bugs5382/go-apperr"
 )
 
+// polisDummy is Jackson's literal client id for tenant+product mode, and its
+// development client secret.
 const polisDummy = "dummy"
 
 const (
@@ -47,6 +50,9 @@ type PolisClient struct {
 	product   string
 	tenant    string
 	http      *http.Client
+	// ClientSecret is sent on the code exchange; Jackson checks it against its
+	// CLIENT_SECRET_VERIFIER. Empty sends the development value "dummy".
+	ClientSecret string
 }
 
 func NewPolisClient(publicURL, issuerURL, product, tenant string) *PolisClient {
@@ -57,6 +63,13 @@ func NewPolisClient(publicURL, issuerURL, product, tenant string) *PolisClient {
 		tenant:    tenant,
 		http:      &http.Client{Timeout: 10 * time.Second},
 	}
+}
+
+func (c *PolisClient) clientSecret() string {
+	if c.ClientSecret == "" {
+		return polisDummy
+	}
+	return c.ClientSecret
 }
 
 // AuthorizeURL builds the browser redirect to Jackson's authorize endpoint for
@@ -81,7 +94,7 @@ func (c *PolisClient) CodeExchange(ctx context.Context, code, redirectURI string
 		"code":          {code},
 		"redirect_uri":  {redirectURI},
 		"client_id":     {polisDummy},
-		"client_secret": {polisDummy},
+		"client_secret": {c.clientSecret()},
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.issuerURL+"/api/oauth/token", strings.NewReader(form.Encode()))
 	if err != nil {

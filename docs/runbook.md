@@ -12,7 +12,9 @@
   without it. The hops are plaintext gRPC, so keep them on a private network and let only the
   callers in the call graph reach each port (network policies).
 - **Point it at Ory.** Set `KRATOS_PUBLIC_URL` and `KRATOS_ADMIN_URL` for Ory Kratos, and
-  `POLIS_TENANT` and the other `POLIS_*` values if you use Ory Polis SSO.
+  `POLIS_TENANT` and the other `POLIS_*` values if you use Ory Polis SSO. Run Polis with a real
+  `CLIENT_SECRET_VERIFIER` and give the gateway the same value as `POLIS_CLIENT_SECRET` from a
+  Secret; the gateway refuses the development value `dummy` in `real` mode.
 - **Set `SETUP_TOKEN` for the first run only**, then remove it: with it unset, `/setup/bootstrap`
   and `/setup/seed` answer 503. The gateway logs only that a token is configured, never its value,
   so read it from the Secret that sets it, for example
@@ -92,6 +94,6 @@ an existing, enabled user, or the browser lands on `SSO_APP_BASE` with `?sso_err
 | Login works, then every request is 401 | The browser drops the `Secure` cookie on plain http: serve HTTPS, or set `COOKIE_SECURE=false` for a test stack. |
 | Subscriptions never connect | The socket's `Origin` doesn't match the host the gateway sees: check the proxy passes `Host` or `X-Forwarded-Host`. |
 | Every GraphQL call fails with `Unavailable` | A backend address is wrong or the service is down; the start-up line lists the addresses. |
-| The gateway exits at start in `real` mode | Redis is unreachable, or `COOKIE_SECURE` isn't a boolean, or `HYDRA_ENABLED` is on without `HYDRA_ISSUER`, or `WORKLOAD_TOKEN_FILE` is unset or unreadable. |
+| The gateway exits at start in `real` mode | Redis is unreachable, or `COOKIE_SECURE` isn't a boolean, or `HYDRA_ENABLED` is on without `HYDRA_ISSUER`, or `WORKLOAD_TOKEN_FILE` is unset or unreadable, or SSO is on with `POLIS_CLIENT_SECRET` unset or `dummy`. |
 | Every GraphQL call fails with `Unauthenticated` or `PermissionDenied` | The backends refuse the gateway's workload token: check the token's audience is `sneakers`, the service account is `sneakers-gateway`, and the backend lists it in `WORKLOAD_ALLOWED_SERVICEACCOUNTS`. |
 | `/setup/bootstrap` answers 503 | `SETUP_TOKEN` is unset (expected once setup is done). |

@@ -202,6 +202,11 @@ func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityService
 			env("POLIS_PRODUCT", "sneakers"),
 			env("POLIS_TENANT", "example.org"),
 		)
+		secret, err := polisClientSecret("real", os.Getenv)
+		if err != nil {
+			return nil, err
+		}
+		h.Polis.ClientSecret = secret
 		h.SSORedirectBase = env("SSO_REDIRECT_BASE", "")
 		h.SSOAppBase = env("SSO_APP_BASE", "/")
 	}
@@ -364,6 +369,7 @@ func main() {
 			logger.Fatal().Err(err).Msg("auth setup")
 		}
 		bffH.Log = reqLog
+		bffH.Audit = auditClient
 		// MCP /login: the OAuth native-app authorization server that issues
 		// personal tokens. Mounted only when the env's public UI URL is set.
 		if pub := env("OAUTH_PUBLIC_URL", ""); pub != "" {

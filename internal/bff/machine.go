@@ -72,12 +72,13 @@ func (h *Handler) MachineActor(next http.Handler) http.Handler {
 			}
 			mv = oidcVerifier{jwt: h.MachineOidcVerifier, identity: h.Identity, issuer: h.MachineOidcIssuer}
 		}
-		principalID, groupNames, ok := mv.verify(r.Context(), token)
+		p, ok := mv.verify(r.Context(), token)
 		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		ctx := resolvers.WithMachineActor(r.Context(), principalID, groupNames)
+		ctx := resolvers.WithMachineActor(r.Context(), p.id, p.groupNames)
+		ctx = resolvers.WithMachineGroupIDs(ctx, p.groupIDs)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -94,5 +95,6 @@ func (h *Handler) serveUserToken(w http.ResponseWriter, r *http.Request, next ht
 		return
 	}
 	ctx := resolvers.WithUserTokenActor(r.Context(), resp.GetUser().GetId(), resp.GetTokenId(), resp.GetGroupNames())
+	ctx = resolvers.WithMachineGroupIDs(ctx, resp.GetGroupIds())
 	next.ServeHTTP(w, r.WithContext(ctx))
 }

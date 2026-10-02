@@ -627,7 +627,7 @@ func (r *mutationResolver) AddGroupMember(ctx context.Context, userID string, gr
 	if err := requireAdmin(ctx); err != nil {
 		return false, err
 	}
-	if _, err := r.Identity.AddGroupMember(ctx, &identityv1.AddGroupMemberRequest{UserId: userID, GroupId: groupID}); err != nil {
+	if _, err := r.Identity.AddGroupMember(ctx, &identityv1.AddGroupMemberRequest{UserId: userID, GroupId: groupID, ActingUserId: actorFrom(ctx)}); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -639,7 +639,7 @@ func (r *mutationResolver) RemoveGroupMember(ctx context.Context, userID string,
 	if err := requireAdmin(ctx); err != nil {
 		return false, err
 	}
-	if _, err := r.Identity.RemoveGroupMember(ctx, &identityv1.RemoveGroupMemberRequest{UserId: userID, GroupId: groupID}); err != nil {
+	if _, err := r.Identity.RemoveGroupMember(ctx, &identityv1.RemoveGroupMemberRequest{UserId: userID, GroupId: groupID, ActingUserId: actorFrom(ctx)}); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -651,7 +651,7 @@ func (r *mutationResolver) CreateGroup(ctx context.Context, name string) (*Group
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	resp, err := r.Identity.CreateGroup(ctx, &identityv1.CreateGroupRequest{Name: name})
+	resp, err := r.Identity.CreateGroup(ctx, &identityv1.CreateGroupRequest{Name: name, ActingUserId: actorFrom(ctx)})
 	if err != nil {
 		return nil, err
 	}
@@ -665,10 +665,11 @@ func (r *mutationResolver) CreateLocalUser(ctx context.Context, username string,
 		return nil, err
 	}
 	resp, err := r.Identity.CreateLocalUser(ctx, &identityv1.CreateLocalUserRequest{
-		Username: username,
-		Email:    email,
-		Name:     name,
-		Password: password,
+		Username:     username,
+		Email:        email,
+		Name:         name,
+		Password:     password,
+		ActingUserId: actorFrom(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -710,7 +711,7 @@ func (r *mutationResolver) SetUserRoles(ctx context.Context, userID string, role
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	resp, err := r.Identity.SetUserRoles(ctx, &identityv1.SetUserRolesRequest{UserId: userID, Roles: roles})
+	resp, err := r.Identity.SetUserRoles(ctx, &identityv1.SetUserRolesRequest{UserId: userID, Roles: roles, ActingUserId: actorFrom(ctx)})
 	if err != nil {
 		return nil, err
 	}
@@ -725,7 +726,7 @@ func (r *mutationResolver) SetUserDisabled(ctx context.Context, userID string, d
 	if disabled && userID == actorFrom(ctx) {
 		return nil, errors.New("you cannot disable your own account")
 	}
-	resp, err := r.Identity.SetUserDisabled(ctx, &identityv1.SetUserDisabledRequest{UserId: userID, Disabled: disabled})
+	resp, err := r.Identity.SetUserDisabled(ctx, &identityv1.SetUserDisabledRequest{UserId: userID, Disabled: disabled, ActingUserId: actorFrom(ctx)})
 	if err != nil {
 		return nil, err
 	}
@@ -738,7 +739,7 @@ func (r *mutationResolver) RevokeMyToken(ctx context.Context, id string) (*UserT
 	if me == "" {
 		return nil, errors.New("not signed in")
 	}
-	resp, err := r.Identity.RevokeUserToken(ctx, &identityv1.RevokeUserTokenRequest{Id: id, UserId: me})
+	resp, err := r.Identity.RevokeUserToken(ctx, &identityv1.RevokeUserTokenRequest{Id: id, UserId: me, ActingUserId: me})
 	if err != nil {
 		return nil, err
 	}
@@ -828,7 +829,7 @@ func (r *mutationResolver) RevokeUserToken(ctx context.Context, userID string, i
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	resp, err := r.Identity.RevokeUserToken(ctx, &identityv1.RevokeUserTokenRequest{Id: id, UserId: userID})
+	resp, err := r.Identity.RevokeUserToken(ctx, &identityv1.RevokeUserTokenRequest{Id: id, UserId: userID, ActingUserId: actorFrom(ctx)})
 	if err != nil {
 		return nil, err
 	}
@@ -841,10 +842,11 @@ func (r *mutationResolver) UpdateUser(ctx context.Context, userID string, name s
 		return nil, err
 	}
 	resp, err := r.Identity.UpdateUser(ctx, &identityv1.UpdateUserRequest{
-		UserId:   userID,
-		Name:     name,
-		Email:    email,
-		Username: username,
+		UserId:       userID,
+		Name:         name,
+		Email:        email,
+		Username:     username,
+		ActingUserId: actorFrom(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -944,7 +946,7 @@ func (r *mutationResolver) DisableServiceAccount(ctx context.Context, id string)
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	resp, err := r.Identity.DisableServiceAccount(ctx, &identityv1.DisableServiceAccountRequest{Id: id})
+	resp, err := r.Identity.DisableServiceAccount(ctx, &identityv1.DisableServiceAccountRequest{Id: id, ActingUserId: actorFrom(ctx)})
 	if err != nil {
 		return nil, err
 	}
@@ -979,7 +981,7 @@ func (r *mutationResolver) RevokeAPIToken(ctx context.Context, id string) (*APIT
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	resp, err := r.Identity.RevokeApiToken(ctx, &identityv1.RevokeApiTokenRequest{Id: id})
+	resp, err := r.Identity.RevokeApiToken(ctx, &identityv1.RevokeApiTokenRequest{Id: id, ActingUserId: actorFrom(ctx)})
 	if err != nil {
 		return nil, err
 	}

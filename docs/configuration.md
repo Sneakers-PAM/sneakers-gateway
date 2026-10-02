@@ -66,6 +66,7 @@ SSO is off unless `POLIS_PUBLIC_URL` is set. Setup's SSO provisioning is off unl
 | `POLIS_ISSUER_URL` | `http://sneakers-polis:5225` | The Polis URL the gateway calls for the code exchange and user info. |
 | `POLIS_PRODUCT` | `sneakers` | The Polis product. |
 | `POLIS_TENANT` | `example.org` | The Polis tenant, usually your email domain: set it. |
+| `POLIS_CLIENT_SECRET` | (none) | The client secret for the SSO code exchange: the `CLIENT_SECRET_VERIFIER` Polis runs with. Read it from a Secret; surrounding whitespace is trimmed. With `AUTH_MODE=real` and `POLIS_PUBLIC_URL` set, an unset value or the development value `dummy` stops the gateway at start. |
 | `POLIS_ADMIN_URL` | (none) | The Polis admin API, used by setup to create the SAML connection. |
 | `POLIS_API_KEY` | (none) | The Polis admin API key. |
 | `POLIS_SAML_METADATA_URL` | (none) | The identity provider's SAML metadata URL for that connection. |
