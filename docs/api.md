@@ -49,6 +49,8 @@ unchanged, and drops details from any other domain. The check-out and check-in r
 | `checkoutSecret` | `FAILED_PRECONDITION` | `CHECKOUT_TYPE_DISABLED` | | The secret's type doesn't allow check-out. |
 | `checkoutSecret` | `FAILED_PRECONDITION` | `CHECKOUT_LEASE_HELD` | `holder_user_id` | Someone already holds a lease on the secret. |
 | `checkinSecret` | `PERMISSION_DENIED` | `CHECKIN_NOT_HOLDER` | | Only the lease holder can check in. |
+| `restoreSecretVersion` | `FAILED_PRECONDITION` | `CHECKOUT_LEASE_HELD` | `holder_user_id` | Someone holds a lease on the secret. The gateway checks this, since the vault can't see leases. |
+| `restoreSecretVersion` | `FAILED_PRECONDITION` | `ROTATION_IN_PROGRESS` | | The vault is rotating the secret. |
 
 `revealSecretVersionField` and `restoreSecretVersion` without the recovery role answer
 `PERMISSION_DENIED` with reason `RECOVERY_ROLE_REQUIRED`. A reveal or check-out that needs a
@@ -57,7 +59,8 @@ reason `STEP_UP_REQUIRED` (domain `sneakers.vault`): the client runs a step-up a
 group rule in `setFolderRuleset` or `setSecretRuleset` without `subjectId` is refused with
 `GROUP_ID_REQUIRED`.
 
-The workflow service owns these reasons; a refusal without one still has its `code`.
+The workflow service owns the check-out and check-in reasons; a refusal without one still has its
+`code`.
 
 The human schema has about 45 queries (users and groups, folders, secrets and their rulesets,
 access requests and approvals, audit, notifications, tokens), about 70 mutations, and one
@@ -103,7 +106,9 @@ their field keys to any reader, never a value. `revealSecretVersionField` and
 as a new version, need the identity role `recovery` and a fresh second factor. The gateway sends
 the role as `is_recovery` on the vault actor, read from identity on every request, and the vault
 decides: `RECOVERY_ROLE_REQUIRED` without the role, `STEP_UP_REQUIRED` without a fresh MFA, and a
-refusal while the secret is checked out or rotating. Only a site admin or root can grant or
+refusal while the secret is rotating (`ROTATION_IN_PROGRESS`). The vault can't see check-out
+leases, so the gateway asks the workflow first and refuses a restore while someone holds a lease
+(`CHECKOUT_LEASE_HELD` with `holder_user_id`); if that lookup fails, the restore doesn't run. Only a site admin or root can grant or
 revoke the role (identity enforces it). Machine callers never get the recovery surface.
 
 ## Login and sessions (`AUTH_MODE=real`)

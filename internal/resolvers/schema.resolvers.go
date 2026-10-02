@@ -207,6 +207,9 @@ func (r *mutationResolver) RevealSecretVersionField(ctx context.Context, secretI
 
 // RestoreSecretVersion is the resolver for the restoreSecretVersion field.
 func (r *mutationResolver) RestoreSecretVersion(ctx context.Context, secretID string, versionNo int) (*Secret, error) {
+	if err := r.refuseWhileCheckedOut(ctx, secretID); err != nil {
+		return nil, err
+	}
 	resp, err := r.Vault.RestoreSecretVersion(ctx, &vaultv1.RestoreSecretVersionRequest{
 		Actor: actorOf(ctx), SecretId: secretID, VersionNo: safeconv.Int32(versionNo),
 	})
