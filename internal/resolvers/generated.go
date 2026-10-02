@@ -408,6 +408,7 @@ type ComplexityRoot struct {
 	}
 
 	Secret struct {
+		CanRead              func(childComplexity int) int
 		ExpiresAt            func(childComplexity int) int
 		FolderID             func(childComplexity int) int
 		HeartbeatOptOut      func(childComplexity int) int
@@ -2920,6 +2921,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.RaciRuleGrant.Value(childComplexity), true
 
+	case "Secret.canRead":
+		if e.ComplexityRoot.Secret.CanRead == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Secret.CanRead(childComplexity), true
 	case "Secret.expiresAt":
 		if e.ComplexityRoot.Secret.ExpiresAt == nil {
 			break
@@ -4003,6 +4010,10 @@ type Secret {
   # A personal-token reveal needs the owner's per-use browser approval, or a
   # grant that allows reveal.
   requireTokenApproval: Boolean
+  # Whether the signed-in user may read the secret. Set by secretsInFolder and
+  # secret, where a user may see a secret they can't read (shown locked, so
+  # they can request access); null elsewhere.
+  canRead: Boolean
 }
 
 # Parsed metadata off an imported/exported certificate (vault-side parse; never
@@ -5347,6 +5358,8 @@ func (ec *executionContext) childFields_Secret(ctx context.Context, field graphq
 		return ec.fieldContext_Secret_heartbeatOptOut(ctx, field)
 	case "requireTokenApproval":
 		return ec.fieldContext_Secret_requireTokenApproval(ctx, field)
+	case "canRead":
+		return ec.fieldContext_Secret_canRead(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Secret", field.Name)
 }
@@ -17054,6 +17067,29 @@ func (ec *executionContext) fieldContext_Secret_requireTokenApproval(_ context.C
 	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _Secret_canRead(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Secret_canRead(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CanRead, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *bool) graphql.Marshaler {
+			return ec.marshalOBoolean2ᚖbool(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Secret_canRead(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
 func (ec *executionContext) _SecretFieldDef_key(ctx context.Context, field graphql.CollectedField, obj *SecretFieldDef) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -24834,6 +24870,8 @@ func (ec *executionContext) _Secret(ctx context.Context, sel ast.SelectionSet, o
 			out.Values[i] = ec._Secret_heartbeatOptOut(ctx, field, obj)
 		case "requireTokenApproval":
 			out.Values[i] = ec._Secret_requireTokenApproval(ctx, field, obj)
+		case "canRead":
+			out.Values[i] = ec._Secret_canRead(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

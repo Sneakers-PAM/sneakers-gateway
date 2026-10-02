@@ -62,6 +62,25 @@ reason `STEP_UP_REQUIRED` (domain `sneakers.vault`): the client runs a step-up a
 group rule in `setFolderRuleset` or `setSecretRuleset` without `subjectId` is refused with
 `GROUP_ID_REQUIRED`.
 
+Other vault reasons a client may see (domain `sneakers.vault`):
+
+| `code` | `reason` | Meaning |
+|---|---|---|
+| `PERMISSION_DENIED` | `NO_ACCESS` | The user can't read the secret: a reveal, copy, version reveal or `secretFields`. |
+| `FAILED_PRECONDITION` | `RETIRED` | The secret is retired, so it can't be revealed or copied. |
+| `PERMISSION_DENIED` | `NOT_SITE_ADMIN` | The call needs a site admin: settings, password policies, secret types, connections, key rotation. |
+| `PERMISSION_DENIED` | `NOT_FOLDER_OWNER` | The call needs the folder's owner or a site admin: folder rules, renaming or reordering. |
+| `PERMISSION_DENIED` | `API_SENSITIVE_DISABLED` | A token may not reveal super-sensitive fields while `allowApiForSensitive` is off. |
+| `FAILED_PRECONDITION` | `ROTATION_NOT_SUPPORTED` | The secret's type can't rotate. |
+| `FAILED_PRECONDITION` | `ROTATION_OPTED_OUT` | The secret is opted out of rotation. |
+
+A secret the user can't see at all (an explicit deny, or someone else's personal folder) is left
+out of `secretsInFolder`, and `secret` returns null for it, with no reason given.
+
+`Secret.canRead` is set by `secretsInFolder` and `secret`, the two queries that show a user secrets
+they may not be able to read, so the client can show those locked and offer an access request. It's
+null on every other query.
+
 The workflow service owns the check-out and check-in reasons; a refusal without one still has its
 `code`. For `restoreSecretVersion` and `rotateSecret` the gateway looks up the lease itself, and if
 that lookup fails the change doesn't run: the client gets the workflow's code (`UNAVAILABLE` when it
