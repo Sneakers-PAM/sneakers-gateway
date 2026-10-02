@@ -1,0 +1,338 @@
+# The machine-only GraphQL contract: served on a SEPARATE endpoint
+# (/machine/graphql), gated by
+# bff.MachineActor (Authorization: Bearer service-account API token), never
+# mounted alongside or merged into the human schema.graphqls. Deliberately
+# minimal — today it exposes exactly the RACI-read + audited, no-MFA/checkout
+# reveal a non-human caller needs. It intentionally does NOT expose the human
+# schema's revealSecretField (checkout/session semantics) or anything else
+# from schema.graphqls.
+
+# Metadata-only summary of a secret visible to a non-human principal. Field
+# values NEVER travel here — mirrors the vault Secret proto's RACI-read
+# surface used by findSecretsForPrincipal.
+type SecretSummary {
+  id: ID!
+  name: String!
+  folderId: ID!
+  typeId: ID!
+  targetId: ID
+  # The secret is opted out of scheduled rotation / heartbeat checks.
+  rotationOptOut: Boolean!
+  heartbeatOptOut: Boolean!
+}
+
+# Result of generateSecretForPrincipal: the stored secret's summary, plus the
+# generated password value ONLY when the caller asked for it back
+# (returnValue: true).
+type GeneratedSecret {
+  secret: SecretSummary!
+  generatedValue: String
+}
+
+# One field key/value pair for createSecretForPrincipal /
+# generateSecretForPrincipal, e.g. { key: "username", value: "svc-a" }.
+input SecretFieldInput {
+  key: String!
+  value: String!
+}
+
+# One old-key -> new-key rename for changeSecretTypeForPrincipal, e.g.
+# { from: "password", to: "note" }.
+input FieldMappingInput {
+  from: String!
+  to: String!
+}
+
+# Result of changeSecretTypeForPrincipal: the secret's summary under its new
+# type, the field KEYS now populated (never values), the old field KEYS whose
+# values had no field in the new type and were appended to its notes field
+# (never values), and what the change left the secret's rotation, heartbeat
+# and target at.
+type TypeChangedSecret {
+  secret: SecretSummary!
+  fieldKeys: [String!]!
+  movedToNotesKeys: [String!]!
+  automation: TypeChangeAutomation!
+}
+
+# The secret's automation and target after a type change, derived from the new
+# type and the secret.
+type TypeChangeAutomation {
+  rotation: TypeChangeRotation!
+  heartbeat: TypeChangeHeartbeat!
+  target: TypeChangeTarget!
+}
+
+# NONE: the new type never rotates. OFF: rotation is opted out. A change into a
+# rotation type always leaves it OFF until setSecretAutomationForPrincipal
+# enables it. ON: rotation is enabled.
+enum TypeChangeRotation {
+  NONE
+  OFF
+  ON
+}
+
+# NONE: the new type has no heartbeat. OFF: heartbeat is opted out. NO_TARGET:
+# no heartbeat runs until a target is attached. ON: heartbeat runs against the
+# target (the target needs a connection).
+enum TypeChangeHeartbeat {
+  NONE
+  OFF
+  NO_TARGET
+  ON
+}
+
+# ATTACHED: the secret kept its target. NONE: the new type takes a target but
+# the secret has none. NOT_SUPPORTED: the new type takes no target, so any
+# target the secret had was detached.
+enum TypeChangeTarget {
+  ATTACHED
+  NONE
+  NOT_SUPPORTED
+}
+
+# Result of updateSecretFieldsForPrincipal: the secret's summary plus the
+# field KEYS whose value changed, sorted. Values go in, never come out.
+type UpdatedSecretFields {
+  secret: SecretSummary!
+  changedFieldKeys: [String!]!
+}
+
+# A folder the calling service-account principal may READ (RACI C), from
+# foldersForPrincipal. canAuthor: the principal may create secrets there
+# (RACI-Author R), which is what createSecretForPrincipal needs. path joins
+# folder names from the nearest ancestor the principal can see, so a folder
+# under a hidden parent starts its path at itself. On the results of
+# createFolderForPrincipal and renameFolderForPrincipal, path is the folder's
+# own name only (vault returns the one folder, not its ancestors); list
+# foldersForPrincipal for the full path.
+type PrincipalFolder {
+  id: ID!
+  name: String!
+  parentId: ID
+  path: String!
+  canAuthor: Boolean!
+}
+
+# One field a secret type declares. kind is the vault FieldKind without its
+# prefix: TEXT, MULTILINE, PASSWORD, BOOLEAN, SELECT, FILE or SENSITIVE.
+# sensitive: the value is only released through an audited reveal. Default
+# values are deliberately not exposed.
+type SecretTypeField {
+  key: String!
+  label: String!
+  kind: String!
+  required: Boolean!
+  sensitive: Boolean!
+}
+
+# A secret type from the vault catalog, for picking typeId and field keys.
+type SecretTypeSummary {
+  id: ID!
+  name: String!
+  fields: [SecretTypeField!]!
+}
+
+# A request by a personal token to use one secret field for one exact command.
+# The value is released once, to that token, after the owner approves it in the
+# Sneakers UI or a use grant covers it. state: PENDING, APPROVED, DENIED,
+# REDEEMED or EXPIRED. approvalUrl is where the owner reviews pending uses.
+type SecretUse {
+  id: ID!
+  secretId: ID!
+  secretName: String!
+  fieldKey: String!
+  argv: [String!]!
+  state: String!
+  expiresAtUnix: Int!
+  approvalUrl: String!
+  reveal: Boolean!
+}
+
+type RedeemedSecretUse {
+  use: SecretUse!
+  value: String!
+}
+
+# kind is "user_token" (userId is the owner, principalId the token id) or
+# "service_account" (principalId is the account id).
+type MachinePrincipal {
+  kind: String!
+  userId: String!
+  principalId: String!
+}
+
+# A connection profile (protocol, port, TLS) that targets bind to. Connections
+# are managed by site admins in the admin app; principals can only list them.
+type MachineConnection {
+  id: ID!
+  name: String!
+  protocol: String!
+  port: Int!
+  useTls: Boolean!
+  targetCount: Int!
+}
+
+# A system a secret is validated against or rotated on. ownerUserId empty =
+# shared (admin-published); set = personal to that user.
+type MachineTarget {
+  id: ID!
+  name: String!
+  hostname: String!
+  kind: String!
+  domain: String!
+  realm: String!
+  connectionId: ID!
+  description: String!
+  ownerUserId: String!
+  secretCount: Int!
+}
+
+# Create (no id) or update a target. A token's new target is personal to its
+# user; editing a shared target needs a site admin (not a token).
+input MachineTargetInput {
+  id: ID
+  name: String!
+  hostname: String!
+  kind: String
+  domain: String
+  realm: String
+  connectionId: ID!
+  description: String
+}
+
+# The last credential check of a secret against its target. result is OK,
+# FAILED, UNREACHABLE or UNKNOWN; detail is the connector's reason, never a
+# value. pending: a check is due or running.
+type SecretCheckStatus {
+  result: String!
+  checkedAtUnix: Int!
+  detail: String!
+  pending: Boolean!
+}
+
+type Query {
+  # Trivial liveness probe for the machine endpoint; also satisfies GraphQL's
+  # requirement that a schema define a Query root type.
+  machineHealth: Boolean!
+
+  # Who this bearer is: for logs and diagnostics at the edge. Carries no grants.
+  machineWhoami: MachinePrincipal!
+
+  # Connection profiles a target can bind to.
+  connectionsForPrincipal: [MachineConnection!]!
+
+  # Targets the caller can see: shared ones and its own personal ones.
+  # query matches name, hostname or domain (case-insensitive).
+  targetsForPrincipal(query: String, connectionId: ID): [MachineTarget!]!
+
+  # Status of a secret's credential check (see requestSecretCheck).
+  secretCheckStatus(secretId: ID!): SecretCheckStatus!
+
+  # List the metadata of secrets the calling service-account principal may
+  # READ (RACI C), optionally filtered by name/folder/type. Never returns
+  # field values.
+  findSecretsForPrincipal(query: String, folderId: ID, typeId: ID): [SecretSummary!]!
+
+  # List the folders the calling principal may READ (RACI C), optionally
+  # filtered by a case-insensitive name substring and/or direct parent. Master
+  # personal folders are never listed. Vault audits the call.
+  foldersForPrincipal(query: String, parentId: ID): [PrincipalFolder!]!
+
+  # List the secret types in the vault catalog (built-in plus imported
+  # extensions). The catalog holds no secret material.
+  secretTypes: [SecretTypeSummary!]!
+
+  # Poll a use this token prepared.
+  secretUse(id: ID!): SecretUse!
+}
+
+type Mutation {
+  # Reveal ONE sensitive field for the calling service-account principal:
+  # RACI-read (via the principal's token-scope-derived group/target grants) +
+  # full audit (secret.reveal.principal), NO interactive checkout/MFA.
+  revealSecretFieldForPrincipal(id: ID!, fieldKey: String!): String!
+
+  # Create a secret as the calling service-account principal. Requires
+  # RACI-Author (R) on the folder chain — the same grant human CreateSecret
+  # requires. No MFA/checkout. disableRotation / disableHeartbeat opt the new
+  # secret out of scheduled rotation / heartbeat checks (default false).
+  createSecretForPrincipal(folderId: ID!, typeId: ID!, name: String!, fields: [SecretFieldInput!]!, targetId: ID, disableRotation: Boolean, disableHeartbeat: Boolean): SecretSummary!
+
+  # Generate a policy-compliant password for the type's password field and
+  # store the secret, as the calling service-account principal. Requires
+  # RACI-Author (R). The generated value is returned only when
+  # returnValue: true. disableRotation / disableHeartbeat as for
+  # createSecretForPrincipal.
+  generateSecretForPrincipal(folderId: ID!, typeId: ID!, name: String!, fields: [SecretFieldInput!]!, policyId: ID, targetId: ID, returnValue: Boolean, disableRotation: Boolean, disableHeartbeat: Boolean): GeneratedSecret!
+
+  # Move a secret to another folder as the calling service-account principal.
+  # Requires RACI-Author (R) on the source AND the destination folder (the
+  # same rule as the human move). A move into a personal folder is denied (the
+  # human route is a site-admin approval). The secret keeps its id, values and
+  # history. Audited as the principal (secret.move.principal).
+  moveSecretForPrincipal(id: ID!, destFolderId: ID!): SecretSummary!
+
+  # Change a secret's type as the calling service-account principal. Requires
+  # RACI-Author (R) on the secret. Never drops a value: every non-empty field
+  # must carry over by identical key or via fieldMapping, else the call fails
+  # naming the unmapped keys. Sensitive values stay in sensitive fields; the new
+  # type's required fields must be filled (fields may supply values for keys the
+  # mapping leaves empty, never overwrite one). Any type may be converted into
+  # or out of any other, including rotation/heartbeat types and the certificate
+  # type. Into a rotation type, rotation stays off until enabled; heartbeat runs
+  # only with a target; a type that takes no target detaches it; into the
+  # certificate type the certificate and key must parse. Dropping checkout from
+  # a plain checkout type stays human-only. automation reports the result.
+  # Audited as the principal (secret.type_change.principal); prior values
+  # remain in version history.
+  changeSecretTypeForPrincipal(id: ID!, newTypeId: ID!, fieldMapping: [FieldMappingInput!], fields: [SecretFieldInput!]): TypeChangedSecret!
+
+  # Rename a secret as the calling principal. Requires RACI-Author (R) on the
+  # secret's folder chain and on the secret itself. Retired secrets are
+  # refused. The name is trimmed and must not be empty.
+  renameSecretForPrincipal(id: ID!, name: String!): SecretSummary!
+
+  # Change some of a secret's field values as the calling principal. Requires
+  # RACI-Author (R) on the secret. Only the listed keys change; each must be a
+  # field of the secret's type. An empty value clears an optional field. The
+  # result is a new version, so prior values stay in history. On types the
+  # vault manages (rotation, heartbeat, checkout, certificate) only "notes" and
+  # "description" may change. Returns the changed keys, never values.
+  updateSecretFieldsForPrincipal(id: ID!, fields: [SecretFieldInput!]!): UpdatedSecretFields!
+
+  # Create a subfolder as the calling principal. Requires RACI-Author (R) on
+  # the parent's chain; never top level, never inside a personal folder, and
+  # no sibling with the same name (case-insensitive). The folder inherits its
+  # parent's scope and access rules.
+  createFolderForPrincipal(parentId: ID!, name: String!): PrincipalFolder!
+
+  # Rename a folder as the calling principal. Requires RACI-Author (R) on the
+  # folder's chain. A sibling with the same name is refused.
+  renameFolderForPrincipal(id: ID!, name: String!): PrincipalFolder!
+
+  # Check the stored credential against its target now, through the connector.
+  # At most once a minute per secret; returns the request time (unix). Poll
+  # secretCheckStatus for the result.
+  requestSecretCheck(secretId: ID!): Int!
+
+  # Create or update a target (see MachineTargetInput).
+  saveTargetForPrincipal(input: MachineTargetInput!): MachineTarget!
+
+  # Attach a target to a secret, or detach it when targetId is omitted. Needs
+  # RACI-Author on the secret and a target the caller can see.
+  setSecretTargetForPrincipal(secretId: ID!, targetId: ID): SecretSummary!
+
+  # Opt a secret out of (true) or back into (false) scheduled rotation and
+  # heartbeat checks. Needs RACI-Author on the secret. Both flags are set on
+  # every call. Audited as the principal.
+  setSecretAutomationForPrincipal(secretId: ID!, disableRotation: Boolean!, disableHeartbeat: Boolean!): SecretSummary!
+
+  # Ask to use one secret field for the exact command in argv. Personal tokens only.
+  # reveal: true asks for the value itself (no argv), for a secret that
+  # requires token approval.
+  prepareSecretUse(secretId: ID!, fieldKey: String!, argv: [String!], clientLabel: String, reveal: Boolean): SecretUse!
+
+  # Release the value of an approved use, once, to the token that prepared it.
+  redeemSecretUse(id: ID!): RedeemedSecretUse!
+}

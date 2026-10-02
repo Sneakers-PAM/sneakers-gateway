@@ -1,0 +1,24 @@
+# gqlgen config for the gateway's MACHINE-ONLY GraphQL surface: a separate
+# schema/executable-schema/resolver package from the
+# human gqlgen.yml (schema.graphqls -> internal/resolvers), generated
+# independently so the two never share generated code, a Resolver struct, or
+# a mux route. See internal/machineresolvers/resolver.go for why.
+schema:
+  - graphql/machine.graphqls
+exec:
+  filename: internal/machineresolvers/generated.go
+  package: machineresolvers
+model:
+  filename: internal/machineresolvers/models_gen.go
+  package: machineresolvers
+resolver:
+  filename_template: "{name}.resolvers.go"
+  dir: internal/machineresolvers
+  package: machineresolvers
+  layout: follow-schema
+skip_mod_tidy: true
+models:
+  TypeChangedSecret:
+    fields:
+      automation:
+        resolver: true

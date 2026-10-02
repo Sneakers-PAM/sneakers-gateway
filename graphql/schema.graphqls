@@ -1,0 +1,968 @@
+# The single GraphQL contract for Sneakers. Both surfaces speak it:
+#   - live: the gqlgen BFF (this gateway) -> vault/audit gRPC
+#   - mock: the same schema executed in-browser over fixtures
+# Shapes mirror the UI mock. Identity is ambient (no-auth dev: the acting user
+# comes from the X-Dev-User header -> request context), so mutations take no
+# explicit actor argument.
+
+enum FieldKind { text multiline password boolean select file sensitive }
+enum PolicyEnforcement { lax strict }
+enum TypeOrigin { system extension custom }
+enum FolderScope { personal group role }
+enum FolderRole { read write delete bulk owner }
+enum SubjectKind { group user everyone }
+enum HeartbeatResult { ok failed unreachable unknown }
+enum RotationState { ok failed degraded rotating unknown }
+
+type SecretFieldDef {
+  key: String!
+  label: String!
+  kind: FieldKind!
+  options: [String!]
+  defaultValue: String
+  required: Boolean
+  sensitive: Boolean
+  policyId: String
+  policyEnforcement: PolicyEnforcement
+  # Rotation replaces THIS field's value (not hard-coded to "password").
+  rotates: Boolean
+  # Extra-sensitive: reveal shows a partial mask + requires a second double-reveal.
+  superSensitive: Boolean
+  # Validation regex (RE2/ECMA-safe); empty/absent = no constraint.
+  pattern: String
+  # Max input length; absent/0 = no cap.
+  maxLength: Int
+}
+
+type SecretType {
+  id: ID!
+  name: String!
+  fields: [SecretFieldDef!]!
+  heartbeat: Boolean
+  checkout: Boolean
+  origin: TypeOrigin!
+  vendor: String
+  # "Allowed rotation": whether this type may be rotated at all.
+  rotation: Boolean
+}
+
+type Folder {
+  id: ID!
+  name: String!
+  parentId: String
+  scope: FolderScope!
+  ownerUserId: String
+  groupId: String
+  role: String
+  isMasterPersonal: Boolean
+  order: Int
+  # Output-only: secrets in this folder + all descendants (drives the delete UX).
+  subtreeSecretCount: Int
+  # Output-only: RACI owners — user ids.
+  owners: [String!]
+  # whether the current actor may manage/create-under this folder — authoritative, from the vault
+  canManage: Boolean!
+}
+
+type FolderAccessRule {
+  id: ID!
+  folderId: String!
+  subjectKind: SubjectKind!
+  subjectId: String!
+  role: FolderRole!
+}
+
+type InheritedFolderRule {
+  rule: FolderAccessRule!
+  fromFolderId: String!
+  fromFolderName: String!
+}
+
+# ---- firewall-RACI ruleset ----------------------------------------------------
+# The four governed RACI actions. C = read + reveal secret values; R =
+# manage (create/edit/rotate); A = approve checkout/access requests;
+# I = informed (see the secret exists / metadata, no reveal).
+enum RaciAction { C I A R }
+# Tri-state grant per action cell: allow, deny, or blank (fall through).
+enum RaciGrant { allow deny }
+
+# One grant cell on a RACI rule row. A missing action = blank (fall through).
+type RaciRuleGrant {
+  action: RaciAction!
+  value: RaciGrant!
+}
+
+# One ordered firewall row on a folder: a subject with a tri-state grant per
+# RACI action. Evaluated top-down the folder chain (target first, then
+# ancestors); first non-blank allow/deny per action wins.
+type RaciRule {
+  id: ID!
+  folderId: String!
+  order: Int!
+  subjectKind: SubjectKind!
+  # group name or user id; empty for everyone.
+  subjectName: String!
+  grants: [RaciRuleGrant!]!
+}
+
+# A folder's own editable ruleset: owners (auto R+A+C, inherit down) + rules.
+type FolderRuleset {
+  folderId: String!
+  owners: [String!]!
+  rules: [RaciRule!]!
+  # Rules inherited from ancestor folders, read-only, tagged with their source.
+  inherited: [InheritedRaciRule!]!
+  # Owners inherited from ancestor folders, read-only, tagged with their source.
+  inheritedOwners: [InheritedOwner!]!
+}
+
+# An owner inherited from an ancestor folder, tagged with where it came from.
+type InheritedOwner {
+  userId: String!
+  fromFolderId: String!
+  fromFolderName: String!
+}
+
+# A RACI rule inherited from an ancestor folder, tagged with where it came from.
+type InheritedRaciRule {
+  rule: RaciRule!
+  fromFolderId: String!
+  fromFolderName: String!
+}
+
+# The effective access a user has on a folder (Resolve over the chain).
+type FolderAccess {
+  read: Boolean!
+  reveal: Boolean!
+  manage: Boolean!
+  approve: Boolean!
+  informed: Boolean!
+  manageRuleset: Boolean!
+}
+
+input RaciRuleGrantInput {
+  action: RaciAction!
+  value: RaciGrant!
+}
+
+input RaciRuleInput {
+  subjectKind: SubjectKind!
+  subjectName: String!
+  grants: [RaciRuleGrantInput!]!
+}
+
+# A secret's own editable ruleset: rules + inherited rules (secrets have no
+# owners of their own; ownership lives on the enclosing folder).
+type SecretRuleset {
+  secretId: String!
+  rules: [RaciRule!]!
+  # Rules inherited from the enclosing folder chain, read-only, tagged with their source.
+  inherited: [InheritedRaciRule!]!
+}
+
+type Secret {
+  id: ID!
+  name: String!
+  folderId: String!
+  typeId: String!
+  targetId: String
+  expiresAt: String
+  lastHeartbeatResult: HeartbeatResult
+  verifiedAt: String
+  masked: Boolean
+  viewCount: Int
+  lastAccessedAt: String
+  retired: Boolean!
+  retiredAt: String!
+  lastRotationResult: RotationState
+  rotatedAt: String
+  rotationIntervalDays: Int
+  nextRotationAt: String
+  # Per-secret automation overrides (audited). True = this secret is never
+  # rotated / heartbeat-checked, even if its type supports it.
+  rotationOptOut: Boolean
+  heartbeatOptOut: Boolean
+  # A personal-token reveal needs the owner's per-use browser approval, or a
+  # grant that allows reveal.
+  requireTokenApproval: Boolean
+}
+
+# Parsed metadata off an imported/exported certificate (vault-side parse; never
+# includes key material).
+type CertMeta {
+  subject: String!
+  issuer: String!
+  sans: [String!]!
+  notBefore: String!
+  notAfter: String!
+  serialNumber: String!
+  fingerprintSha256: String!
+  keyAlgorithm: String!
+  keyBits: Int!
+  isCA: Boolean!
+  # whether the stored secret carries the certificate's private key; lets the
+  # UI seed the key-bearing export-disable state from an import/replace response
+  hasPrivateKey: Boolean!
+}
+
+# Result of importCertificate. A single-entry file (PEM/DER/single-cert PKCS12)
+# yields a persisted secret + its parsed meta. A multi-entry container (e.g. a
+# PKCS12/JKS bundle with several cert+key pairs) yields the list of created
+# secret aliases instead, with secret/meta left null — that's a normal result,
+# not an error.
+type ImportCertificateResult {
+  secret: Secret
+  aliases: [String!]!
+  meta: CertMeta
+}
+
+# A certificate export ready for download: base64-encoded file bytes + the
+# filename/content-type the UI should hand to the browser.
+type CertExport {
+  fileBase64: String!
+  filename: String!
+  contentType: String!
+}
+
+# One entry in a secret's append-only value history. `fieldKeys` lists the keys
+# present in that version (for the UI) but never any values — an old value is
+# fetched only via the audited revealSecretVersionField.
+type SecretVersion {
+  versionNo: Int!
+  createdBy: String!
+  # Human-readable label for createdBy, resolved via identity (falls back to id).
+  createdByName: String!
+  createdAt: String!
+  active: Boolean!
+  fieldKeys: [String!]!
+  # The subset of `fieldKeys` whose value changed vs the immediately-prior
+  # version (the oldest version reports all its keys; a removed field counts as
+  # changed). Empty when a version changed no values. Never exposes a value.
+  changedFieldKeys: [String!]!
+}
+
+# Dashboard rollup over the current user's readable secrets.
+type SecretStats {
+  total: Int!
+  expiringSoon: Int!
+  expired: Int!
+  drift: Int!
+}
+
+# A field key/value pair (GraphQL has no map type).
+type KeyValue {
+  key: String!
+  value: String!
+}
+
+# A generated asymmetric key pair.
+type KeyPair {
+  privateKey: String!
+  publicKey: String!
+}
+input KeyValueInput {
+  key: String!
+  value: String!
+}
+
+input SecretFieldDefInput {
+  key: String!
+  label: String!
+  kind: FieldKind!
+  options: [String!]
+  defaultValue: String
+  required: Boolean
+  sensitive: Boolean
+  policyId: String
+  policyEnforcement: PolicyEnforcement
+  rotates: Boolean
+  superSensitive: Boolean
+  pattern: String
+  maxLength: Int
+}
+
+input SecretTypeInput {
+  name: String!
+  fields: [SecretFieldDefInput!]!
+  heartbeat: Boolean
+  checkout: Boolean
+  rotation: Boolean
+}
+
+input UpdateSecretInput {
+  name: String
+  targetId: String
+  expiresAt: String
+  fields: [KeyValueInput!]
+  # Move the secret to another folder. Omit to keep its current folder.
+  folderId: String
+}
+
+type Connection {
+  id: ID!
+  name: String!
+  protocol: String!
+  port: Int
+  useTls: Boolean
+  description: String
+  # Output-only: number of targets binding to this connection (server-computed).
+  targetCount: Int!
+}
+input ConnectionInput {
+  id: ID
+  name: String!
+  protocol: String!
+  port: Int
+  useTls: Boolean
+  description: String
+}
+
+type Target {
+  id: ID!
+  name: String!
+  hostname: String!
+  kind: String
+  domain: String
+  realm: String
+  connectionId: String!
+  description: String
+  # Output-only: number of secrets pointing at this target (server-computed).
+  secretCount: Int!
+  # Output-only: empty = shared (admin-owned); set = personal, owned by this user.
+  # Server-assigned from the actor on create; never settable via TargetInput.
+  ownerUserId: String
+}
+input TargetInput {
+  id: ID
+  name: String!
+  hostname: String!
+  kind: String
+  domain: String
+  realm: String
+  connectionId: String!
+  description: String
+}
+
+enum PwStartClass { any letter digit symbol }
+
+type PasswordPolicy {
+  id: ID!
+  name: String!
+  minLength: Int!
+  maxLength: Int
+  requireUpper: Boolean!
+  requireLower: Boolean!
+  requireDigit: Boolean!
+  requireSymbol: Boolean!
+  rotationDays: Int
+  startClass: PwStartClass
+  endLiteral: String
+  excludeChars: String
+  # Output-only usage (server-computed):
+  isDefault: Boolean!
+  byTypeFields: Int!
+  deletable: Boolean!
+}
+input PasswordPolicyInput {
+  id: ID
+  name: String!
+  minLength: Int!
+  maxLength: Int
+  requireUpper: Boolean!
+  requireLower: Boolean!
+  requireDigit: Boolean!
+  requireSymbol: Boolean!
+  rotationDays: Int
+  startClass: PwStartClass
+  endLiteral: String
+  excludeChars: String
+}
+
+type SecuritySettings {
+  defaultPasswordPolicyId: String
+  requireMfaForSensitiveCheckout: Boolean!
+  allowApiForSensitive: Boolean!
+  # Days a resolved access request is retained before the daily purge job
+  # deletes it (and its comment thread) from the workflow DB.
+  requestHistoryRetentionDays: Int
+  # Gateway sliding-session lifetime, in seconds. Applied to session create and
+  # each sliding renewal. Unset resolves to 1800 (30m); the gateway clamps the
+  # effective value to [900, 3600] (15m-60m).
+  sessionTtlSeconds: Int
+}
+# Partial update: only the fields provided are changed.
+input SecuritySettingsInput {
+  defaultPasswordPolicyId: String
+  requireMfaForSensitiveCheckout: Boolean
+  allowApiForSensitive: Boolean
+  requestHistoryRetentionDays: Int
+  sessionTtlSeconds: Int
+}
+
+# A platform user. `roles` are elevated roles on top of the baseline; `isRoot`
+# marks the protected bootstrap super-admin; `keycloakSubject` is the federated
+# identity's JWT `sub` (empty for pre-created local rows not yet adopted).
+type User {
+  id: ID!
+  name: String!
+  username: String!
+  email: String!
+  roles: [String!]!
+  isRoot: Boolean!
+  keycloakSubject: String!
+  # Whether the account's email address has been confirmed via an emailed code.
+  # false until then; login/admin are NOT gated on it.
+  emailVerified: Boolean!
+  # A disabled user can't sign in, and every personal token they own stops
+  # working on its next request.
+  disabled: Boolean!
+}
+
+enum ApprovalStatus { pending approved denied }
+
+# What an approval request asks for: secret_access (the default) or folder_move
+# (a shared -> personal folder move needing site-admin approval).
+enum RequestKind { secret_access folder_move secret_move }
+
+# A time-boxed checkout lease (issued by the checkout saga).
+type Lease {
+  id: ID!
+  secretId: String!
+  userId: String!
+  issuedAt: String!
+  expiresAt: String!
+  returned: Boolean
+}
+
+# A single-use ticket authorizing one interactive SSH session over the
+# sshbroker's WebSocket PTY endpoint.
+type SshSessionTicket {
+  wsUrl: String!
+  ticket: String!
+  sessionId: ID!
+  expiresInSeconds: Int!
+}
+
+# A message in an access request's discussion thread, so a requester and
+# approver can chat on the request. authorName is resolved to a display name.
+type ApprovalComment {
+  id: ID!
+  authorUserId: String!
+  authorName: String!
+  body: String!
+  createdAt: String!
+}
+
+type ApprovalRequest {
+  id: ID!
+  secretId: String!
+  requestedByUserId: String!
+  status: ApprovalStatus!
+  requestedAt: String!
+  reason: String
+  resolvedAt: String
+  resolvedByUserId: String
+  resolvedByUserName: String
+  comments: [ApprovalComment!]!
+  # Request discriminator + folder-move payload. kind=folder_move requests
+  # carry folderId/destParentId + display names and an empty secretId.
+  kind: RequestKind!
+  folderId: String!
+  destParentId: String!
+  folderName: String!
+  destParentName: String!
+}
+
+type Group {
+  id: ID!
+  name: String!
+}
+
+# A user-search result label (id + display name), used to resolve subject ids
+# on RACI rule rows back into human-readable names.
+type UserLabel {
+  id: String!
+  name: String!
+}
+
+# The effective RACI decision for a simulated actor against a folder/secret's
+# chain, evaluated with a draft ruleset that hasn't been saved yet. Each action
+# carries a human-readable reason (which rule/inheritance/ownership decided it).
+type RaciDecision {
+  read: Boolean!
+  readReason: String!
+  reveal: Boolean!
+  revealReason: String!
+  manage: Boolean!
+  manageReason: String!
+  approve: Boolean!
+  approveReason: String!
+  informed: Boolean!
+  informedReason: String!
+}
+
+type Notification {
+  id: ID!
+  action: String!
+  resourceKind: String!
+  resourceId: ID!
+  resourceLabel: String!
+  actorLabel: String!
+  occurredAt: String!
+  read: Boolean!
+}
+
+# A single key/value attribute on an audit record (GraphQL has no map type).
+type AuditAttr {
+  key: String!
+  value: String!
+}
+
+# One record in the append-only, hash-chained audit trail. `tier` is a
+# lowercase string ("audit" | "activity"); prevHash/hash carry the tamper-
+# evident chain (prevHash is empty for seq 1).
+type AuditRecord {
+  seq: Int!
+  tier: String!
+  action: String!
+  actorUserId: String!
+  # Human-readable actor label resolved via identity (falls back to the id).
+  actorName: String!
+  subject: String!
+  groupId: String!
+  sensitive: Boolean!
+  attributes: [AuditAttr!]!
+  occurredAt: String!
+  prevHash: String!
+  hash: String!
+}
+
+# The result of verifying the audit hash-chain. `brokenAtSeq` is the first bad
+# record when invalid, 0 when valid.
+type AuditChainStatus {
+  valid: Boolean!
+  brokenAtSeq: Int!
+  length: Int!
+}
+
+# A non-human principal (external caller, agent, or automation) that
+# authenticates to the machine /machine/graphql endpoint with an opaque Bearer
+# API token instead of a session cookie. Managed here, on the human admin
+# surface: site-admin-gated create/list/disable. Disable is a soft-disable
+# (no delete) — tokens already minted keep their own independent
+# expiry/revocation state.
+type ServiceAccount {
+  id: ID!
+  name: String!
+  description: String!
+  disabled: Boolean!
+  createdBy: String!
+  createdAtUnix: Int!
+  # OIDC linkage: set once an admin links this service account
+  # to a Hydra OAuth2 client via linkOidcClient, null/absent for the (common)
+  # unlinked case. Surfacing these is what makes an OIDC link observable —
+  # without them there is no way to see which service accounts are
+  # OIDC-linked or to what.
+  oidcIssuer: String
+  oidcSubject: String
+  # Admin-set bound on the OIDC linkage (trust model): the only
+  # RACI groups the linked client may ever hold. At /machine/graphql its
+  # effective groups are its JWT scope groups INTERSECT this list. Empty
+  # (always, for an unlinked account) means NO groups, never "all".
+  oidcAllowedGroups: [String!]!
+}
+
+# Metadata about a minted API token — deliberately NEVER the token value
+# itself. The plaintext token is only ever returned once, at mint time, via
+# MintApiTokenResult. revokedAtUnix/lastUsedAtUnix are 0 when unset.
+# A pending request by one of your personal tokens to use a secret field for
+# one exact command. Approving releases the value once, to that token.
+type SecretUse {
+  id: ID!
+  secretName: String!
+  fieldKey: String!
+  argv: [String!]!
+  clientLabel: String!
+  state: String!
+  expiresAtUnix: Int!
+  # The value goes to the token itself, not to a command; argv is empty.
+  reveal: Boolean!
+}
+
+type UseGrantProgram {
+  program: String!
+  argPattern: String!
+}
+
+# A bounded pre-approval: uses by one token inside this scope need no per-use approval.
+type UseGrant {
+  id: ID!
+  tokenId: ID!
+  secretIds: [ID!]!
+  folderId: ID
+  fieldKeys: [String!]!
+  programs: [UseGrantProgram!]!
+  expiresAtUnix: Int!
+  maxUses: Int!
+  uses: Int!
+  revokedAtUnix: Int!
+  # Also covers reveals to the token, for secrets that require token approval.
+  allowReveal: Boolean!
+}
+
+input UseGrantProgramInput {
+  program: String!
+  argPattern: String!
+}
+
+input UseGrantInput {
+  tokenId: ID!
+  secretIds: [ID!]
+  folderId: ID
+  fieldKeys: [String!]
+  programs: [UseGrantProgramInput!]!
+  expiresAtUnix: Int!
+  maxUses: Int
+  allowReveal: Boolean
+}
+
+# A fresh second-factor proof: kind totp or email with code, or passkey with
+# credentialJson and webauthnSessionId from beginMfaPasskey.
+input FactorInput {
+  kind: String!
+  code: String
+  credentialJson: String
+  webauthnSessionId: String
+}
+
+type PasskeyChallenge {
+  options: String!
+  webauthnSessionId: String!
+}
+
+# A personal token owned by one user. It identifies the user only; permissions
+# are resolved live on every request. The token value is never returned here.
+type UserToken {
+  id: ID!
+  label: String!
+  clientName: String!
+  createdAtUnix: Int!
+  lastUsedAtUnix: Int!
+  expiresAtUnix: Int!
+  revokedAtUnix: Int!
+}
+
+type ApiToken {
+  id: ID!
+  serviceAccountId: ID!
+  scope: String!
+  expiresAtUnix: Int!
+  revokedAtUnix: Int!
+  lastUsedAtUnix: Int!
+  createdBy: String!
+}
+
+# The one-time result of minting an API token: the plaintext token (shown to
+# the admin exactly once — never logged, never re-fetchable) plus the newly
+# minted token's metadata.
+type MintApiTokenResult {
+  token: String!
+  apiToken: ApiToken!
+}
+
+type Query {
+  users: [User!]!
+  # A single user by id (identity directory), for the admin user-detail surface.
+  user(id: String!): User
+  groups: [Group!]!
+  # Directory groups a user is a direct member of.
+  userGroups(userId: String!): [Group!]!
+  # Users who are direct members of a group.
+  groupMembers(groupId: String!): [User!]!
+  # AD group names synced onto a user from Keycloak federation (read-only here).
+  userAdGroups(userId: String!): [String!]!
+  # Typeahead search over users, for picking RACI subjects / simulator actors.
+  searchUsers(query: String!, limit: Int): [User!]!
+  # Resolves a batch of user ids to display labels (id + name).
+  resolveUserLabels(ids: [String!]!): [UserLabel!]!
+  # Previews the effective RACI decision for userId on a folder if draftRules
+  # (not yet saved) were in effect, without persisting anything.
+  simulateFolder(folderId: String!, userId: String!, draftRules: [RaciRuleInput!]!): RaciDecision!
+  # Previews the effective RACI decision for userId on a secret if draftRules
+  # (not yet saved) were in effect, without persisting anything.
+  simulateSecret(secretId: String!, userId: String!, draftRules: [RaciRuleInput!]!): RaciDecision!
+  activeLeasesForUser(userId: String!): [Lease!]!
+  activeLease(secretId: String!): Lease
+  approvalRequests: [ApprovalRequest!]!
+  connections: [Connection!]!
+  targets: [Target!]!
+  passwordPolicies: [PasswordPolicy!]!
+  securitySettings: SecuritySettings!
+  secretTypes: [SecretType!]!
+  # Extension packs available to install (not yet installed).
+  availableExtensions: [SecretType!]!
+  folders: [Folder!]!
+  secretsInFolder(folderId: String!, includeRetired: Boolean): [Secret!]!
+  secret(id: ID!): Secret
+  secretStats: SecretStats!
+  topAccessedSecrets(limit: Int): [Secret!]!
+  # Dashboard drill-down: the caller's readable secrets filtered by a stat tile's
+  # status. status ∈ "expiring" | "expired" | "drift" | "all".
+  secretsByStatus(status: String!): [Secret!]!
+  findSecretsByPublicKey(query: String!): [Secret!]!
+  # Non-sensitive field values only (sensitive values require revealSecretField).
+  secretFields(id: ID!): [KeyValue!]!
+  # A secret's value history (newest version first). Metadata + field keys only;
+  # gated by the same read access as revealing the secret.
+  secretVersions(secretId: ID!): [SecretVersion!]!
+  folderRules(folderId: String!): [FolderAccessRule!]!
+  inheritedFolderRules(folderId: String!): [InheritedFolderRule!]!
+  # A folder's firewall-RACI ruleset (owners + own rules + inherited rules).
+  folderRuleset(folderId: String!): FolderRuleset!
+  # The acting user's effective RACI access on a folder (Resolve over the chain).
+  myFolderAccess(folderId: String!): FolderAccess!
+  # A secret's own firewall-RACI ruleset (own rules + inherited rules).
+  secretRuleset(secretId: String!): SecretRuleset!
+  # The acting user's effective RACI access on a secret (Resolve over the chain).
+  mySecretAccess(secretId: String!): FolderAccess!
+  # The acting user's Informed-notification inbox, newest first.
+  myNotifications(limit: Int): [Notification!]!
+  # The acting user's unread notification count (for the header badge).
+  myUnreadNotificationCount: Int!
+  # The audit trail (admin-only): optional filters by actor and/or subject, with
+  # an optional limit (0/omitted = no limit). `excludeActions` drops records whose
+  # action is in the set BEFORE the limit, so exclusion spans the whole chain (not
+  # just the fetched window). Newest-first per the audit service.
+  auditRecords(actorUserId: String, subject: String, excludeActions: [String!], limit: Int): [AuditRecord!]!
+  # The full set of distinct action strings present in the chain (admin-only), so
+  # the UI can offer the complete "hide actions" list rather than only the actions
+  # in the fetched window.
+  auditActions: [String!]!
+  # Verifies the audit hash-chain (admin-only) for the tamper-evidence banner.
+  auditChain: AuditChainStatus!
+
+  # Site-admin-only: the service-account principals provisioned for machine
+  # access.
+  serviceAccounts: [ServiceAccount!]!
+  # Site-admin-only: a service account's minted API tokens (metadata only —
+  # never the token value; see MintApiTokenResult for the one-time reveal).
+  apiTokens(serviceAccountId: ID!): [ApiToken!]!
+  # The caller's own personal tokens.
+  myTokens: [UserToken!]!
+  # Uses your personal tokens are waiting for you to approve.
+  pendingSecretUses: [SecretUse!]!
+  # Your use grants.
+  useGrants: [UseGrant!]!
+  # Site-admin: another user's personal tokens.
+  userTokens(userId: String!): [UserToken!]!
+}
+
+input CreateSecretInput {
+  name: String!
+  folderId: String!
+  typeId: String!
+  targetId: String
+  expiresAt: String
+  fields: [KeyValueInput!]!
+}
+
+type Mutation {
+  saveConnection(input: ConnectionInput!): Connection!
+  deleteConnection(id: ID!): Boolean!
+  saveTarget(input: TargetInput!): Target!
+  deleteTarget(id: ID!): Boolean!
+
+  savePasswordPolicy(input: PasswordPolicyInput!): PasswordPolicy!
+  deletePasswordPolicy(id: ID!): Boolean!
+  updateSecuritySettings(input: SecuritySettingsInput!): SecuritySettings!
+
+  createSecretType(input: SecretTypeInput!): SecretType!
+  updateSecretType(id: ID!, input: SecretTypeInput!): SecretType!
+  deleteSecretType(id: ID!): Boolean!
+  cloneSecretType(id: ID!): SecretType!
+  importExtension(id: ID!): SecretType!
+  importExtensionFromJson(json: String!): SecretType!
+
+  createSecret(input: CreateSecretInput!): Secret!
+  updateSecret(id: ID!, input: UpdateSecretInput!): Secret!
+  # Reveals ONE sensitive field; audited + RBAC-gated server-side.
+  revealSecretField(id: ID!, fieldKey: String!): String!
+  # Reveals ONE field from a prior version; audited + RBAC-gated server-side.
+  revealSecretVersionField(secretId: ID!, versionNo: Int!, fieldKey: String!): String!
+  # Emergency access: bypasses checkout-lock/approval-pending for a
+  # read-eligible actor. Requires a fresh TOTP code (MFA step-up); high-severity
+  # audit, owner notify, and forced post-use rotation are triggered server-side.
+  breakGlassSecret(secretId: String!, reason: String!, code: String!): [KeyValue!]!
+  # Copies the primary sensitive field value (distinct audited "copy" event).
+  copySecret(id: ID!): String
+  # Soft-delete: hides the secret from default listings, recoverable via restoreSecret.
+  retireSecret(id: String!): Secret!
+  # Reverses retireSecret.
+  restoreSecret(id: String!): Secret!
+  # Hard delete: permanently removes the secret. Irreversible.
+  deleteSecret(id: String!): Boolean!
+
+  # Imports a certificate file (PEM/DER/PKCS12/PKCS7/JKS) into folderId as a new
+  # secret named `name`. passphrase decrypts an encrypted container/key;
+  # alias picks one entry out of a multi-entry container. A multi-entry
+  # container with no alias given returns the list of created aliases instead
+  # of a single secret (see ImportCertificateResult).
+  importCertificate(folderId: String!, name: String!, fileBase64: String!, passphrase: String, alias: String): ImportCertificateResult!
+  # Exports an existing certificate secret in the given format
+  # (pkcs12|pem|pem-cert|pem-key|pem-fullchain|der|pkcs7|jks). newPassphrase
+  # re-encrypts the exported container/key where the format supports it.
+  exportCertificate(secretId: String!, format: String!, newPassphrase: String): CertExport!
+  # Replaces an existing certificate secret's material in place with a freshly
+  # issued certificate file (e.g. after a CA re-issue) without changing the
+  # secret's id, folder, or ruleset; appends a new version to the secret's
+  # ledger. passphrase and alias behave as in importCertificate. A multi-entry
+  # container with no alias given returns the list of created aliases instead
+  # of a single secret (see ImportCertificateResult).
+  replaceCertificate(secretId: String!, fileBase64: String!, passphrase: String, alias: String): ImportCertificateResult!
+  # Generates a new asymmetric key pair in the given format (e.g. rsa2048|rsa4096|ec256|ec384).
+  generateKeyPair(format: String!): KeyPair!
+
+  createFolder(parentId: String, name: String!): Folder!
+  renameFolder(id: ID!, name: String!): Folder!
+  moveFolder(id: ID!, newParentId: String): Folder!
+  # reassignToId optional: omit to delete an empty-of-secrets folder (cascades empty children).
+  deleteFolder(id: ID!, reassignToId: String): Boolean!
+  reorderFolders(parentId: String, orderedIds: [String!]!): Boolean!
+
+  addFolderRule(folderId: String!, subjectKind: SubjectKind!, subjectId: String!, role: FolderRole!): FolderAccessRule!
+  removeFolderRule(id: ID!): Boolean!
+
+  # Replace a folder's entire firewall-RACI ruleset (owners + ordered rules).
+  setFolderRuleset(folderId: String!, owners: [String!]!, rules: [RaciRuleInput!]!): FolderRuleset!
+  # Replace a secret's entire firewall-RACI ruleset (ordered rules).
+  setSecretRuleset(secretId: String!, rules: [RaciRuleInput!]!): SecretRuleset!
+
+  # Access workflow (go-saga): checkout drives the checkout saga.
+  checkoutSecret(secretId: String!, hours: Int): Lease!
+  checkinSecret(secretId: String!): Boolean!
+  createAccessRequest(secretId: String!, reason: String): ApprovalRequest!
+  # Request a shared -> personal folder move for site-admin approval. Used
+  # when a non-admin drags shared content into a personal folder; destParentId
+  # may be any user's personal folder.
+  createFolderMoveRequest(folderId: String!, destParentId: String!, reason: String, folderName: String, destParentName: String): ApprovalRequest!
+  # Request a shared -> personal SECRET move for site-admin approval.
+  createSecretMoveRequest(secretId: String!, destFolderId: String!, reason: String, secretName: String, destFolderName: String): ApprovalRequest!
+  resolveApproval(id: ID!, approve: Boolean!, grantHours: Int): ApprovalRequest!
+  # Adds a message to an access request's discussion thread.
+  addApprovalComment(requestId: String!, body: String!): ApprovalRequest!
+
+  # Triggers an agentless credential rotation for the secret.
+  rotateSecret(secretId: String!): Boolean!
+
+  # Per-secret automation override (audited): disable/enable rotation and/or
+  # heartbeat for this specific secret. Returns the updated secret.
+  setSecretAutomation(secretId: String!, disableRotation: Boolean!, disableHeartbeat: Boolean!): Secret!
+  # Manage rights on the secret; a signed-in person only.
+  setSecretTokenApproval(secretId: String!, required: Boolean!): Secret!
+
+  # Group membership (identity is the source of truth). Admin-gated server-side
+  # (acting user must be a site-admin or root). Idempotent; returns true on success.
+  addGroupMember(userId: String!, groupId: String!): Boolean!
+  removeGroupMember(userId: String!, groupId: String!): Boolean!
+
+  # Create a directory group (lldap-backed). Admin-gated server-side (acting user
+  # must be site-admin or root). Returns the new group.
+  createGroup(name: String!): Group!
+
+  # Create a local (lldap-backed) user account. Admin-gated server-side (acting
+  # user must be site-admin or root). The password is admin-supplied (typically
+  # client-generated); the user then signs in via Keycloak, which federates lldap
+  # read-only. Roles are assigned separately.
+  createLocalUser(username: String!, email: String!, name: String!, password: String!): User!
+
+  # Email verification: confirm an account's email/username spelling.
+  # requestEmailVerification (re)sends a verification code; admin-gated
+  # server-side. confirmEmailVerification verifies the emailed code (keyed by
+  # userId or email) and marks the account verified; it returns false for a
+  # wrong/expired code and never reveals whether the account exists. The
+  # unauthenticated /setup and pre-login flows use the public REST
+  # /auth/verify/* endpoints (this confirm mutation is for authed contexts).
+  requestEmailVerification(userId: String!): Boolean!
+  confirmEmailVerification(userId: String, email: String, code: String!): Boolean!
+
+  # Replace a user's role set — grant/revoke e.g. the "admin" role. Admin-gated
+  # server-side. root's admin authority is is_root-derived and unaffected.
+  setUserRoles(userId: String!, roles: [String!]!): User!
+  # Site-admin: disable or re-enable a user. Refused for the caller's own account.
+  setUserDisabled(userId: String!, disabled: Boolean!): User!
+  revokeMyToken(id: ID!): UserToken!
+  # Approving needs a fresh second factor; denying does not.
+  decideSecretUse(id: ID!, approve: Boolean!, factor: FactorInput): SecretUse!
+  # Creating a grant needs a fresh second factor and one of your own tokens.
+  createUseGrant(input: UseGrantInput!, factor: FactorInput!): UseGrant!
+  revokeUseGrant(id: ID!): UseGrant!
+  # Email a one-time code for a factor check.
+  sendMfaEmailCode: Boolean!
+  # Start a passkey factor check.
+  beginMfaPasskey: PasskeyChallenge!
+  # Site-admin: revoke another user's personal token.
+  revokeUserToken(userId: String!, id: ID!): UserToken!
+
+  # Edit a user's profile — display name, email, and username. Admin-gated
+  # server-side. Fixes a misspelled account in place instead of delete + recreate.
+  # Changing the username is the careful path: the directory user is recreated
+  # (lldap uids can't be renamed), which drops the password, so the account is
+  # flagged unverified and a password-reset email is sent so the user can set a
+  # new one. Name/email-only edits never disturb the password. Returns the user.
+  updateUser(userId: String!, name: String!, email: String!, username: String!): User!
+
+  # Mark one of the acting user's notifications read.
+  markNotificationRead(id: ID!): Boolean!
+  # Mark all of the acting user's notifications read.
+  markAllNotificationsRead: Boolean!
+
+  # Authorizes an interactive SSH session against an ssh-key secret's bound
+  # target: reveals the key (audited, RBAC-gated), hands session parameters to
+  # sshbroker, and returns a single-use WebSocket ticket.
+  openSshSession(secretId: ID!): SshSessionTicket!
+
+  # Service-account + API-token management. Site-admin-only:
+  # these are the human /graphql admin operations for the machine-auth surface
+  # served separately at /machine/graphql. The identity RPCs behind these do
+  # NOT self-authorize; the gateway enforces site-admin here.
+  createServiceAccount(name: String!, description: String!): ServiceAccount!
+  # Soft-disable (no delete); returns the updated service account.
+  disableServiceAccount(id: ID!): ServiceAccount!
+  # Mints a new API token for a service account. The plaintext token is
+  # returned exactly once, in this result, and is never re-fetchable.
+  # expiresAt is a Unix timestamp (seconds); omitted/0 means no expiry.
+  # scope is a space-separated list of groups, each a group ID or name slug
+  # (lowercase, whitespace runs -> "-", e.g. "help-desk"); every entry must
+  # resolve to exactly one group or the mint is rejected. It is stored as
+  # canonical group IDs, and it is the token's only RACI group grant.
+  mintApiToken(serviceAccountId: ID!, scope: String!, expiresAt: Int): MintApiTokenResult!
+  # Revokes a minted token; returns its updated metadata.
+  revokeApiToken(id: ID!): ApiToken!
+  # Links an OIDC/OAuth2 client (Ory Hydra client-credentials) to
+  # a service account: a JWT bearer whose verified issuer/sub then match
+  # resolves to this service account at /machine/graphql (via
+  # ResolveServiceAccountByOidc), alongside its existing opaque API token(s).
+  # The issuer is always the gateway's own configured Hydra issuer
+  # (HYDRA_ISSUER) — never caller-supplied. Site-admin-only.
+  # allowedGroups is required and bounds which RACI groups the client may
+  # ever hold: effective groups = JWT scope groups INTERSECT allowedGroups.
+  # It replaces any prior bound wholesale; [] links the client but grants no
+  # groups. Each entry is a group ID, exact name, or name slug and must
+  # resolve to exactly one group (else rejected); the bound is stored as group
+  # IDs. JWT scope tokens match a group by ID or slug (e.g. "help-desk").
+  linkOidcClient(serviceAccountId: ID!, oidcSubject: String!, allowedGroups: [String!]!): ServiceAccount!
+  # Removes a service account's OIDC client linkage; its opaque API-token
+  # path is unaffected. Site-admin-only.
+  unlinkOidcClient(serviceAccountId: ID!): ServiceAccount!
+}
+
+# Live push channel over WebSocket (graphql-ws). Every subscription is
+# authenticated from the session cookie on the socket's connection_init and is
+# RACI-scoped to the acting user exactly like the equivalent query.
+type Subscription {
+  # Pushes the acting user's dashboard rollup: emits once immediately on
+  # subscribe, then whenever the readable-secrets stats change. Replaces the
+  # dashboard's poll while the socket is up. Scoped by the same GetSecretStats
+  # over the actor's readable secrets as the secretStats query.
+  secretStats: SecretStats!
+}
