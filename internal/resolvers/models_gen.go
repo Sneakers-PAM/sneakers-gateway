@@ -341,6 +341,7 @@ type Secret struct {
 	RotationOptOut       *bool            `json:"rotationOptOut,omitempty"`
 	HeartbeatOptOut      *bool            `json:"heartbeatOptOut,omitempty"`
 	RequireTokenApproval *bool            `json:"requireTokenApproval,omitempty"`
+	CanRead              *bool            `json:"canRead,omitempty"`
 }
 
 type SecretFieldDef struct {

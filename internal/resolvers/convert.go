@@ -335,6 +335,14 @@ func gqlSecret(s *vaultv1.Secret) *Secret {
 	}
 }
 
+// gqlSecretWithAccess is gqlSecret plus canRead, for the vault calls that set
+// can_read (ListSecretsInFolder and GetSecret).
+func gqlSecretWithAccess(s *vaultv1.Secret) *Secret {
+	out := gqlSecret(s)
+	out.CanRead = boolPtr(s.GetCanRead())
+	return out
+}
+
 func deref(s *string) string {
 	if s == nil {
 		return ""

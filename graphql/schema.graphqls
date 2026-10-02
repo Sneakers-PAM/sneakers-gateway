@@ -200,6 +200,10 @@ type Secret {
   # A personal-token reveal needs the owner's per-use browser approval, or a
   # grant that allows reveal.
   requireTokenApproval: Boolean
+  # Whether the signed-in user may read the secret. Set by secretsInFolder and
+  # secret, where a user may see a secret they can't read (shown locked, so
+  # they can request access); null elsewhere.
+  canRead: Boolean
 }
 
 # Parsed metadata off an imported/exported certificate (vault-side parse; never

@@ -1319,7 +1319,7 @@ func (r *queryResolver) SecretsInFolder(ctx context.Context, folderID string, in
 	}
 	out := make([]*Secret, 0, len(resp.GetSecrets()))
 	for _, s := range resp.GetSecrets() {
-		out = append(out, gqlSecret(s))
+		out = append(out, gqlSecretWithAccess(s))
 	}
 	return out, nil
 }
@@ -1333,7 +1333,7 @@ func (r *queryResolver) Secret(ctx context.Context, id string) (*Secret, error) 
 	if err != nil {
 		return nil, err
 	}
-	return gqlSecret(resp.GetSecret()), nil
+	return gqlSecretWithAccess(resp.GetSecret()), nil
 }
 
 // SecretStats is the resolver for the secretStats field.
