@@ -100,9 +100,11 @@ backends.
 
 ## CORS
 
-Every route echoes the request `Origin` with credentials allowed, and answers `OPTIONS` preflights
-for `Content-Type`, `X-Dev-User`, `X-CSRF-Token` and `Authorization`. Put the gateway behind a
-reverse proxy that serves only your UI's origin.
+Only the origins in `CORS_ALLOWED_ORIGINS` (see [configuration.md](configuration.md)) get CORS
+headers: the exact `Origin` is echoed with credentials allowed, and their `OPTIONS` preflights are
+answered for `Content-Type`, `X-Dev-User`, `X-CSRF-Token` and `Authorization`. Any other origin
+gets no CORS headers, so the browser keeps the response from it, and its preflight answers 403.
+With `AUTH_MODE=noauth` and no list set, any origin is echoed, for local development.
 
 ## Calling other services
 
