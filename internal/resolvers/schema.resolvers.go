@@ -1141,7 +1141,7 @@ func (r *queryResolver) ResolveUserLabels(ctx context.Context, ids []string) ([]
 // effective RACI decision for userId on a folder if draftRules (not yet
 // saved) were in effect, without persisting anything.
 func (r *queryResolver) SimulateFolder(ctx context.Context, folderID string, userID string, draftRules []*RaciRuleInput) (*RaciDecision, error) {
-	simIsSiteAdmin, simIsRoot, err := r.simActorAttrs(ctx, userID)
+	simIsSiteAdmin, simIsRoot, simGroupNames, simGroupIDs, err := r.simActorAttrs(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1151,7 +1151,7 @@ func (r *queryResolver) SimulateFolder(ctx context.Context, folderID string, use
 	}
 	resp, err := r.Vault.SimulateFolder(ctx, &vaultv1.SimulateFolderRequest{
 		Actor: actorOf(ctx), FolderId: folderID, SimUserId: userID,
-		SimIsSiteAdmin: simIsSiteAdmin, SimIsRoot: simIsRoot, SimGroupNames: nil,
+		SimIsSiteAdmin: simIsSiteAdmin, SimIsRoot: simIsRoot, SimGroupNames: simGroupNames, SimGroupIds: simGroupIDs,
 		DraftRules: protoRules,
 	})
 	if err != nil {
@@ -1164,7 +1164,7 @@ func (r *queryResolver) SimulateFolder(ctx context.Context, folderID string, use
 // effective RACI decision for userId on a secret if draftRules (not yet
 // saved) were in effect, without persisting anything.
 func (r *queryResolver) SimulateSecret(ctx context.Context, secretID string, userID string, draftRules []*RaciRuleInput) (*RaciDecision, error) {
-	simIsSiteAdmin, simIsRoot, err := r.simActorAttrs(ctx, userID)
+	simIsSiteAdmin, simIsRoot, simGroupNames, simGroupIDs, err := r.simActorAttrs(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1174,7 +1174,7 @@ func (r *queryResolver) SimulateSecret(ctx context.Context, secretID string, use
 	}
 	resp, err := r.Vault.SimulateSecret(ctx, &vaultv1.SimulateSecretRequest{
 		Actor: actorOf(ctx), SecretId: secretID, SimUserId: userID,
-		SimIsSiteAdmin: simIsSiteAdmin, SimIsRoot: simIsRoot, SimGroupNames: nil,
+		SimIsSiteAdmin: simIsSiteAdmin, SimIsRoot: simIsRoot, SimGroupNames: simGroupNames, SimGroupIds: simGroupIDs,
 		DraftRules: protoRules,
 	})
 	if err != nil {

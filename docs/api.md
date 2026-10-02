@@ -22,7 +22,9 @@ authenticates, and where to read more.
   factor (see "Step-up" below); the workflow actor carries the admin flags and groups too, for the
   vault's access check on check-out. Both carry the user's directory group ids next to the names,
   which group rules match on; so do a personal token's and a service account's actor on the
-  machine API.
+  machine API. `simulateFolder` and `simulateSecret` resolve the same for the previewed user
+  (`sim_group_names` and `sim_group_ids`), so the preview matches a GROUP rule the same way the
+  real access check does.
 - Identity's admin calls (users, groups, roles, factors, service accounts and tokens) name the
   signed-in user as `acting_user_id`, so the audit event identity records has an actor. A password
   Kratos rejects at `/auth/login` never reaches identity, so the gateway records it itself:
