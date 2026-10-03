@@ -12,6 +12,7 @@ context.
 - 🧩 **Human GraphQL:** `/graphql` (queries, mutations and a WebSocket subscription) for the web and mobile apps, behind a session cookie and a CSRF token.
 - 🤖 **Machine GraphQL:** `/machine/graphql` for personal tokens, service-account API tokens and, when enabled, OIDC client-credentials tokens: no cookie, no CSRF.
 - 🔑 **Login:** sign-in uses Ory: Ory Kratos for accounts and the password step, a second factor (TOTP, email code or passkey), Ory Polis for SAML single sign-on, Ory Hydra for machine OAuth, and an OAuth authorization server for native clients such as the MCP server.
+- 🛡️ **Self-service factors:** `GET /auth/mfa/factors` lists the signed-in user's own factors, and adding or removing one needs a second factor within `MFA_MAX_AGE`.
 - 🍪 **Server-side sessions:** session and pending-login records live in Redis; the browser only holds an opaque, `HttpOnly` session id.
 - 🛠️ **First-run setup:** `/setup/*` creates the first admin and seeds the vault's built-in types, guarded by `SETUP_TOKEN`.
 - 📈 **Observable:** OpenTelemetry traces and metrics, and one JSON log line per request and per GraphQL error.

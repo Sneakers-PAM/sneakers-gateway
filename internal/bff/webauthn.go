@@ -65,9 +65,13 @@ func (h *Handler) MfaWebauthnBegin(w http.ResponseWriter, r *http.Request) {
 
 // EnrollWebauthnBegin serves POST /auth/mfa/webauthn/register/begin for the AUTHED
 // user: returns the creation options + the ceremony handle to echo back on finish.
+// Step-up rules as MfaEnroll.
 func (h *Handler) EnrollWebauthnBegin(w http.ResponseWriter, r *http.Request) {
 	sess, _, ok := h.authedSession(w, r)
 	if !ok {
+		return
+	}
+	if !h.requireEnrolStepUp(w, r, sess, "/auth/mfa/webauthn/register/begin") {
 		return
 	}
 	resp, err := h.Identity.WebauthnRegisterBegin(r.Context(), &identityv1.WebauthnRegisterBeginRequest{UserId: sess.UserID})

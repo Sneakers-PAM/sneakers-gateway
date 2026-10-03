@@ -557,6 +557,7 @@ func TestMfaRemove_AuthedUser(t *testing.T) {
 	fid := &fakeIdentity{}
 	h, _ := mfaLoginHandler(t, fid)
 	sid, csrf := enrolledSession(t, h, "usr-42")
+	freshMFA(t, h, sid)
 
 	rec := authedPost(h.MfaRemove, "/auth/mfa/remove", sid, csrf, map[string]string{})
 	if rec.Code != http.StatusOK {
@@ -594,6 +595,7 @@ func TestMfaRemove_IdentityError_KeepsSession(t *testing.T) {
 	fid := &fakeIdentity{removeFactorErr: errors.New("identity down")}
 	h, _ := mfaLoginHandler(t, fid)
 	sid, csrf := enrolledSession(t, h, "usr-42")
+	freshMFA(t, h, sid)
 
 	rec := authedPost(h.MfaRemove, "/auth/mfa/remove", sid, csrf, map[string]string{})
 	if rec.Code != http.StatusBadGateway {

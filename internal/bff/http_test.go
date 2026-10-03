@@ -56,8 +56,11 @@ type fakeIdentity struct {
 	confirmErr   error
 
 	// MFA email OTP + factor-model stubs.
-	factors         []string // ListUserFactors kinds
+	factors         []string                 // ListUserFactors kinds
+	userFactors     []*identityv1.UserFactor // ListUserFactors verbatim, when set
 	factorsErr      error
+	waCreds         []*identityv1.WebauthnCredential // ListWebauthnCredentials
+	waCredsErr      error
 	sendEmailReq    *identityv1.SendEmailOtpRequest
 	sendEmailErr    error
 	verifyEmailReq  *identityv1.VerifyEmailOtpRequest
@@ -163,11 +166,21 @@ func (f *fakeIdentity) ListUserFactors(_ context.Context, in *identityv1.ListUse
 	if f.factorsErr != nil {
 		return nil, f.factorsErr
 	}
+	if f.userFactors != nil {
+		return &identityv1.ListUserFactorsResponse{Factors: f.userFactors}, nil
+	}
 	out := &identityv1.ListUserFactorsResponse{}
 	for _, k := range f.factors {
 		out.Factors = append(out.Factors, &identityv1.UserFactor{Kind: k})
 	}
 	return out, nil
+}
+
+func (f *fakeIdentity) ListWebauthnCredentials(_ context.Context, _ *identityv1.ListWebauthnCredentialsRequest, _ ...grpc.CallOption) (*identityv1.ListWebauthnCredentialsResponse, error) {
+	if f.waCredsErr != nil {
+		return nil, f.waCredsErr
+	}
+	return &identityv1.ListWebauthnCredentialsResponse{Credentials: f.waCreds}, nil
 }
 
 func (f *fakeIdentity) SendEmailOtp(_ context.Context, in *identityv1.SendEmailOtpRequest, _ ...grpc.CallOption) (*identityv1.SendEmailOtpResponse, error) {

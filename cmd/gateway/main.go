@@ -182,7 +182,12 @@ func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityService
 	if d, derr := time.ParseDuration(env("MFA_PENDING_TTL", "")); derr == nil {
 		pendingTTL = d
 	}
+	mfaMaxAge, err := bff.ParseMFAMaxAge(os.Getenv)
+	if err != nil {
+		return nil, err
+	}
 	h := &bff.Handler{
+		MFAMaxAge:  mfaMaxAge,
 		Store:      bff.NewRedisStore(rc, ttlFn),
 		Identity:   identity,
 		Pending:    bff.NewRedisPendingStore(rc, pendingTTL),
@@ -410,6 +415,8 @@ func main() {
 		// device); a site-admin/root removes another user's factor as account
 		// recovery. Both call identity's generalized RemoveFactor(kind=totp).
 		mux.Handle("/auth/mfa/remove", cors(http.HandlerFunc(bffH.MfaRemove)))
+		// The signed-in user's own factors, for the self-service security page.
+		mux.Handle("/auth/mfa/factors", cors(http.HandlerFunc(bffH.MfaFactors)))
 		mux.Handle("/auth/mfa/admin/remove-totp", cors(http.HandlerFunc(bffH.MfaAdminRemoveTotp)))
 		mux.Handle("/auth/mfa/admin/status", cors(http.HandlerFunc(bffH.MfaAdminStatus)))
 		mux.Handle("/auth/sso/login", cors(http.HandlerFunc(bffH.SSOLogin)))
