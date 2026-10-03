@@ -272,10 +272,14 @@ func (h *Handler) authedSession(w http.ResponseWriter, r *http.Request) (Session
 // MfaEnroll serves POST /auth/mfa/enroll for the AUTHED user: it starts TOTP
 // enrollment and returns the base32 secret + otpauth:// URI for the
 // authenticator app / QR. An existing confirmed factor is 409; TOTP not
-// configured (no key) is 503.
+// configured (no key) is 503. A user who already has a factor needs an MFA
+// within MFA_MAX_AGE (else 403 step_up_required); a first enrolment does not.
 func (h *Handler) MfaEnroll(w http.ResponseWriter, r *http.Request) {
 	sess, _, ok := h.authedSession(w, r)
 	if !ok {
+		return
+	}
+	if !h.requireEnrolStepUp(w, r, sess, "/auth/mfa/enroll") {
 		return
 	}
 	resp, err := h.Identity.EnrollTotp(r.Context(), &identityv1.EnrollTotpRequest{UserId: sess.UserID})
@@ -402,11 +406,30 @@ func (h *Handler) MfaEmailVerify(w http.ResponseWriter, r *http.Request) {
 // with the same teardown as Logout — revoke the Kratos session, drop the
 // server-side session, expire the cookie — so the user is kicked out and must
 // sign in again (re-hitting the mandatory enroll wall when MFA is enforced). The
-// {signedOut:true} flag tells the SPA to route to the login screen.
+// {signedOut:true} flag tells the SPA to route to the login screen. A session
+// whose MFA is older than MFA_MAX_AGE is refused with 403 step_up_required,
+// and when MFA is enforced, removing the user's last TOTP or passkey factor is
+// refused with 409 last_factor.
 func (h *Handler) MfaRemove(w http.ResponseWriter, r *http.Request) {
 	sess, sid, ok := h.authedSession(w, r)
 	if !ok {
 		return
+	}
+	if !h.requireStepUp(w, r, sess, "/auth/mfa/remove") {
+		return
+	}
+	if h.MfaEnforced {
+		factors, err := h.Identity.ListUserFactors(r.Context(), &identityv1.ListUserFactorsRequest{UserId: sess.UserID})
+		if err != nil {
+			h.logger().Ctx(r.Context()).Error(err, "mfa remove: factor count unknown")
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "identity_unreachable"})
+			return
+		}
+		if strongFactorsLeft(factors.GetFactors(), factorTotp) == 0 {
+			h.logger().Ctx(r.Context()).Info("mfa remove refused: last factor")
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "last_factor"})
+			return
+		}
 	}
 	if _, err := h.Identity.RemoveFactor(r.Context(), &identityv1.RemoveFactorRequest{
 		UserId: sess.UserID, Kind: factorTotp, ActingUserId: sess.UserID,

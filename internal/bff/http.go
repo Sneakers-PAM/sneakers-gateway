@@ -77,6 +77,8 @@ type IdentityClient interface {
 	WebauthnAssertBegin(ctx context.Context, in *identityv1.WebauthnAssertBeginRequest, opts ...grpc.CallOption) (*identityv1.WebauthnAssertBeginResponse, error)
 	WebauthnAssertFinish(ctx context.Context, in *identityv1.WebauthnAssertFinishRequest, opts ...grpc.CallOption) (*identityv1.WebauthnAssertFinishResponse, error)
 	RemoveFactor(ctx context.Context, in *identityv1.RemoveFactorRequest, opts ...grpc.CallOption) (*identityv1.RemoveFactorResponse, error)
+	// ListWebauthnCredentials lists the user's passkeys for GET /auth/mfa/factors.
+	ListWebauthnCredentials(ctx context.Context, in *identityv1.ListWebauthnCredentialsRequest, opts ...grpc.CallOption) (*identityv1.ListWebauthnCredentialsResponse, error)
 	// VerifyApiToken: the gateway's machine bearer-auth path
 	// (MachineActor) resolves a service-account API token to its principal here.
 	// Does not distinguish unknown/expired/revoked to the caller — MachineActor
@@ -134,6 +136,10 @@ type Handler struct {
 	// un-enrolled user cannot bypass MFA by refreshing into the app. When false,
 	// MFA is optional and the client shows a setup-recommended banner instead.
 	MfaEnforced bool
+	// MFAMaxAge is how recent a second factor must be to change factors
+	// (env MFA_MAX_AGE, the setting the vault and workflow read). Zero means
+	// DefaultMFAMaxAge.
+	MFAMaxAge time.Duration
 	// Auth is the local-login password backend: a *KratosClient in main.go.
 	Auth authClient
 	// Polis is the single-domain SAML SSO broker client. nil disables the SSO

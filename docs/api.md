@@ -146,12 +146,13 @@ cookie and the CSRF header.
 | `/auth/verify-otp` | Second-factor step at login (TOTP or email code). |
 | `/auth/mfa/otp/send`, `/auth/mfa/email/send` | Email a one-time code. |
 | `/auth/mfa/webauthn/begin` | Passkey assertion at login. |
-| `/auth/mfa/enroll`, `/auth/mfa/confirm` | Enroll TOTP for the signed-in user. |
-| `/auth/mfa/webauthn/register/begin`, `/auth/mfa/webauthn/register/finish` | Enroll a passkey. |
+| `/auth/mfa/factors` (`GET`) | The signed-in user's own factors (see [Managing your factors](#managing-your-factors)). |
+| `/auth/mfa/enroll`, `/auth/mfa/confirm` | Enroll TOTP for the signed-in user. `enroll` needs a fresh second factor once the user has one. |
+| `/auth/mfa/webauthn/register/begin`, `/auth/mfa/webauthn/register/finish` | Enroll a passkey. `register/begin` needs a fresh second factor once the user has one. |
 | `/auth/mfa/email/verify` | Prove the email factor. |
 | `/auth/mfa/step-up` | Step-up: prove a factor again (`{kind: totp\|email, code}` or `{kind: passkey, credentialJson, webauthnSessionId}`) so the vault sees a fresh second factor. Answers `{mfaVerifiedAt}` (Unix seconds); a wrong proof is 401 `invalid_code`, and after 5 wrong proofs the session is revoked (401 `session_revoked`). |
 | `/auth/mfa/step-up/email/send`, `/auth/mfa/step-up/passkey/begin` | Email a step-up code; start a passkey assertion (returns `options` and `webauthnSessionId`). |
-| `/auth/mfa/remove` | Remove your own TOTP factor. |
+| `/auth/mfa/remove` | Remove your own TOTP factor, then sign out (`{ok: true, signedOut: true}`). Needs a fresh second factor; refuses to remove the last one when MFA is enforced. |
 | `/auth/mfa/admin/remove-totp`, `/auth/mfa/admin/status` | Admin: remove another user's TOTP, read their MFA status. |
 | `/auth/session` (`GET`) | The current session: whether signed in, the CSRF token, MFA posture, and `mfaVerifiedAt` (Unix seconds) once a factor has been proved. |
 | `/auth/logout` | End the session. |
@@ -160,6 +161,43 @@ cookie and the CSRF header.
 | `/auth/sso/login` (`GET`), `/auth/sso/callback` (`GET`) | SAML single sign-on through Ory Polis, when configured. |
 
 The cookies are described in [cookies.md](cookies.md).
+
+### Managing your factors
+
+`GET /auth/mfa/factors` needs the session cookie and the CSRF header, and lists only the caller's
+own factors:
+
+```json
+{"factors": [
+  {"kind": "totp", "id": "totp", "label": "Authenticator app", "createdAt": "2026-01-02T03:04:05Z", "lastUsedAt": null},
+  {"kind": "passkey", "id": "<credential id>", "label": "Laptop", "createdAt": "2026-02-01T00:00:00Z", "lastUsedAt": "2026-03-01T00:00:00Z"},
+  {"kind": "email", "id": "email", "label": "Email", "createdAt": null, "lastUsedAt": null}
+]}
+```
+
+- `kind` is `totp`, `passkey` or `email`. TOTP and email come from identity's `ListUserFactors`;
+  each passkey is its own entry from `ListWebauthnCredentials`, with the passkey's credential id
+  and label (`Passkey` when it has none).
+- Times are RFC 3339 or `null`. Identity doesn't record when TOTP was last used, so its
+  `lastUsedAt` is always `null`. The email factor is implicit (every user with an address has it),
+  so its `createdAt` and `lastUsedAt` are `null`.
+- No entry carries a secret, public key, transport list or other credential material.
+- A user with no factor gets `{"factors": []}`. Identity unreachable is 502 `identity_unreachable`.
+
+Changing factors needs a recent second factor, using `MFA_MAX_AGE` (the same setting and parsing as
+the vault and the workflow; see [configuration.md](configuration.md)):
+
+| Route | Refusal |
+|---|---|
+| `POST /auth/mfa/remove` | 403 `{"error":"step_up_required"}` when the session's last MFA is older than `MFA_MAX_AGE`, or the session never proved one. |
+| `POST /auth/mfa/enroll`, `POST /auth/mfa/webauthn/register/begin` | 403 `{"error":"step_up_required"}` as above, but only when the user already has a TOTP or passkey factor (identity's `GetMfaStatus`). A user with none has nothing to step up with, so the first enrolment stays open. |
+| `POST /auth/mfa/remove` | 409 `{"error":"last_factor"}` when `MFA_ENFORCED` is on and removing TOTP would leave no TOTP or passkey factor. The implicit email factor doesn't count, matching how a login decides whether a second factor is owed. |
+
+The client answers `step_up_required` with `POST /auth/mfa/step-up` and retries. Refusals change
+nothing and keep the session. Factor enrolment (`mfa.enroll`, on TOTP confirm and passkey
+registration) and removal (`mfa.remove`) are already written to the audit service by identity,
+which owns the factors, with the actor and subject user ids, the factor kind and, for a passkey,
+its credential id; the gateway doesn't write a second copy.
 
 ## OAuth for native clients
 

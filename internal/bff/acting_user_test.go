@@ -18,6 +18,7 @@ func TestMfaRemove_SendsTheActingUser(t *testing.T) {
 	fid := &fakeIdentity{}
 	h, _ := mfaLoginHandler(t, fid)
 	sid, csrf := enrolledSession(t, h, "usr-42")
+	freshMFA(t, h, sid)
 	if rec := authedPost(h.MfaRemove, "/auth/mfa/remove", sid, csrf, nil); rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body)
 	}
