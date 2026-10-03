@@ -75,3 +75,11 @@ Follow the logging rules in `CLAUDE.md`. In short:
   trace ids); never the deprecated package-level `log.Ctx`.
 - Never edit `generated.go` or `models_gen.go` by hand; gqlgen keeps resolver bodies in
   `*.resolvers.go` across regeneration.
+- `go.mod` holds tagged releases only: no `replace` directive, and no pseudo-version (`@main`,
+  `@<sha>`) of a `github.com/Bugs5382/*` or `github.com/Sneakers-PAM/*` module; the
+  `proto-sync / check` job fails on either. To compile and test against a local package checkout,
+  use a git-ignored `go.work` beside `go.mod` (`go work init . ../go-<pkg>`, which writes
+  `use . ../go-<pkg>`); `go.work` and `go.work.sum` are in `.gitignore`. For local callee protos,
+  point `SNEAKERS_AUDIT_PROTO_DIR`, `SNEAKERS_IDENTITY_PROTO_DIR`, `SNEAKERS_NOTIFY_PROTO_DIR`,
+  `SNEAKERS_SSHBROKER_PROTO_DIR` and `SNEAKERS_VAULT_PROTO_DIR` at a local `proto/` directory when
+  running `scripts/proto-generate.sh`, rather than editing a pin in `proto-refs.env`.
