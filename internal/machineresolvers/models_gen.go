@@ -99,14 +99,23 @@ type SecretPlacement struct {
 }
 
 type SecretSummary struct {
-	ID              string           `json:"id"`
-	Name            string           `json:"name"`
-	FolderID        string           `json:"folderId"`
-	TypeID          string           `json:"typeId"`
-	TargetID        *string          `json:"targetId,omitempty"`
-	RotationOptOut  bool             `json:"rotationOptOut"`
-	HeartbeatOptOut bool             `json:"heartbeatOptOut"`
-	Placement       *SecretPlacement `json:"placement,omitempty"`
+	ID                  string           `json:"id"`
+	Name                string           `json:"name"`
+	FolderID            string           `json:"folderId"`
+	TypeID              string           `json:"typeId"`
+	TargetID            *string          `json:"targetId,omitempty"`
+	RotationOptOut      bool             `json:"rotationOptOut"`
+	HeartbeatOptOut     bool             `json:"heartbeatOptOut"`
+	ValueVersion        int              `json:"valueVersion"`
+	ValueChangedAt      *string          `json:"valueChangedAt,omitempty"`
+	RotationEnabled     bool             `json:"rotationEnabled"`
+	RotatesOnCheckin    bool             `json:"rotatesOnCheckin"`
+	HeartbeatEnabled    bool             `json:"heartbeatEnabled"`
+	LastRotationResult  *string          `json:"lastRotationResult,omitempty"`
+	RotatedAt           *string          `json:"rotatedAt,omitempty"`
+	NextRotationAt      *string          `json:"nextRotationAt,omitempty"`
+	LastHeartbeatResult *string          `json:"lastHeartbeatResult,omitempty"`
+	Placement           *SecretPlacement `json:"placement,omitempty"`
 }
 
 type SecretTypeField struct {

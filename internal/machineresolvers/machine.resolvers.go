@@ -321,14 +321,25 @@ func (r *queryResolver) SecretCheckStatus(ctx context.Context, secretID string) 
 // FindSecretsForPrincipal is the resolver for the findSecretsForPrincipal
 // field. Thin bridge to vault: vault does the RACI-read filtering (RACI C)
 // and returns metadata-only Secrets; this only maps them to summaries.
-func (r *queryResolver) FindSecretsForPrincipal(ctx context.Context, query *string, folderID *string, typeID *string) ([]*SecretSummary, error) {
+func (r *queryResolver) FindSecretsForPrincipal(ctx context.Context, query *string, folderID *string, typeID *string, changedSince *string) ([]*SecretSummary, error) {
 	resp, err := r.Vault.ListSecretsForPrincipal(ctx, &vaultv1.ListSecretsForPrincipalRequest{
 		Actor: resolvers.MachineActorOf(ctx), Query: deref(query), FolderId: deref(folderID), TypeId: deref(typeID),
+		ChangedSince: deref(changedSince),
 	})
 	if err != nil {
 		return nil, err
 	}
 	return summariesOf(resp.GetSecrets()), nil
+}
+
+// SecretForPrincipal is the resolver for the secretForPrincipal field. The
+// vault does the RACI read check and the audit.
+func (r *queryResolver) SecretForPrincipal(ctx context.Context, id string) (*SecretSummary, error) {
+	resp, err := r.Vault.GetSecretForPrincipal(ctx, &vaultv1.GetSecretForPrincipalRequest{Actor: resolvers.MachineActorOf(ctx), Id: id})
+	if err != nil {
+		return nil, err
+	}
+	return summaryOf(resp.GetSecret()), nil
 }
 
 // FoldersForPrincipal is the resolver for the foldersForPrincipal field. Vault
