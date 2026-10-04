@@ -513,3 +513,44 @@ func (r *Resolver) verifyAuditChain(ctx context.Context) (*AuditChainStatus, err
 	}
 	return gqlAuditChain(resp), nil
 }
+
+// secretMoveActions are the audit actions that record a secret actually
+// changing folder. A move that waits on an approval is not a move.
+var secretMoveActions = map[string]bool{"secret.move": true, "secret.move.principal": true}
+
+// listSecretMoves returns a secret's folder moves from the audit trail, newest
+// first. The vault's history gate (ListSecretVersions) runs first, so a caller
+// who may not see the secret's history never reaches the audit read.
+func (r *Resolver) listSecretMoves(ctx context.Context, secretID string) ([]*SecretMove, error) {
+	if _, err := r.Vault.ListSecretVersions(ctx, &vaultv1.ListSecretVersionsRequest{Actor: actorOf(ctx), SecretId: secretID}); err != nil {
+		return nil, err
+	}
+	resp, err := r.Audit.ListRecords(ctx, &auditv1.ListRecordsRequest{Subject: secretID})
+	if err != nil {
+		return nil, err
+	}
+	var moves []*auditv1.AuditRecord
+	for _, rec := range resp.GetRecords() {
+		if secretMoveActions[rec.GetAction()] {
+			moves = append(moves, rec)
+		}
+	}
+	names := r.resolveActorNames(ctx, moves)
+	out := make([]*SecretMove, 0, len(moves))
+	for i := len(moves) - 1; i >= 0; i-- {
+		rec := moves[i]
+		name := names[rec.GetActorUserId()]
+		if name == "" {
+			name = rec.GetActorUserId()
+		}
+		attrs := rec.GetAttributes()
+		out = append(out, &SecretMove{
+			MovedBy:      rec.GetActorUserId(),
+			MovedByName:  name,
+			MovedAt:      rec.GetOccurredAt(),
+			FromFolderID: attrs["from_folder_id"],
+			ToFolderID:   attrs["to_folder_id"],
+		})
+	}
+	return out, nil
+}

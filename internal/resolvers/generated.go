@@ -459,6 +459,7 @@ type ComplexityRoot struct {
 		SearchUsers               func(childComplexity int, query string, limit *int) int
 		Secret                    func(childComplexity int, id string) int
 		SecretFields              func(childComplexity int, id string) int
+		SecretMoves               func(childComplexity int, secretID string) int
 		SecretRuleset             func(childComplexity int, secretID string) int
 		SecretStats               func(childComplexity int) int
 		SecretTypes               func(childComplexity int) int
@@ -549,6 +550,14 @@ type ComplexityRoot struct {
 		Rotates           func(childComplexity int) int
 		Sensitive         func(childComplexity int) int
 		SuperSensitive    func(childComplexity int) int
+	}
+
+	SecretMove struct {
+		FromFolderID func(childComplexity int) int
+		MovedAt      func(childComplexity int) int
+		MovedBy      func(childComplexity int) int
+		MovedByName  func(childComplexity int) int
+		ToFolderID   func(childComplexity int) int
 	}
 
 	SecretRuleset struct {
@@ -836,6 +845,7 @@ type QueryResolver interface {
 	FindSecretsByPublicKey(ctx context.Context, query string) ([]*Secret, error)
 	SecretFields(ctx context.Context, id string) ([]*KeyValue, error)
 	SecretVersions(ctx context.Context, secretID string) ([]*SecretVersion, error)
+	SecretMoves(ctx context.Context, secretID string) ([]*SecretMove, error)
 	FolderRules(ctx context.Context, folderID string) ([]*FolderAccessRule, error)
 	InheritedFolderRules(ctx context.Context, folderID string) ([]*InheritedFolderRule, error)
 	FolderRuleset(ctx context.Context, folderID string) (*FolderRuleset, error)
@@ -3278,6 +3288,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SecretFields(childComplexity, args["id"].(string)), true
+	case "Query.secretMoves":
+		if e.ComplexityRoot.Query.SecretMoves == nil {
+			break
+		}
+
+		args, err := ec.field_Query_secretMoves_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SecretMoves(childComplexity, args["secretId"].(string)), true
 	case "Query.secretRuleset":
 		if e.ComplexityRoot.Query.SecretRuleset == nil {
 			break
@@ -3793,6 +3814,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretFieldDef.SuperSensitive(childComplexity), true
+
+	case "SecretMove.fromFolderId":
+		if e.ComplexityRoot.SecretMove.FromFolderID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretMove.FromFolderID(childComplexity), true
+	case "SecretMove.movedAt":
+		if e.ComplexityRoot.SecretMove.MovedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretMove.MovedAt(childComplexity), true
+	case "SecretMove.movedBy":
+		if e.ComplexityRoot.SecretMove.MovedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretMove.MovedBy(childComplexity), true
+	case "SecretMove.movedByName":
+		if e.ComplexityRoot.SecretMove.MovedByName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretMove.MovedByName(childComplexity), true
+	case "SecretMove.toFolderId":
+		if e.ComplexityRoot.SecretMove.ToFolderID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretMove.ToFolderID(childComplexity), true
 
 	case "SecretRuleset.inherited":
 		if e.ComplexityRoot.SecretRuleset.Inherited == nil {
@@ -4869,6 +4921,17 @@ type SecretVersion {
   changedFieldKeys: [String!]!
 }
 
+# A folder move in a secret's history, read from the audit trail. The folder
+# ids are empty for a move recorded before the vault kept them.
+type SecretMove {
+  movedBy: String!
+  # Human-readable label for movedBy, resolved via identity (falls back to id).
+  movedByName: String!
+  movedAt: String!
+  fromFolderId: String!
+  toFolderId: String!
+}
+
 # Dashboard rollup over the current user's readable secrets.
 type SecretStats {
   total: Int!
@@ -5503,6 +5566,9 @@ type Query {
   # A secret's value history (newest version first). Metadata + field keys only;
   # gated by the same read access as revealing the secret.
   secretVersions(secretId: ID!): [SecretVersion!]!
+  # A secret's folder moves, newest first. Gated by the same access as
+  # secretVersions.
+  secretMoves(secretId: ID!): [SecretMove!]!
   folderRules(folderId: String!): [FolderAccessRule!]!
   inheritedFolderRules(folderId: String!): [InheritedFolderRule!]!
   # A folder's firewall-RACI ruleset (owners + own rules + inherited rules).
@@ -6674,6 +6740,22 @@ func (ec *executionContext) childFields_SecretFieldDef(ctx context.Context, fiel
 		return ec.fieldContext_SecretFieldDef_maxLength(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecretFieldDef", field.Name)
+}
+
+func (ec *executionContext) childFields_SecretMove(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "movedBy":
+		return ec.fieldContext_SecretMove_movedBy(ctx, field)
+	case "movedByName":
+		return ec.fieldContext_SecretMove_movedByName(ctx, field)
+	case "movedAt":
+		return ec.fieldContext_SecretMove_movedAt(ctx, field)
+	case "fromFolderId":
+		return ec.fieldContext_SecretMove_fromFolderId(ctx, field)
+	case "toFolderId":
+		return ec.fieldContext_SecretMove_toFolderId(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SecretMove", field.Name)
 }
 
 func (ec *executionContext) childFields_SecretRuleset(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -9119,6 +9201,20 @@ func (ec *executionContext) field_Query_secretFields_args(ctx context.Context, r
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_secretMoves_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "secretId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["secretId"] = arg0
 	return args, nil
 }
 
@@ -18909,6 +19005,50 @@ func (ec *executionContext) fieldContext_Query_secretVersions(ctx context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_secretMoves(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_secretMoves(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SecretMoves(ctx, fc.Args["secretId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*SecretMove) graphql.Marshaler {
+			return ec.marshalNSecretMove2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretMoveᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_secretMoves(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretMove(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_secretMoves_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_folderRules(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -21075,6 +21215,121 @@ func (ec *executionContext) _SecretFieldDef_maxLength(ctx context.Context, field
 }
 func (ec *executionContext) fieldContext_SecretFieldDef_maxLength(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SecretFieldDef", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _SecretMove_movedBy(ctx context.Context, field graphql.CollectedField, obj *SecretMove) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretMove_movedBy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MovedBy, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretMove_movedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretMove", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretMove_movedByName(ctx context.Context, field graphql.CollectedField, obj *SecretMove) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretMove_movedByName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MovedByName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretMove_movedByName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretMove", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretMove_movedAt(ctx context.Context, field graphql.CollectedField, obj *SecretMove) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretMove_movedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MovedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretMove_movedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretMove", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretMove_fromFolderId(ctx context.Context, field graphql.CollectedField, obj *SecretMove) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretMove_fromFolderId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FromFolderID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretMove_fromFolderId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretMove", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretMove_toFolderId(ctx context.Context, field graphql.CollectedField, obj *SecretMove) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretMove_toFolderId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ToFolderID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretMove_toFolderId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretMove", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _SecretRuleset_secretId(ctx context.Context, field graphql.CollectedField, obj *SecretRuleset) (ret graphql.Marshaler) {
@@ -29123,6 +29378,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "secretMoves":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_secretMoves(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "folderRules":
 			field := field
 
@@ -29979,6 +30256,65 @@ func (ec *executionContext) _SecretFieldDef(ctx context.Context, sel ast.Selecti
 			out.Values[i] = ec._SecretFieldDef_pattern(ctx, field, obj)
 		case "maxLength":
 			out.Values[i] = ec._SecretFieldDef_maxLength(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var secretMoveImplementors = []string{"SecretMove"}
+
+func (ec *executionContext) _SecretMove(ctx context.Context, sel ast.SelectionSet, obj *SecretMove) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, secretMoveImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SecretMove")
+		case "movedBy":
+			out.Values[i] = ec._SecretMove_movedBy(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "movedByName":
+			out.Values[i] = ec._SecretMove_movedByName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "movedAt":
+			out.Values[i] = ec._SecretMove_movedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fromFolderId":
+			out.Values[i] = ec._SecretMove_fromFolderId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "toFolderId":
+			out.Values[i] = ec._SecretMove_toFolderId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -32590,6 +32926,32 @@ func (ec *executionContext) unmarshalNSecretFieldDefInput2ᚕᚖgithubᚗcomᚋS
 func (ec *executionContext) unmarshalNSecretFieldDefInput2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretFieldDefInput(ctx context.Context, v any) (*SecretFieldDefInput, error) {
 	res, err := ec.unmarshalInputSecretFieldDefInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSecretMove2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretMoveᚄ(ctx context.Context, sel ast.SelectionSet, v []*SecretMove) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNSecretMove2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretMove(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNSecretMove2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretMove(ctx context.Context, sel ast.SelectionSet, v *SecretMove) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SecretMove(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNSecretRuleset2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretRuleset(ctx context.Context, sel ast.SelectionSet, v SecretRuleset) graphql.Marshaler {

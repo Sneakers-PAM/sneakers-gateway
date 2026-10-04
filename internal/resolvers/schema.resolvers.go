@@ -1495,6 +1495,11 @@ func (r *queryResolver) SecretVersions(ctx context.Context, secretID string) ([]
 	return out, nil
 }
 
+// SecretMoves is the resolver for the secretMoves field.
+func (r *queryResolver) SecretMoves(ctx context.Context, secretID string) ([]*SecretMove, error) {
+	return r.listSecretMoves(ctx, secretID)
+}
+
 // FolderRules is the resolver for the folderRules field.
 func (r *queryResolver) FolderRules(ctx context.Context, folderID string) ([]*FolderAccessRule, error) {
 	resp, err := r.Vault.ListFolderRules(ctx, &vaultv1.ListFolderRulesRequest{FolderId: folderID})

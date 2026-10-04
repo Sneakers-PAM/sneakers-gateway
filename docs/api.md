@@ -311,6 +311,12 @@ leases, so the gateway asks the workflow first and refuses a restore while someo
 (`CHECKOUT_LEASE_HELD` with `holder_user_id`); if that lookup fails, the restore doesn't run. Only a site admin or root can grant or
 revoke the role (identity enforces it). Machine callers never get the recovery surface.
 
+`secretMoves(secretId)` lists a secret's folder moves, newest first, with who moved it, when, and
+the source and destination folder ids. It's read from the audit trail (`secret.move` and
+`secret.move.principal`; a move waiting on an approval isn't listed), behind the same vault check
+as `secretVersions`, which runs first. The folder ids are empty for a move recorded before the
+vault kept them.
+
 ### Maintenance
 
 `maintenance` answers any signed-in user with `readOnly` and, when the appliance gave one, a
