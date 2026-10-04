@@ -563,7 +563,7 @@ func main() {
 	// hydraVerifier/hydraIssuer are computed once, above, by newHydraVerifier.
 	machineH := &bff.Handler{Identity: identityClient, MachineOidcVerifier: hydraVerifier, MachineOidcIssuer: hydraIssuer, MCPDisabled: !mcpEnabled, MachineAPIDisabled: !machineAPIEnabled}
 	machineGQL := handler.New(machineresolvers.NewExecutableSchema(machineresolvers.Config{
-		Resolvers: &machineresolvers.Resolver{Vault: vaultClient, PublicURL: env("OAUTH_PUBLIC_URL", ""), ApprovalRunLinks: runLinks, ActiveUsers: activeUsers},
+		Resolvers: &machineresolvers.Resolver{Vault: vaultClient, PublicURL: env("OAUTH_PUBLIC_URL", ""), ApprovalRunLinks: runLinks, ActiveUsers: activeUsers, Log: reqLog},
 	}))
 	machineGQL.AddTransport(transport.POST{})
 	machineGQL.Use(gqllog.ErrorLog{Log: reqLog, Actor: resolvers.CallerID})

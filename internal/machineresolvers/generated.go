@@ -73,8 +73,8 @@ type ComplexityRoot struct {
 	Mutation struct {
 		ChangeSecretTypeForPrincipal    func(childComplexity int, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*SecretFieldInput) int
 		CreateFolderForPrincipal        func(childComplexity int, parentID string, name string) int
-		CreateSecretForPrincipal        func(childComplexity int, folderID string, typeID string, name string, fields []*SecretFieldInput, targetID *string, disableRotation *bool, disableHeartbeat *bool) int
-		GenerateSecretForPrincipal      func(childComplexity int, folderID string, typeID string, name string, fields []*SecretFieldInput, policyID *string, targetID *string, returnValue *bool, disableRotation *bool, disableHeartbeat *bool) int
+		CreateSecretForPrincipal        func(childComplexity int, folderID string, typeID string, name string, fields []*SecretFieldInput, targetID *string, disableRotation *bool, disableHeartbeat *bool, keepFolder *bool) int
+		GenerateSecretForPrincipal      func(childComplexity int, folderID string, typeID string, name string, fields []*SecretFieldInput, policyID *string, targetID *string, returnValue *bool, disableRotation *bool, disableHeartbeat *bool, keepFolder *bool) int
 		MoveSecretForPrincipal          func(childComplexity int, id string, destFolderID string) int
 		PrepareSecretUse                func(childComplexity int, secretID string, fieldKey string, argv []string, clientLabel *string, reveal *bool, runID *string, purpose *string) int
 		RedeemSecretUse                 func(childComplexity int, id string) int
@@ -121,11 +121,19 @@ type ComplexityRoot struct {
 		Result        func(childComplexity int) int
 	}
 
+	SecretPlacement struct {
+		FolderID          func(childComplexity int) int
+		Reason            func(childComplexity int) int
+		RequestedFolderID func(childComplexity int) int
+		Rule              func(childComplexity int) int
+	}
+
 	SecretSummary struct {
 		FolderID        func(childComplexity int) int
 		HeartbeatOptOut func(childComplexity int) int
 		ID              func(childComplexity int) int
 		Name            func(childComplexity int) int
+		Placement       func(childComplexity int) int
 		RotationOptOut  func(childComplexity int) int
 		TargetID        func(childComplexity int) int
 		TypeID          func(childComplexity int) int
@@ -180,8 +188,8 @@ type ComplexityRoot struct {
 
 type MutationResolver interface {
 	RevealSecretFieldForPrincipal(ctx context.Context, id string, fieldKey string) (string, error)
-	CreateSecretForPrincipal(ctx context.Context, folderID string, typeID string, name string, fields []*SecretFieldInput, targetID *string, disableRotation *bool, disableHeartbeat *bool) (*SecretSummary, error)
-	GenerateSecretForPrincipal(ctx context.Context, folderID string, typeID string, name string, fields []*SecretFieldInput, policyID *string, targetID *string, returnValue *bool, disableRotation *bool, disableHeartbeat *bool) (*GeneratedSecret, error)
+	CreateSecretForPrincipal(ctx context.Context, folderID string, typeID string, name string, fields []*SecretFieldInput, targetID *string, disableRotation *bool, disableHeartbeat *bool, keepFolder *bool) (*SecretSummary, error)
+	GenerateSecretForPrincipal(ctx context.Context, folderID string, typeID string, name string, fields []*SecretFieldInput, policyID *string, targetID *string, returnValue *bool, disableRotation *bool, disableHeartbeat *bool, keepFolder *bool) (*GeneratedSecret, error)
 	MoveSecretForPrincipal(ctx context.Context, id string, destFolderID string) (*SecretSummary, error)
 	ChangeSecretTypeForPrincipal(ctx context.Context, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*SecretFieldInput) (*TypeChangedSecret, error)
 	RenameSecretForPrincipal(ctx context.Context, id string, name string) (*SecretSummary, error)
@@ -393,7 +401,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.CreateSecretForPrincipal(childComplexity, args["folderId"].(string), args["typeId"].(string), args["name"].(string), args["fields"].([]*SecretFieldInput), args["targetId"].(*string), args["disableRotation"].(*bool), args["disableHeartbeat"].(*bool)), true
+		return e.ComplexityRoot.Mutation.CreateSecretForPrincipal(childComplexity, args["folderId"].(string), args["typeId"].(string), args["name"].(string), args["fields"].([]*SecretFieldInput), args["targetId"].(*string), args["disableRotation"].(*bool), args["disableHeartbeat"].(*bool), args["keepFolder"].(*bool)), true
 	case "Mutation.generateSecretForPrincipal":
 		if e.ComplexityRoot.Mutation.GenerateSecretForPrincipal == nil {
 			break
@@ -404,7 +412,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.GenerateSecretForPrincipal(childComplexity, args["folderId"].(string), args["typeId"].(string), args["name"].(string), args["fields"].([]*SecretFieldInput), args["policyId"].(*string), args["targetId"].(*string), args["returnValue"].(*bool), args["disableRotation"].(*bool), args["disableHeartbeat"].(*bool)), true
+		return e.ComplexityRoot.Mutation.GenerateSecretForPrincipal(childComplexity, args["folderId"].(string), args["typeId"].(string), args["name"].(string), args["fields"].([]*SecretFieldInput), args["policyId"].(*string), args["targetId"].(*string), args["returnValue"].(*bool), args["disableRotation"].(*bool), args["disableHeartbeat"].(*bool), args["keepFolder"].(*bool)), true
 	case "Mutation.moveSecretForPrincipal":
 		if e.ComplexityRoot.Mutation.MoveSecretForPrincipal == nil {
 			break
@@ -688,6 +696,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SecretCheckStatus.Result(childComplexity), true
 
+	case "SecretPlacement.folderId":
+		if e.ComplexityRoot.SecretPlacement.FolderID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretPlacement.FolderID(childComplexity), true
+	case "SecretPlacement.reason":
+		if e.ComplexityRoot.SecretPlacement.Reason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretPlacement.Reason(childComplexity), true
+	case "SecretPlacement.requestedFolderId":
+		if e.ComplexityRoot.SecretPlacement.RequestedFolderID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretPlacement.RequestedFolderID(childComplexity), true
+	case "SecretPlacement.rule":
+		if e.ComplexityRoot.SecretPlacement.Rule == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretPlacement.Rule(childComplexity), true
+
 	case "SecretSummary.folderId":
 		if e.ComplexityRoot.SecretSummary.FolderID == nil {
 			break
@@ -712,6 +745,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretSummary.Name(childComplexity), true
+	case "SecretSummary.placement":
+		if e.ComplexityRoot.SecretSummary.Placement == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.Placement(childComplexity), true
 	case "SecretSummary.rotationOptOut":
 		if e.ComplexityRoot.SecretSummary.RotationOptOut == nil {
 			break
@@ -1012,6 +1051,28 @@ type SecretSummary {
   # The secret is opted out of scheduled rotation / heartbeat checks.
   rotationOptOut: Boolean!
   heartbeatOptOut: Boolean!
+  # Where createSecretForPrincipal / generateSecretForPrincipal stored the
+  # secret and why; null on every other result.
+  placement: SecretPlacement
+}
+
+# How createSecretForPrincipal / generateSecretForPrincipal chose the folder.
+# A personal token's secret whose name, or a field naming an account
+# (username, login, email, account), names the token's owner (their username
+# as a whole word, or their email, ignoring case) goes to the owner's
+# Personal folder instead of the requested one. rule:
+#   REQUESTED           nothing names the caller, or the caller is a service account
+#   PERSONAL_DEFAULT    stored in the owner's Personal folder
+#   KEPT_BY_CALLER      matched, but keepFolder: true kept the requested folder
+#   ALREADY_PERSONAL    matched, and the requested folder is already personal
+#   NO_PERSONAL_FOLDER  matched, but the owner has no Personal folder yet
+# reason says the same in words and names the matching part (the name or a
+# field key), never a value.
+type SecretPlacement {
+  folderId: ID!
+  requestedFolderId: ID!
+  rule: String!
+  reason: String!
 }
 
 # Result of generateSecretForPrincipal: the stored secret's summary, plus the
@@ -1266,14 +1327,17 @@ type Mutation {
   # RACI-Author (R) on the folder chain — the same grant human CreateSecret
   # requires. No MFA/checkout. disableRotation / disableHeartbeat opt the new
   # secret out of scheduled rotation / heartbeat checks (default false).
-  createSecretForPrincipal(folderId: ID!, typeId: ID!, name: String!, fields: [SecretFieldInput!]!, targetId: ID, disableRotation: Boolean, disableHeartbeat: Boolean): SecretSummary!
+  # keepFolder: true stores the secret in folderId even when it names the
+  # caller (see SecretPlacement).
+  createSecretForPrincipal(folderId: ID!, typeId: ID!, name: String!, fields: [SecretFieldInput!]!, targetId: ID, disableRotation: Boolean, disableHeartbeat: Boolean, keepFolder: Boolean): SecretSummary!
 
   # Generate a policy-compliant password for the type's password field and
   # store the secret, as the calling service-account principal. Requires
   # RACI-Author (R). The generated value is returned only when
   # returnValue: true. disableRotation / disableHeartbeat as for
-  # createSecretForPrincipal.
-  generateSecretForPrincipal(folderId: ID!, typeId: ID!, name: String!, fields: [SecretFieldInput!]!, policyId: ID, targetId: ID, returnValue: Boolean, disableRotation: Boolean, disableHeartbeat: Boolean): GeneratedSecret!
+  # createSecretForPrincipal, and so are keepFolder and the placement
+  # (secret.placement).
+  generateSecretForPrincipal(folderId: ID!, typeId: ID!, name: String!, fields: [SecretFieldInput!]!, policyId: ID, targetId: ID, returnValue: Boolean, disableRotation: Boolean, disableHeartbeat: Boolean, keepFolder: Boolean): GeneratedSecret!
 
   # Move a secret to another folder as the calling service-account principal.
   # Requires RACI-Author (R) on the source AND the destination folder (the
@@ -1464,6 +1528,20 @@ func (ec *executionContext) childFields_SecretCheckStatus(ctx context.Context, f
 	return nil, fmt.Errorf("no field named %q was found under type SecretCheckStatus", field.Name)
 }
 
+func (ec *executionContext) childFields_SecretPlacement(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "folderId":
+		return ec.fieldContext_SecretPlacement_folderId(ctx, field)
+	case "requestedFolderId":
+		return ec.fieldContext_SecretPlacement_requestedFolderId(ctx, field)
+	case "rule":
+		return ec.fieldContext_SecretPlacement_rule(ctx, field)
+	case "reason":
+		return ec.fieldContext_SecretPlacement_reason(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SecretPlacement", field.Name)
+}
+
 func (ec *executionContext) childFields_SecretSummary(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "id":
@@ -1480,6 +1558,8 @@ func (ec *executionContext) childFields_SecretSummary(ctx context.Context, field
 		return ec.fieldContext_SecretSummary_rotationOptOut(ctx, field)
 	case "heartbeatOptOut":
 		return ec.fieldContext_SecretSummary_heartbeatOptOut(ctx, field)
+	case "placement":
+		return ec.fieldContext_SecretSummary_placement(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecretSummary", field.Name)
 }
@@ -1811,6 +1891,14 @@ func (ec *executionContext) field_Mutation_createSecretForPrincipal_args(ctx con
 		return nil, err
 	}
 	args["disableHeartbeat"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "keepFolder",
+		func(ctx context.Context, v any) (*bool, error) {
+			return ec.unmarshalOBoolean2ᚖbool(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["keepFolder"] = arg7
 	return args, nil
 }
 
@@ -1889,6 +1977,14 @@ func (ec *executionContext) field_Mutation_generateSecretForPrincipal_args(ctx c
 		return nil, err
 	}
 	args["disableHeartbeat"] = arg8
+	arg9, err := graphql.ProcessArgField(ctx, rawArgs, "keepFolder",
+		func(ctx context.Context, v any) (*bool, error) {
+			return ec.unmarshalOBoolean2ᚖbool(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["keepFolder"] = arg9
 	return args, nil
 }
 
@@ -2921,7 +3017,7 @@ func (ec *executionContext) _Mutation_createSecretForPrincipal(ctx context.Conte
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateSecretForPrincipal(ctx, fc.Args["folderId"].(string), fc.Args["typeId"].(string), fc.Args["name"].(string), fc.Args["fields"].([]*SecretFieldInput), fc.Args["targetId"].(*string), fc.Args["disableRotation"].(*bool), fc.Args["disableHeartbeat"].(*bool))
+			return ec.Resolvers.Mutation().CreateSecretForPrincipal(ctx, fc.Args["folderId"].(string), fc.Args["typeId"].(string), fc.Args["name"].(string), fc.Args["fields"].([]*SecretFieldInput), fc.Args["targetId"].(*string), fc.Args["disableRotation"].(*bool), fc.Args["disableHeartbeat"].(*bool), fc.Args["keepFolder"].(*bool))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *SecretSummary) graphql.Marshaler {
@@ -2965,7 +3061,7 @@ func (ec *executionContext) _Mutation_generateSecretForPrincipal(ctx context.Con
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().GenerateSecretForPrincipal(ctx, fc.Args["folderId"].(string), fc.Args["typeId"].(string), fc.Args["name"].(string), fc.Args["fields"].([]*SecretFieldInput), fc.Args["policyId"].(*string), fc.Args["targetId"].(*string), fc.Args["returnValue"].(*bool), fc.Args["disableRotation"].(*bool), fc.Args["disableHeartbeat"].(*bool))
+			return ec.Resolvers.Mutation().GenerateSecretForPrincipal(ctx, fc.Args["folderId"].(string), fc.Args["typeId"].(string), fc.Args["name"].(string), fc.Args["fields"].([]*SecretFieldInput), fc.Args["policyId"].(*string), fc.Args["targetId"].(*string), fc.Args["returnValue"].(*bool), fc.Args["disableRotation"].(*bool), fc.Args["disableHeartbeat"].(*bool), fc.Args["keepFolder"].(*bool))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *GeneratedSecret) graphql.Marshaler {
@@ -4248,6 +4344,98 @@ func (ec *executionContext) fieldContext_SecretCheckStatus_pending(_ context.Con
 	return graphql.NewScalarFieldContext("SecretCheckStatus", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _SecretPlacement_folderId(ctx context.Context, field graphql.CollectedField, obj *SecretPlacement) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretPlacement_folderId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FolderID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretPlacement_folderId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretPlacement", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _SecretPlacement_requestedFolderId(ctx context.Context, field graphql.CollectedField, obj *SecretPlacement) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretPlacement_requestedFolderId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RequestedFolderID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretPlacement_requestedFolderId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretPlacement", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _SecretPlacement_rule(ctx context.Context, field graphql.CollectedField, obj *SecretPlacement) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretPlacement_rule(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Rule, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretPlacement_rule(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretPlacement", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretPlacement_reason(ctx context.Context, field graphql.CollectedField, obj *SecretPlacement) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretPlacement_reason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Reason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretPlacement_reason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretPlacement", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _SecretSummary_id(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4407,6 +4595,38 @@ func (ec *executionContext) _SecretSummary_heartbeatOptOut(ctx context.Context, 
 }
 func (ec *executionContext) fieldContext_SecretSummary_heartbeatOptOut(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _SecretSummary_placement(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_placement(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Placement, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *SecretPlacement) graphql.Marshaler {
+			return ec.marshalOSecretPlacement2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋmachineresolversᚐSecretPlacement(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_placement(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SecretSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretPlacement(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _SecretTypeField_key(ctx context.Context, field graphql.CollectedField, obj *SecretTypeField) (ret graphql.Marshaler) {
@@ -7130,6 +7350,60 @@ func (ec *executionContext) _SecretCheckStatus(ctx context.Context, sel ast.Sele
 	return out
 }
 
+var secretPlacementImplementors = []string{"SecretPlacement"}
+
+func (ec *executionContext) _SecretPlacement(ctx context.Context, sel ast.SelectionSet, obj *SecretPlacement) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, secretPlacementImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SecretPlacement")
+		case "folderId":
+			out.Values[i] = ec._SecretPlacement_folderId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requestedFolderId":
+			out.Values[i] = ec._SecretPlacement_requestedFolderId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "rule":
+			out.Values[i] = ec._SecretPlacement_rule(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reason":
+			out.Values[i] = ec._SecretPlacement_reason(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var secretSummaryImplementors = []string{"SecretSummary"}
 
 func (ec *executionContext) _SecretSummary(ctx context.Context, sel ast.SelectionSet, obj *SecretSummary) graphql.Marshaler {
@@ -7173,6 +7447,8 @@ func (ec *executionContext) _SecretSummary(ctx context.Context, sel ast.Selectio
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "placement":
+			out.Values[i] = ec._SecretSummary_placement(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -8576,6 +8852,13 @@ func (ec *executionContext) unmarshalOSecretFieldInput2ᚕᚖgithubᚗcomᚋSnea
 		}
 	}
 	return res, nil
+}
+
+func (ec *executionContext) marshalOSecretPlacement2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋmachineresolversᚐSecretPlacement(ctx context.Context, sel ast.SelectionSet, v *SecretPlacement) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._SecretPlacement(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {

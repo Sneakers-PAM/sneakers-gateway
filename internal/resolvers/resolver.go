@@ -241,6 +241,24 @@ func WithUserTokenActor(ctx context.Context, userID, tokenID string, groupNames 
 	return context.WithValue(ctx, machineActorKey{}, machineActor{userID: userID, tokenID: tokenID, groupNames: groupNames})
 }
 
+type callerIdentityKey struct{}
+
+type callerIdentity struct{ username, email string }
+
+// WithCallerIdentity stores a personal token owner's username and email, so
+// the machine surface can tell a secret that names its caller. It's never
+// sent to a backend.
+func WithCallerIdentity(ctx context.Context, username, email string) context.Context {
+	return context.WithValue(ctx, callerIdentityKey{}, callerIdentity{username: username, email: email})
+}
+
+// CallerIdentity returns the username and email WithCallerIdentity stored,
+// or empty strings (a service account, or a human session).
+func CallerIdentity(ctx context.Context) (username, email string) {
+	c, _ := ctx.Value(callerIdentityKey{}).(callerIdentity)
+	return c.username, c.email
+}
+
 // WithMachineGroupIDs adds the directory group ids (the same groups as the
 // machine actor's names) to the machine actor already on ctx.
 func WithMachineGroupIDs(ctx context.Context, ids []string) context.Context {

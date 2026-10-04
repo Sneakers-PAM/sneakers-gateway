@@ -12,6 +12,7 @@
 package machineresolvers
 
 import (
+	log "github.com/Bugs5382/go-log"
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 )
@@ -32,4 +33,13 @@ type Resolver struct {
 	// ActiveUsers lists the active people for the vault's approval
 	// decisions; nil means unknown (never a single-user install).
 	ActiveUsers *resolvers.ActiveUsers
+	// Log is the request logger; nil logs nothing.
+	Log log.Logger
+}
+
+func (r *Resolver) logger() log.Logger {
+	if r.Log == nil {
+		return log.Nop()
+	}
+	return r.Log
 }

@@ -113,5 +113,6 @@ func (h *Handler) serveUserToken(w http.ResponseWriter, r *http.Request, next ht
 	}
 	ctx := resolvers.WithUserTokenActor(r.Context(), resp.GetUser().GetId(), resp.GetTokenId(), resp.GetGroupNames())
 	ctx = resolvers.WithMachineGroupIDs(ctx, resp.GetGroupIds())
+	ctx = resolvers.WithCallerIdentity(ctx, resp.GetUser().GetUsername(), resp.GetUser().GetEmail())
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
