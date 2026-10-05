@@ -317,6 +317,16 @@ With `OAUTH_PUBLIC_URL` set, the gateway is an OAuth 2.0 authorization server fo
 | `POST /oauth2/consent/{id}/email-code`, `POST /oauth2/consent/{id}/passkey/begin` | Step-up second factor for the consent. |
 | `POST /oauth2/token` | Exchange the code for a personal token. |
 
+A token minted here is recorded by identity with `client_kind: mcp`; one minted on the tokens page
+is `cli`. Together with Hydra client-credentials JWTs (audience `sneakers-mcp`), the `mcp` tokens
+are the MCP agent tokens.
+
+**MCP off** (`MCP_ENABLED=false`): every route above, and every MCP agent token on
+`/machine/graphql`, answers `403` with
+`{"error":"MCP_DISABLED","message":"MCP is turned off on this appliance (setting mcp.enabled)"}`,
+before identity or Hydra is called for a JWT, so no new agent token can be minted or used.
+Personal tokens with `client_kind: cli` and service-account API tokens keep working.
+
 ## First-run setup
 
 | Route | Purpose |

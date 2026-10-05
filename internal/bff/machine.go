@@ -65,6 +65,10 @@ func (h *Handler) MachineActor(next http.Handler) http.Handler {
 		}
 		var mv machineVerifier = saTokenVerifier{identity: h.Identity}
 		if looksLikeJWT(token) {
+			if h.MCPDisabled {
+				writeMCPDisabled(w)
+				return
+			}
 			if h.MachineOidcVerifier == nil {
 				// Inert: Hydra not enabled (HYDRA_ENABLED unset/false).
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -92,6 +96,10 @@ func (h *Handler) serveUserToken(w http.ResponseWriter, r *http.Request, next ht
 	resp, err := h.Identity.VerifyUserToken(r.Context(), &identityv1.VerifyUserTokenRequest{Token: token})
 	if err != nil || !resp.GetValid() || resp.GetUser().GetId() == "" {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if h.MCPDisabled && resp.GetClientKind() == ClientKindMCP {
+		writeMCPDisabled(w)
 		return
 	}
 	ctx := resolvers.WithUserTokenActor(r.Context(), resp.GetUser().GetId(), resp.GetTokenId(), resp.GetGroupNames())

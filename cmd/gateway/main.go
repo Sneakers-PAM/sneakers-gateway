@@ -62,6 +62,13 @@ func envTrue(k string) bool {
 	return v == "1" || strings.EqualFold(v, "true")
 }
 
+// mcpEnabledFrom reads MCP_ENABLED: on unless it's "false" or "0" (any case,
+// spaces trimmed), so an install that never sets it keeps the MCP.
+func mcpEnabledFrom(v string) bool {
+	v = strings.TrimSpace(v)
+	return v != "0" && !strings.EqualFold(v, "false")
+}
+
 // newHydraVerifier builds the machine bearer-auth path's OIDC leg from env,
 // gated on HYDRA_ENABLED (default OFF), an explicit activation flag, so
 // inertness holds by construction: while HYDRA_ENABLED is unset/false this
@@ -378,6 +385,14 @@ func main() {
 	}
 	cors := corsP.wrap
 	mux := http.NewServeMux()
+	// MCP off: the OAuth routes that mint MCP agent tokens answer
+	// MCP_DISABLED, and the machine API refuses the agent tokens (below).
+	mcpEnabled := mcpEnabledFrom(os.Getenv("MCP_ENABLED"))
+	logger.Info().Bool("mcp_enabled", mcpEnabled).Msg("mcp switch")
+	if !mcpEnabled {
+		mux.Handle("/oauth2/", bff.MCPOff())
+		mux.Handle("/.well-known/oauth-authorization-server", bff.MCPOff())
+	}
 	// valkeyInfo reads the session store's INFO for the diagnostics; it stays
 	// nil (not configured) in noauth mode, which has no Valkey client.
 	var valkeyInfo func(context.Context) (string, error)
@@ -419,7 +434,7 @@ func main() {
 		bffH.Audit = auditClient
 		// MCP /login: the OAuth native-app authorization server that issues
 		// personal tokens. Mounted only when the env's public UI URL is set.
-		if pub := env("OAUTH_PUBLIC_URL", ""); pub != "" {
+		if pub := env("OAUTH_PUBLIC_URL", ""); pub != "" && mcpEnabled {
 			o := (&bff.OAuth{Handler: bffH, Store: bffH.OAuthStore, PublicURL: pub}).Routes()
 			mux.Handle("/oauth2/", o)
 			mux.Handle("/.well-known/oauth-authorization-server", o)
@@ -525,7 +540,7 @@ func main() {
 	// own executable schema (internal/machineresolvers, graphql/machine.graphqls)
 	// so the human /graphql surface above is never touched by this mount.
 	// hydraVerifier/hydraIssuer are computed once, above, by newHydraVerifier.
-	machineH := &bff.Handler{Identity: identityClient, MachineOidcVerifier: hydraVerifier, MachineOidcIssuer: hydraIssuer}
+	machineH := &bff.Handler{Identity: identityClient, MachineOidcVerifier: hydraVerifier, MachineOidcIssuer: hydraIssuer, MCPDisabled: !mcpEnabled}
 	machineGQL := handler.New(machineresolvers.NewExecutableSchema(machineresolvers.Config{
 		Resolvers: &machineresolvers.Resolver{Vault: vaultClient, PublicURL: env("OAUTH_PUBLIC_URL", ""), ApprovalRunLinks: runLinks},
 	}))
