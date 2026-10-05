@@ -91,6 +91,13 @@ type CertMeta struct {
 	HasPrivateKey     bool     `json:"hasPrivateKey"`
 }
 
+type ComponentVersion struct {
+	Name    string          `json:"name"`
+	Version *string         `json:"version,omitempty"`
+	Commit  *string         `json:"commit,omitempty"`
+	Status  ComponentStatus `json:"status"`
+}
+
 type Connection struct {
 	ID          string  `json:"id"`
 	Name        string  `json:"name"`
@@ -117,6 +124,23 @@ type CreateSecretInput struct {
 	TargetID  *string          `json:"targetId,omitempty"`
 	ExpiresAt *string          `json:"expiresAt,omitempty"`
 	Fields    []*KeyValueInput `json:"fields"`
+}
+
+type Diagnostics struct {
+	GeneratedAt string              `json:"generatedAt"`
+	TraceID     string              `json:"traceId"`
+	Actor       *DiagnosticsActor   `json:"actor"`
+	PublicURL   string              `json:"publicUrl"`
+	Appliance   *string             `json:"appliance,omitempty"`
+	Gateway     *ComponentVersion   `json:"gateway"`
+	Services    []*ComponentVersion `json:"services"`
+	ThirdParty  []*ComponentVersion `json:"thirdParty"`
+}
+
+type DiagnosticsActor struct {
+	ID       string   `json:"id"`
+	Username string   `json:"username"`
+	Roles    []string `json:"roles"`
 }
 
 type FactorInput struct {
@@ -617,6 +641,63 @@ func (e *ApprovalStatus) UnmarshalJSON(b []byte) error {
 }
 
 func (e ApprovalStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type ComponentStatus string
+
+const (
+	ComponentStatusOk            ComponentStatus = "OK"
+	ComponentStatusUnavailable   ComponentStatus = "UNAVAILABLE"
+	ComponentStatusNotConfigured ComponentStatus = "NOT_CONFIGURED"
+)
+
+var AllComponentStatus = []ComponentStatus{
+	ComponentStatusOk,
+	ComponentStatusUnavailable,
+	ComponentStatusNotConfigured,
+}
+
+func (e ComponentStatus) IsValid() bool {
+	switch e {
+	case ComponentStatusOk, ComponentStatusUnavailable, ComponentStatusNotConfigured:
+		return true
+	}
+	return false
+}
+
+func (e ComponentStatus) String() string {
+	return string(e)
+}
+
+func (e *ComponentStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ComponentStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ComponentStatus", str)
+	}
+	return nil
+}
+
+func (e ComponentStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ComponentStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ComponentStatus) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

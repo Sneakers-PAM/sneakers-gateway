@@ -6,7 +6,9 @@
 // "rpc error: code = <Code> desc = <text>") and gains extensions: code, the
 // canonical gRPC code name (FAILED_PRECONDITION), and, when a Sneakers service
 // attached a google.rpc.ErrorInfo, reason (its stable reason, such as
-// CHECKOUT_LEASE_HELD) and metadata.
+// CHECKOUT_LEASE_HELD), its domain (sneakers.workflow) and metadata. Every
+// error, coded or not, also carries traceId, the request's trace id, so a
+// copied diagnostic can be matched to the logs.
 package gqlerr
 
 import (
@@ -17,6 +19,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -30,6 +33,12 @@ const sneakersDomain = "sneakers."
 // Present is a gqlgen error presenter.
 func Present(ctx context.Context, err error) *gqlerror.Error {
 	ge := graphql.DefaultErrorPresenter(ctx, err)
+	if sc := trace.SpanContextFromContext(ctx); sc.HasTraceID() {
+		if ge.Extensions == nil {
+			ge.Extensions = map[string]any{}
+		}
+		ge.Extensions["traceId"] = sc.TraceID().String()
+	}
 	var gs interface{ GRPCStatus() *status.Status }
 	if !errors.As(err, &gs) {
 		return ge
@@ -45,6 +54,7 @@ func Present(ctx context.Context, err error) *gqlerror.Error {
 			continue
 		}
 		ge.Extensions["reason"] = info.GetReason()
+		ge.Extensions["domain"] = info.GetDomain()
 		if len(info.GetMetadata()) > 0 {
 			ge.Extensions["metadata"] = info.GetMetadata()
 		}

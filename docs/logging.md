@@ -19,3 +19,7 @@ Every GraphQL response that carries errors, on `/graphql` and `/machine/graphql`
 - Client-side codes log at `warn`: InvalidArgument, NotFound, AlreadyExists, PermissionDenied, FailedPrecondition, ResourceExhausted, Unauthenticated, OutOfRange, Canceled and GraphQL validation errors.
 - Everything else logs at `error`: Internal, Unavailable, Unknown, DeadlineExceeded and the rest.
 - Variables, arguments and response data are never logged.
+
+## Diagnostics
+
+Each fresh read of the component versions for the `diagnostics` query writes one `debug` line, `diagnostics: collected`, with `ms` (how long the probes took) and `unavailable` (the names of configured components that didn't answer). A read served from the 30-second cache writes a `trace` line with its `age_ms`. Addresses, URLs, tokens and error text are never logged.

@@ -16,6 +16,7 @@ require (
 	github.com/rs/zerolog v1.35.1
 	github.com/vektah/gqlparser/v2 v2.5.33
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0
+	go.opentelemetry.io/otel/trace v1.45.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
@@ -46,7 +47,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.45.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.45.0 // indirect
-	go.opentelemetry.io/otel/trace v1.45.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
