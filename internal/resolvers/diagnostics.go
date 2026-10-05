@@ -5,6 +5,7 @@ package resolvers
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
@@ -60,7 +61,7 @@ func componentsOf(cs []diag.Component) []*ComponentVersion {
 }
 
 func componentOf(c diag.Component) *ComponentVersion {
-	v := &ComponentVersion{Name: c.Name, Status: ComponentStatus(c.Status)}
+	v := &ComponentVersion{Name: c.Name, Status: ComponentStatus(c.Status), Dependencies: dependenciesOf(c.Dependencies)}
 	if c.Version != "" {
 		v.Version = &c.Version
 	}
@@ -68,6 +69,26 @@ func componentOf(c diag.Component) *ComponentVersion {
 		v.Commit = &c.Commit
 	}
 	return v
+}
+
+// dependenciesOf keeps nil as null: a component that reported no readiness
+// shows no dependency list, not an empty one.
+func dependenciesOf(ds []diag.Dependency) []*DependencyState {
+	if ds == nil {
+		return nil
+	}
+	out := make([]*DependencyState, 0, len(ds))
+	for _, d := range ds {
+		s := &DependencyState{Name: d.Name, State: DependencyHealth(strings.ToUpper(d.State)), Required: d.Required}
+		if d.Error != "" {
+			s.Error = &d.Error
+		}
+		if d.Version != "" {
+			s.Version = &d.Version
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 func traceID(ctx context.Context) string {

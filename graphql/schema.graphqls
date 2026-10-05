@@ -824,6 +824,29 @@ type ComponentVersion {
   version: String
   commit: String
   status: ComponentStatus!
+  # The component's readiness by dependency, as its health check reports it;
+  # null when it doesn't report one (an older build, or a third-party
+  # service).
+  dependencies: [DependencyState!]
+}
+
+type DependencyState {
+  # A dependency name such as postgres, valkey, kratos or audit.
+  name: String!
+  state: DependencyHealth!
+  # Whether the component's readiness fails while this is down.
+  required: Boolean!
+  # When it isn't OK: timeout, refused, unavailable, unauthenticated or error.
+  error: String
+  version: String
+}
+
+enum DependencyHealth {
+  OK
+  # An optional dependency is failing; the component still serves.
+  DEGRADED
+  # A required dependency is failing; the component isn't ready.
+  DOWN
 }
 
 enum ComponentStatus {

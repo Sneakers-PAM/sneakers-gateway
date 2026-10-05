@@ -14,6 +14,7 @@ package diag
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"regexp"
 	"slices"
@@ -37,7 +38,26 @@ const (
 	HeaderVersion   = "sneakers-version"
 	HeaderCommit    = "sneakers-commit"
 	HeaderDepPrefix = "sneakers-dep-"
+	// HeaderHealth carries the service's readiness report as JSON.
+	HeaderHealth = "sneakers-health"
 )
+
+// The dependency states a service reports.
+const (
+	DepOK       = "ok"
+	DepDegraded = "degraded"
+	DepDown     = "down"
+)
+
+// Dependency is one of a component's dependencies as its readiness reports
+// it. Only fixed tokens and clean versions are kept.
+type Dependency struct {
+	Name     string `json:"name"`
+	State    string `json:"state"`
+	Required bool   `json:"required"`
+	Error    string `json:"error,omitempty"`
+	Version  string `json:"version,omitempty"`
+}
 
 // Status is a component's state as the diagnostics see it.
 type Status string
@@ -58,6 +78,9 @@ type Component struct {
 	Version string `json:"version"`
 	Commit  string `json:"commit"`
 	Status  Status `json:"status"`
+	// Dependencies is the component's readiness by dependency; nil when it
+	// didn't report one.
+	Dependencies []Dependency `json:"dependencies,omitempty"`
 	// deps holds the dependency versions a service reported (sneakers-dep-*
 	// headers), keyed by dependency name. Never serialised.
 	deps map[string]string
@@ -96,7 +119,9 @@ type Collector struct {
 	Appliance  string
 	Services   []Probe
 	ThirdParty []Probe
-	Now        func() time.Time
+	// GatewayDependencies gives the gateway's own readiness by dependency.
+	GatewayDependencies func(context.Context) []Dependency
+	Now                 func() time.Time
 	// Log gets one debug line per collection; nil logs nothing.
 	Log log.Logger
 
@@ -153,6 +178,9 @@ func (c *Collector) collect(ctx context.Context, now time.Time) Report {
 	}
 	gw := c.Gateway
 	gw.Version, gw.Commit = clean(gw.Version), clean(gw.Commit)
+	if c.GatewayDependencies != nil {
+		gw.Dependencies = c.GatewayDependencies(ctx)
+	}
 	return Report{
 		GeneratedAt: now.UTC(),
 		PublicURL:   origin(c.PublicURL),
@@ -224,6 +252,40 @@ func cleanOptional(s string) string {
 		return s
 	}
 	return ""
+}
+
+var (
+	depNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	depStates      = []string{DepOK, DepDegraded, DepDown}
+	depErrors      = []string{"timeout", "refused", "unavailable", "unauthenticated", "error"}
+)
+
+// parseDependencies reads a sneakers-health header. Entries with a name or
+// state outside the allow-list are dropped, an error that isn't a known class
+// becomes "error", and a version that isn't clean is left out. A header that
+// isn't JSON gives nil.
+func parseDependencies(raw string) []Dependency {
+	var h struct {
+		Dependencies []Dependency `json:"dependencies"`
+	}
+	if raw == "" || json.Unmarshal([]byte(raw), &h) != nil {
+		return nil
+	}
+	out := []Dependency{}
+	for _, d := range h.Dependencies {
+		if !depNamePattern.MatchString(d.Name) || !slices.Contains(depStates, d.State) {
+			continue
+		}
+		e := ""
+		if d.State != DepOK {
+			e = "error"
+			if slices.Contains(depErrors, d.Error) {
+				e = d.Error
+			}
+		}
+		out = append(out, Dependency{Name: d.Name, State: d.State, Required: d.Required, Error: e, Version: cleanOptional(d.Version)})
+	}
+	return out
 }
 
 // origin reduces a configured public URL to its scheme and host, dropping any

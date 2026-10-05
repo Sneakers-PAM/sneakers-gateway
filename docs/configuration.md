@@ -52,7 +52,7 @@ and Ory Hydra for machine OAuth (below).
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `KRATOS_PUBLIC_URL` | `http://sneakers-kratos:4433` | Ory Kratos public API. |
+| `KRATOS_PUBLIC_URL` | `http://sneakers-kratos:4433` | Ory Kratos public API. Readiness checks its `/health/ready`. |
 | `KRATOS_ADMIN_URL` | `http://sneakers-kratos:4434` | Ory Kratos admin API, for password reset. |
 | `JWT_LEEWAY_SECONDS` | `30` | Clock leeway for Ory Hydra token times. |
 
@@ -102,7 +102,7 @@ above, plus Kratos (`KRATOS_ADMIN_URL`, real mode), Hydra (when `HYDRA_ENABLED`)
 |---|---|---|
 | `CONNECTOR_ADDR` | (none) | The connector's gRPC `host:port` (its `GRPC_PORT`, 9090 by default), read only for its build. Unset shows the connector as not configured. |
 | `MCP_HEALTH_URL` | (none) | The MCP server's health URL, for example `http://sneakers-mcp:9101/health`. Unset shows mcp as not configured. |
-| `HYDRA_ADMIN_URL` | (the origin of `HYDRA_JWKS_URL`) | Where Hydra's `/version` is read. |
+| `HYDRA_ADMIN_URL` | (the origin of `HYDRA_JWKS_URL`) | Where Hydra's `/version` (diagnostics) and `/health/ready` (readiness) are read. |
 | `SNEAKERS_APPLIANCE_VERSION` | (none) | Set by the appliance to its own version; unset means not on the appliance. |
 | `OAUTH_PUBLIC_URL` | (none) | Its origin is shown as `publicUrl`. |
 

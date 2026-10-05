@@ -23,20 +23,26 @@ import (
 // maxBody caps how much of a version answer is read.
 const maxBody = 64 << 10
 
-// GRPCHealth reads a Sneakers-PAM service's build from its health check's
-// response headers. A nil conn means the service isn't configured. A service
-// that answers without the headers (an older build) is OK with an unknown
-// version.
+// GRPCHealth reads a Sneakers-PAM service's build and readiness from its
+// health check's response headers. A nil conn means the service isn't
+// configured. A service that answers without the headers (an older build) is
+// OK with an unknown version and no dependencies; one that answers that it
+// isn't serving is unavailable but keeps its build and dependencies.
 func GRPCHealth(name string, conn grpc.ClientConnInterface) Probe {
 	return func(ctx context.Context) Component {
 		if conn == nil {
 			return Component{Name: name, Status: StatusNotConfigured}
 		}
 		var md metadata.MD
-		if _, err := healthpb.NewHealthClient(conn).Check(ctx, &healthpb.HealthCheckRequest{}, grpc.Header(&md)); err != nil {
+		resp, err := healthpb.NewHealthClient(conn).Check(ctx, &healthpb.HealthCheckRequest{}, grpc.Header(&md))
+		if err != nil {
 			return Component{Name: name, Status: StatusUnavailable}
 		}
 		c := Component{Name: name, Version: clean(first(md, HeaderVersion)), Commit: clean(first(md, HeaderCommit)), Status: StatusOK}
+		if resp.GetStatus() != healthpb.HealthCheckResponse_SERVING {
+			c.Status = StatusUnavailable
+		}
+		c.Dependencies = parseDependencies(first(md, HeaderHealth))
 		for k := range md {
 			if dep, ok := strings.CutPrefix(k, HeaderDepPrefix); ok {
 				if c.deps == nil {
