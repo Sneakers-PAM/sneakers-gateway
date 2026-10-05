@@ -28,10 +28,12 @@ import (
 	sshbrokerv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/sshbroker/v1"
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	workflowv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/workflow/v1"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/appliance"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/bff"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/gqlerr"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/gqllog"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/machineresolvers"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/maintenance"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/setup"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/workloadauth"
@@ -328,12 +330,25 @@ func main() {
 	if err != nil {
 		logger.Fatal().Err(err).Msg("APPROVAL_RUN_LINKS")
 	}
-	gqlResolver := &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, HydraIssuer: hydraIssuer, MFAMaxAge: mfaMaxAge, Log: reqLog}
+	// Read-only maintenance: MAINTENANCE_READONLY forces it on; on an
+	// appliance the sneakers-appliance ConfigMap turns it on and off.
+	watcher, err := appliance.FromEnv(os.Getenv, reqLog)
+	if err != nil {
+		logger.Warn().Err(err).Msg("appliance configmap: not read; maintenance follows MAINTENANCE_READONLY only")
+	}
+	if watcher != nil {
+		go watcher.Run(ctx)
+	}
+	maintenanceForced := envTrue("MAINTENANCE_READONLY")
+	maintenanceMode := maintenance.New(maintenanceForced, watcher.Maintenance)
+	logger.Info().Bool("maintenance_readonly", maintenanceForced).Bool("appliance_configmap", watcher != nil).Msg("maintenance mode config")
+	gqlResolver := &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, HydraIssuer: hydraIssuer, MFAMaxAge: mfaMaxAge, Log: reqLog, Maintenance: maintenanceMode}
 	gql := handler.New(resolvers.NewExecutableSchema(resolvers.Config{Resolvers: gqlResolver}))
 	gql.AddTransport(transport.Options{})
 	gql.AddTransport(transport.POST{})
 	gql.Use(extension.Introspection{})
 	gql.Use(gqllog.ErrorLog{Log: reqLog, Actor: resolvers.CallerID})
+	gql.Use(maintenance.Guard{Mode: maintenanceMode, Allowed: maintenance.HumanAllowed})
 	gql.SetErrorPresenter(gqlerr.Present)
 
 	// Same-origin-only WebSocket upgrader for GraphQL subscriptions. A WS upgrade
@@ -513,6 +528,7 @@ func main() {
 	}))
 	machineGQL.AddTransport(transport.POST{})
 	machineGQL.Use(gqllog.ErrorLog{Log: reqLog, Actor: resolvers.CallerID})
+	machineGQL.Use(maintenance.Guard{Mode: maintenanceMode, Allowed: maintenance.MachineAllowed})
 	machineGQL.SetErrorPresenter(gqlerr.Present)
 	mux.Handle("/machine/graphql", cors(machineH.MachineActor(machineGQL)))
 

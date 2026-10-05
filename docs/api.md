@@ -188,6 +188,19 @@ leases, so the gateway asks the workflow first and refuses a restore while someo
 (`CHECKOUT_LEASE_HELD` with `holder_user_id`); if that lookup fails, the restore doesn't run. Only a site admin or root can grant or
 revoke the role (identity enforces it). Machine callers never get the recovery surface.
 
+### Maintenance
+
+`maintenance` answers any signed-in user with `readOnly` and, when the appliance gave one, a
+`reason`, so the web apps can show a banner. While `readOnly` is true, both `/graphql` and
+`/machine/graphql` refuse every mutation, before any backend is called, with code
+`FAILED_PRECONDITION` and reason `MAINTENANCE_READONLY` (domain `sneakers.gateway`). These stay
+open: `revealSecretField`, `revealSecretVersionField`, `exportCertificate`, `sendMfaEmailCode`,
+`beginMfaPasskey`, `markNotificationRead` and `markAllNotificationsRead` on `/graphql`, and
+`revealSecretFieldForPrincipal` on `/machine/graphql`. Queries, sign-in and the factor routes
+under `/auth` keep working. The backends hold their own read-only mode too, so a write that gets
+past the gateway is still refused. The mode comes from `MAINTENANCE_READONLY` or the appliance
+ConfigMap (see [configuration.md](configuration.md), "Maintenance and the appliance").
+
 ### Diagnostics
 
 `diagnostics` takes no arguments and answers any signed-in user with the facts a support report

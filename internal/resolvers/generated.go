@@ -254,6 +254,11 @@ type ComplexityRoot struct {
 		UserID    func(childComplexity int) int
 	}
 
+	Maintenance struct {
+		ReadOnly func(childComplexity int) int
+		Reason   func(childComplexity int) int
+	}
+
 	MintApiTokenResult struct {
 		APIToken func(childComplexity int) int
 		Token    func(childComplexity int) int
@@ -387,6 +392,7 @@ type ComplexityRoot struct {
 		GroupMembers              func(childComplexity int, groupID string) int
 		Groups                    func(childComplexity int) int
 		InheritedFolderRules      func(childComplexity int, folderID string) int
+		Maintenance               func(childComplexity int) int
 		MyFolderAccess            func(childComplexity int, folderID string) int
 		MyNotifications           func(childComplexity int, limit *int) int
 		MySecretAccess            func(childComplexity int, secretID string) int
@@ -764,6 +770,7 @@ type QueryResolver interface {
 	UseGrants(ctx context.Context) ([]*UseGrant, error)
 	UserTokens(ctx context.Context, userID string) ([]*UserToken, error)
 	Diagnostics(ctx context.Context) (*Diagnostics, error)
+	Maintenance(ctx context.Context) (*Maintenance, error)
 }
 type SubscriptionResolver interface {
 	SecretStats(ctx context.Context) (<-chan *SecretStats, error)
@@ -1648,6 +1655,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Lease.UserID(childComplexity), true
+
+	case "Maintenance.readOnly":
+		if e.ComplexityRoot.Maintenance.ReadOnly == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Maintenance.ReadOnly(childComplexity), true
+	case "Maintenance.reason":
+		if e.ComplexityRoot.Maintenance.Reason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Maintenance.Reason(childComplexity), true
 
 	case "MintApiTokenResult.apiToken":
 		if e.ComplexityRoot.MintApiTokenResult.APIToken == nil {
@@ -2752,6 +2772,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Query.InheritedFolderRules(childComplexity, args["folderId"].(string)), true
 
+	case "Query.maintenance":
+		if e.ComplexityRoot.Query.Maintenance == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.Maintenance(childComplexity), true
 	case "Query.myFolderAccess":
 		if e.ComplexityRoot.Query.MyFolderAccess == nil {
 			break
@@ -4930,6 +4956,16 @@ type Query {
   # caller. Cached for about 30 seconds. Never carries tokens, secrets,
   # addresses or error text.
   diagnostics: Diagnostics!
+  # Whether the install is in read-only maintenance, for the banner. While
+  # it's on, mutations are refused with the reason MAINTENANCE_READONLY;
+  # reads, reveals and sign-in still work.
+  maintenance: Maintenance!
+}
+
+type Maintenance {
+  readOnly: Boolean!
+  # Why, when the appliance gave a reason; null otherwise.
+  reason: String
 }
 
 type Diagnostics {
@@ -5661,6 +5697,16 @@ func (ec *executionContext) childFields_Lease(ctx context.Context, field graphql
 		return ec.fieldContext_Lease_returned(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Lease", field.Name)
+}
+
+func (ec *executionContext) childFields_Maintenance(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "readOnly":
+		return ec.fieldContext_Maintenance_readOnly(ctx, field)
+	case "reason":
+		return ec.fieldContext_Maintenance_reason(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type Maintenance", field.Name)
 }
 
 func (ec *executionContext) childFields_MintApiTokenResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -11712,6 +11758,52 @@ func (ec *executionContext) fieldContext_Lease_returned(_ context.Context, field
 	return graphql.NewScalarFieldContext("Lease", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _Maintenance_readOnly(ctx context.Context, field graphql.CollectedField, obj *Maintenance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Maintenance_readOnly(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ReadOnly, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Maintenance_readOnly(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Maintenance", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Maintenance_reason(ctx context.Context, field graphql.CollectedField, obj *Maintenance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Maintenance_reason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Reason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Maintenance_reason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Maintenance", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _MintApiTokenResult_token(ctx context.Context, field graphql.CollectedField, obj *MintAPITokenResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -17317,6 +17409,38 @@ func (ec *executionContext) fieldContext_Query_diagnostics(_ context.Context, fi
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Diagnostics(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_maintenance(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_maintenance(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().Maintenance(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Maintenance) graphql.Marshaler {
+			return ec.marshalNMaintenance2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐMaintenance(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_maintenance(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Maintenance(ctx, field)
 		},
 	}
 	return fc, nil
@@ -24524,6 +24648,47 @@ func (ec *executionContext) _Lease(ctx context.Context, sel ast.SelectionSet, ob
 	return out
 }
 
+var maintenanceImplementors = []string{"Maintenance"}
+
+func (ec *executionContext) _Maintenance(ctx context.Context, sel ast.SelectionSet, obj *Maintenance) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, maintenanceImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Maintenance")
+		case "readOnly":
+			out.Values[i] = ec._Maintenance_readOnly(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reason":
+			out.Values[i] = ec._Maintenance_reason(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var mintApiTokenResultImplementors = []string{"MintApiTokenResult"}
 
 func (ec *executionContext) _MintApiTokenResult(ctx context.Context, sel ast.SelectionSet, obj *MintAPITokenResult) graphql.Marshaler {
@@ -26362,6 +26527,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_diagnostics(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "maintenance":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_maintenance(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -28833,6 +29020,20 @@ func (ec *executionContext) marshalNLease2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsne
 		return graphql.Null
 	}
 	return ec._Lease(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNMaintenance2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐMaintenance(ctx context.Context, sel ast.SelectionSet, v Maintenance) graphql.Marshaler {
+	return ec._Maintenance(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNMaintenance2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐMaintenance(ctx context.Context, sel ast.SelectionSet, v *Maintenance) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Maintenance(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNMintApiTokenResult2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐMintAPITokenResult(ctx context.Context, sel ast.SelectionSet, v MintAPITokenResult) graphql.Marshaler {

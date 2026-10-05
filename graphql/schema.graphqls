@@ -834,6 +834,16 @@ type Query {
   # caller. Cached for about 30 seconds. Never carries tokens, secrets,
   # addresses or error text.
   diagnostics: Diagnostics!
+  # Whether the install is in read-only maintenance, for the banner. While
+  # it's on, mutations are refused with the reason MAINTENANCE_READONLY;
+  # reads, reveals and sign-in still work.
+  maintenance: Maintenance!
+}
+
+type Maintenance {
+  readOnly: Boolean!
+  # Why, when the appliance gave a reason; null otherwise.
+  reason: String
 }
 
 type Diagnostics {

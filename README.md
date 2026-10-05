@@ -61,6 +61,7 @@ go tool gqlgen generate --config gqlgen-machine.yml
 - [docs/configuration.md](docs/configuration.md): environment variables.
 - [docs/api.md](docs/api.md): the HTTP routes and the two GraphQL schemas.
 - [docs/runbook.md](docs/runbook.md): operating the service.
+- [docs/appliance.md](docs/appliance.md): the appliance ConfigMap the gateway reads (maintenance).
 - [docs/machine-graphql.md](docs/machine-graphql.md) and [docs/machine-automation.md](docs/machine-automation.md): the machine API in detail.
 - [docs/cookies.md](docs/cookies.md), [docs/logging.md](docs/logging.md) and [docs/error-codes.md](docs/error-codes.md).
 

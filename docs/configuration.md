@@ -111,6 +111,20 @@ The Kubernetes version needs nothing set: in a pod, the gateway reads the API se
 `/version` with the mounted ServiceAccount CA and token, and shows Kubernetes as not configured
 when either is missing.
 
+## Maintenance and the appliance
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `MAINTENANCE_READONLY` | off | `true` or `1` (any case, spaces trimmed) puts the gateway in read-only maintenance: every GraphQL mutation is refused with the reason `MAINTENANCE_READONLY`, except reveals, `exportCertificate`, the step-up challenges and the notification inbox. Queries and the `/auth` sign-in routes keep working. See [api.md](api.md), "Maintenance". |
+| `APPLIANCE_CONFIGMAP` | `sneakers-appliance` | The ConfigMap the appliance's platform controller publishes in the gateway's namespace. Its `maintenance` key turns read-only maintenance on and off at run time, next to `MAINTENANCE_READONLY`. See [appliance.md](appliance.md). |
+| `APPLIANCE_POLL_INTERVAL` | `10s` | How often the ConfigMap is read. A value that isn't a positive duration leaves the ConfigMap unread (logged at warn). |
+| `APPLIANCE_TOKEN_FILE` | `/var/run/secrets/kubernetes.io/serviceaccount/token` | The service-account token the ConfigMap read sends to the API server. |
+
+The ConfigMap is read only in Kubernetes (`KUBERNETES_SERVICE_HOST` set), with the mounted
+ServiceAccount CA and namespace. The gateway's ServiceAccount needs `get` on that one ConfigMap;
+without it, or without the mounted ServiceAccount files, the gateway logs a warning and follows
+`MAINTENANCE_READONLY` only.
+
 ## Telemetry and logging
 
 | Variable | Default | Meaning |
