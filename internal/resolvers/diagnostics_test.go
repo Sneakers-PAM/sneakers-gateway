@@ -117,3 +117,46 @@ func TestDiagnostics_RefusedWithoutAnActor(t *testing.T) {
 		t.Fatalf("err = %v, want an Unauthenticated refusal", err)
 	}
 }
+
+func TestDiagnostics_CarriesDependencyStates(t *testing.T) {
+	c := &diag.Collector{
+		Gateway: diag.Component{Name: "gateway", Status: diag.StatusOK},
+		GatewayDependencies: func(context.Context) []diag.Dependency {
+			return []diag.Dependency{{Name: "valkey", State: diag.DepDown, Required: true, Error: "refused"}}
+		},
+		Services: []diag.Probe{
+			func(context.Context) diag.Component {
+				return diag.Component{Name: "vault", Status: diag.StatusOK, Dependencies: []diag.Dependency{
+					{Name: "postgres", State: diag.DepOK, Required: true, Version: "17.11"},
+					{Name: "audit", State: diag.DepDegraded, Error: "unavailable"},
+				}}
+			},
+			diag.NotConfigured("connector"),
+		},
+	}
+	type dep struct {
+		Name, State    string
+		Required       bool
+		Error, Version *string
+	}
+	var resp struct {
+		Diagnostics struct {
+			Gateway  struct{ Dependencies []dep }
+			Services []struct{ Dependencies []dep }
+		}
+	}
+	newDiagClient(&diagIdentity{}, c, "u-morgan").MustPost(`{ diagnostics {
+  gateway { dependencies { name state required error version } }
+  services { dependencies { name state required error version } } } }`, &resp)
+	d := resp.Diagnostics
+	if len(d.Gateway.Dependencies) != 1 || d.Gateway.Dependencies[0].State != "DOWN" || *d.Gateway.Dependencies[0].Error != "refused" {
+		t.Fatalf("gateway dependencies = %+v", d.Gateway.Dependencies)
+	}
+	v := d.Services[0].Dependencies
+	if len(v) != 2 || v[0].State != "OK" || v[0].Error != nil || *v[0].Version != "17.11" || v[1].State != "DEGRADED" || v[1].Required {
+		t.Fatalf("vault dependencies = %+v", v)
+	}
+	if d.Services[1].Dependencies != nil {
+		t.Fatalf("connector dependencies = %+v, want null", d.Services[1].Dependencies)
+	}
+}

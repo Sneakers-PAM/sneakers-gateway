@@ -119,10 +119,11 @@ type ComplexityRoot struct {
 	}
 
 	ComponentVersion struct {
-		Commit  func(childComplexity int) int
-		Name    func(childComplexity int) int
-		Status  func(childComplexity int) int
-		Version func(childComplexity int) int
+		Commit       func(childComplexity int) int
+		Dependencies func(childComplexity int) int
+		Name         func(childComplexity int) int
+		Status       func(childComplexity int) int
+		Version      func(childComplexity int) int
 	}
 
 	Connection struct {
@@ -133,6 +134,14 @@ type ComplexityRoot struct {
 		Protocol    func(childComplexity int) int
 		TargetCount func(childComplexity int) int
 		UseTLS      func(childComplexity int) int
+	}
+
+	DependencyState struct {
+		Error    func(childComplexity int) int
+		Name     func(childComplexity int) int
+		Required func(childComplexity int) int
+		State    func(childComplexity int) int
+		Version  func(childComplexity int) int
 	}
 
 	Diagnostics struct {
@@ -1112,6 +1121,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ComponentVersion.Commit(childComplexity), true
+	case "ComponentVersion.dependencies":
+		if e.ComplexityRoot.ComponentVersion.Dependencies == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ComponentVersion.Dependencies(childComplexity), true
 	case "ComponentVersion.name":
 		if e.ComplexityRoot.ComponentVersion.Name == nil {
 			break
@@ -1173,6 +1188,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Connection.UseTLS(childComplexity), true
+
+	case "DependencyState.error":
+		if e.ComplexityRoot.DependencyState.Error == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DependencyState.Error(childComplexity), true
+	case "DependencyState.name":
+		if e.ComplexityRoot.DependencyState.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DependencyState.Name(childComplexity), true
+	case "DependencyState.required":
+		if e.ComplexityRoot.DependencyState.Required == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DependencyState.Required(childComplexity), true
+	case "DependencyState.state":
+		if e.ComplexityRoot.DependencyState.State == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DependencyState.State(childComplexity), true
+	case "DependencyState.version":
+		if e.ComplexityRoot.DependencyState.Version == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DependencyState.Version(childComplexity), true
 
 	case "Diagnostics.actor":
 		if e.ComplexityRoot.Diagnostics.Actor == nil {
@@ -4759,6 +4805,29 @@ type ComponentVersion {
   version: String
   commit: String
   status: ComponentStatus!
+  # The component's readiness by dependency, as its health check reports it;
+  # null when it doesn't report one (an older build, or a third-party
+  # service).
+  dependencies: [DependencyState!]
+}
+
+type DependencyState {
+  # A dependency name such as postgres, valkey, kratos or audit.
+  name: String!
+  state: DependencyHealth!
+  # Whether the component's readiness fails while this is down.
+  required: Boolean!
+  # When it isn't OK: timeout, refused, unavailable, unauthenticated or error.
+  error: String
+  version: String
+}
+
+enum DependencyHealth {
+  OK
+  # An optional dependency is failing; the component still serves.
+  DEGRADED
+  # A required dependency is failing; the component isn't ready.
+  DOWN
 }
 
 enum ComponentStatus {
@@ -5167,6 +5236,8 @@ func (ec *executionContext) childFields_ComponentVersion(ctx context.Context, fi
 		return ec.fieldContext_ComponentVersion_commit(ctx, field)
 	case "status":
 		return ec.fieldContext_ComponentVersion_status(ctx, field)
+	case "dependencies":
+		return ec.fieldContext_ComponentVersion_dependencies(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type ComponentVersion", field.Name)
 }
@@ -5189,6 +5260,22 @@ func (ec *executionContext) childFields_Connection(ctx context.Context, field gr
 		return ec.fieldContext_Connection_targetCount(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Connection", field.Name)
+}
+
+func (ec *executionContext) childFields_DependencyState(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "name":
+		return ec.fieldContext_DependencyState_name(ctx, field)
+	case "state":
+		return ec.fieldContext_DependencyState_state(ctx, field)
+	case "required":
+		return ec.fieldContext_DependencyState_required(ctx, field)
+	case "error":
+		return ec.fieldContext_DependencyState_error(ctx, field)
+	case "version":
+		return ec.fieldContext_DependencyState_version(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type DependencyState", field.Name)
 }
 
 func (ec *executionContext) childFields_Diagnostics(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -9465,6 +9552,38 @@ func (ec *executionContext) fieldContext_ComponentVersion_status(_ context.Conte
 	return graphql.NewScalarFieldContext("ComponentVersion", field, false, false, errors.New("field of type ComponentStatus does not have child fields"))
 }
 
+func (ec *executionContext) _ComponentVersion_dependencies(ctx context.Context, field graphql.CollectedField, obj *ComponentVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ComponentVersion_dependencies(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Dependencies, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*DependencyState) graphql.Marshaler {
+			return ec.marshalODependencyState2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDependencyStateᚄ(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ComponentVersion_dependencies(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ComponentVersion",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DependencyState(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Connection_id(ctx context.Context, field graphql.CollectedField, obj *Connection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9624,6 +9743,121 @@ func (ec *executionContext) _Connection_targetCount(ctx context.Context, field g
 }
 func (ec *executionContext) fieldContext_Connection_targetCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Connection", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _DependencyState_name(ctx context.Context, field graphql.CollectedField, obj *DependencyState) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DependencyState_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DependencyState_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DependencyState", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _DependencyState_state(ctx context.Context, field graphql.CollectedField, obj *DependencyState) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DependencyState_state(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.State, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v DependencyHealth) graphql.Marshaler {
+			return ec.marshalNDependencyHealth2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDependencyHealth(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DependencyState_state(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DependencyState", field, false, false, errors.New("field of type DependencyHealth does not have child fields"))
+}
+
+func (ec *executionContext) _DependencyState_required(ctx context.Context, field graphql.CollectedField, obj *DependencyState) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DependencyState_required(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Required, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DependencyState_required(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DependencyState", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _DependencyState_error(ctx context.Context, field graphql.CollectedField, obj *DependencyState) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DependencyState_error(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Error, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DependencyState_error(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DependencyState", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _DependencyState_version(ctx context.Context, field graphql.CollectedField, obj *DependencyState) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DependencyState_version(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Version, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DependencyState_version(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DependencyState", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _Diagnostics_generatedAt(ctx context.Context, field graphql.CollectedField, obj *Diagnostics) (ret graphql.Marshaler) {
@@ -22736,6 +22970,8 @@ func (ec *executionContext) _ComponentVersion(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "dependencies":
+			out.Values[i] = ec._ComponentVersion_dependencies(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -22796,6 +23032,59 @@ func (ec *executionContext) _Connection(ctx context.Context, sel ast.SelectionSe
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var dependencyStateImplementors = []string{"DependencyState"}
+
+func (ec *executionContext) _DependencyState(ctx context.Context, sel ast.SelectionSet, obj *DependencyState) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, dependencyStateImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DependencyState")
+		case "name":
+			out.Values[i] = ec._DependencyState_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "state":
+			out.Values[i] = ec._DependencyState_state(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "required":
+			out.Values[i] = ec._DependencyState_required(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "error":
+			out.Values[i] = ec._DependencyState_error(ctx, field, obj)
+		case "version":
+			out.Values[i] = ec._DependencyState_version(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -27297,6 +27586,26 @@ func (ec *executionContext) unmarshalNCreateSecretInput2githubᚗcomᚋSneakers�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNDependencyHealth2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDependencyHealth(ctx context.Context, v any) (DependencyHealth, error) {
+	var res DependencyHealth
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDependencyHealth2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDependencyHealth(ctx context.Context, sel ast.SelectionSet, v DependencyHealth) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNDependencyState2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDependencyState(ctx context.Context, sel ast.SelectionSet, v *DependencyState) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DependencyState(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNDiagnostics2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDiagnostics(ctx context.Context, sel ast.SelectionSet, v Diagnostics) graphql.Marshaler {
 	return ec._Diagnostics(ctx, sel, &v)
 }
@@ -28660,6 +28969,25 @@ func (ec *executionContext) marshalOCertMeta2ᚖgithubᚗcomᚋSneakersᚑPAMᚋ
 		return graphql.Null
 	}
 	return ec._CertMeta(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalODependencyState2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDependencyStateᚄ(ctx context.Context, sel ast.SelectionSet, v []*DependencyState) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNDependencyState2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDependencyState(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOFactorInput2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFactorInput(ctx context.Context, v any) (*FactorInput, error) {

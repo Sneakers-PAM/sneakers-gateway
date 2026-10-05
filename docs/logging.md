@@ -23,3 +23,7 @@ Every GraphQL response that carries errors, on `/graphql` and `/machine/graphql`
 ## Diagnostics
 
 Each fresh read of the component versions for the `diagnostics` query writes one `debug` line, `diagnostics: collected`, with `ms` (how long the probes took) and `unavailable` (the names of configured components that didn't answer). A read served from the 30-second cache writes a `trace` line with its `age_ms`. Addresses, URLs, tokens and error text are never logged.
+
+## Readiness
+
+A dependency that starts failing writes one `warn` line, `health: dependency failing`, with `dependency`, `required`, `state` (`down` or `degraded`) and `error_class`; one that recovers writes an `info` line, `health: dependency recovered`. Nothing is logged while a state holds, and never the address or the error text.

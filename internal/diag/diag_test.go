@@ -242,3 +242,73 @@ func TestKubernetes_ReadsGitVersionWithToken(t *testing.T) {
 		t.Fatalf("outside a cluster: got %+v, want NOT_CONFIGURED", got)
 	}
 }
+
+func TestGRPCHealth_ReadsDependencyStates(t *testing.T) {
+	hdr := `{"status":"degraded","dependencies":[` +
+		`{"name":"postgres","state":"ok","required":true,"checkedAt":"2026-10-05T12:00:00Z","version":"17.11"},` +
+		`{"name":"audit","state":"degraded","required":false,"error":"unavailable"},` +
+		`{"name":"evil host.example.test","state":"ok"},` +
+		`{"name":"valkey","state":"exploded","required":true},` +
+		`{"name":"kratos","state":"down","required":true,"error":"dial tcp kratos.example.test: hunter2","version":"<b>v1</b>"}]}`
+	got := GRPCHealth("vault", healthServer(t, HeaderVersion, "v0.1.0", HeaderHealth, hdr))(context.Background())
+	want := []Dependency{
+		{Name: "postgres", State: DepOK, Required: true, Version: "17.11"},
+		{Name: "audit", State: DepDegraded, Error: "unavailable"},
+		{Name: "kratos", State: DepDown, Required: true, Error: "error"},
+	}
+	if len(got.Dependencies) != len(want) {
+		t.Fatalf("dependencies = %+v, want %+v", got.Dependencies, want)
+	}
+	for i := range want {
+		if got.Dependencies[i] != want[i] {
+			t.Fatalf("dependency %d = %+v, want %+v", i, got.Dependencies[i], want[i])
+		}
+	}
+}
+
+func TestGRPCHealth_GarbledOrMissingHealthHeader(t *testing.T) {
+	if got := GRPCHealth("vault", healthServer(t, HeaderHealth, "not json hunter2"))(context.Background()); got.Dependencies != nil {
+		t.Fatalf("garbled header: %+v", got.Dependencies)
+	}
+	if got := GRPCHealth("vault", healthServer(t))(context.Background()); got.Dependencies != nil {
+		t.Fatalf("no header: %+v", got.Dependencies)
+	}
+}
+
+func TestGRPCHealth_NotServingIsUnavailableButKeepsItsBuild(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hs := health.NewServer()
+	hs.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
+	s := grpc.NewServer(grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
+		_ = grpc.SetHeader(ctx, metadata.Pairs(HeaderVersion, "v0.1.0", HeaderHealth, `{"status":"down","dependencies":[{"name":"postgres","state":"down","required":true,"error":"refused"}]}`))
+		return h(ctx, req)
+	}))
+	healthpb.RegisterHealthServer(s, hs)
+	go func() { _ = s.Serve(lis) }()
+	t.Cleanup(s.Stop)
+	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	got := GRPCHealth("vault", conn)(context.Background())
+	if got.Status != StatusUnavailable || got.Version != "v0.1.0" || len(got.Dependencies) != 1 || got.Dependencies[0].State != DepDown {
+		t.Fatalf("got %+v, want UNAVAILABLE with its build and postgres down", got)
+	}
+}
+
+func TestCollector_GatewayCarriesItsOwnDependencies(t *testing.T) {
+	c := &Collector{
+		Gateway: Component{Name: "gateway", Status: StatusOK},
+		GatewayDependencies: func(context.Context) []Dependency {
+			return []Dependency{{Name: "valkey", State: DepDown, Required: true, Error: "refused"}}
+		},
+	}
+	r := c.Report(context.Background())
+	if len(r.Gateway.Dependencies) != 1 || r.Gateway.Dependencies[0].Name != "valkey" {
+		t.Fatalf("gateway = %+v", r.Gateway)
+	}
+}

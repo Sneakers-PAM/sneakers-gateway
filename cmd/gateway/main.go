@@ -358,6 +358,7 @@ func main() {
 	// valkeyInfo reads the session store's INFO for the diagnostics; it stays
 	// nil (not configured) in noauth mode, which has no Valkey client.
 	var valkeyInfo func(context.Context) (string, error)
+	var valkeyPing func(context.Context) error
 	if authMode == "real" {
 		// Session timeout is admin-configured (vault SecuritySettings), not an env
 		// var: seed the cache from vault at startup and refresh it in the background
@@ -390,6 +391,7 @@ func main() {
 			logger.Fatal().Err(err).Msg("auth setup")
 		}
 		valkeyInfo = func(ctx context.Context) (string, error) { return valkey.Redis().Info(ctx, "server").Result() }
+		valkeyPing = func(ctx context.Context) error { return valkey.Redis().Ping(ctx).Err() }
 		bffH.Log = reqLog
 		bffH.Audit = auditClient
 		// MCP /login: the OAuth native-app authorization server that issues
@@ -476,9 +478,13 @@ func main() {
 		})
 		mux.Handle("/graphql", cors(withActor(identityClient, gql)))
 	}
-	gqlResolver.Diag = newDiagnostics(os.Getenv, authMode, diagServices{
+	conns := diagServices{
 		identity: idConn, vault: conn, workflow: wfConn, audit: auditConn, notify: nConn, sshbroker: sshbrokerConn, connector: connectorConn,
-	}, valkeyInfo, reqLog)
+	}
+	checker := newHealthChecker(os.Getenv, authMode, conns, valkeyPing, reqLog)
+	mountHealth(mux, checker, authMode)
+	gqlResolver.Diag = newDiagnostics(os.Getenv, authMode, conns, valkeyInfo, reqLog)
+	gqlResolver.Diag.GatewayDependencies = gatewayDependencies(checker)
 
 	// Machine bearer-auth path (with a pluggable OIDC leg): a SEPARATE GraphQL
 	// endpoint for non-human callers, gated by bff.MachineActor instead of the human SessionActor/no-auth gates above —
@@ -496,11 +502,6 @@ func main() {
 	machineGQL.Use(gqllog.ErrorLog{Log: reqLog, Actor: resolvers.CallerID})
 	machineGQL.SetErrorPresenter(gqlerr.Present)
 	mux.Handle("/machine/graphql", cors(machineH.MachineActor(machineGQL)))
-
-	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","mode":"` + authMode + `"}`))
-	})
 
 	// First-run admin bootstrap (/setup). Mounted OUTSIDE the auth/session
 	// middleware (alongside /health) — the whole point is to create the first

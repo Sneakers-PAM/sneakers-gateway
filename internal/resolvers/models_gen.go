@@ -92,10 +92,11 @@ type CertMeta struct {
 }
 
 type ComponentVersion struct {
-	Name    string          `json:"name"`
-	Version *string         `json:"version,omitempty"`
-	Commit  *string         `json:"commit,omitempty"`
-	Status  ComponentStatus `json:"status"`
+	Name         string             `json:"name"`
+	Version      *string            `json:"version,omitempty"`
+	Commit       *string            `json:"commit,omitempty"`
+	Status       ComponentStatus    `json:"status"`
+	Dependencies []*DependencyState `json:"dependencies,omitempty"`
 }
 
 type Connection struct {
@@ -124,6 +125,14 @@ type CreateSecretInput struct {
 	TargetID  *string          `json:"targetId,omitempty"`
 	ExpiresAt *string          `json:"expiresAt,omitempty"`
 	Fields    []*KeyValueInput `json:"fields"`
+}
+
+type DependencyState struct {
+	Name     string           `json:"name"`
+	State    DependencyHealth `json:"state"`
+	Required bool             `json:"required"`
+	Error    *string          `json:"error,omitempty"`
+	Version  *string          `json:"version,omitempty"`
 }
 
 type Diagnostics struct {
@@ -698,6 +707,63 @@ func (e *ComponentStatus) UnmarshalJSON(b []byte) error {
 }
 
 func (e ComponentStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type DependencyHealth string
+
+const (
+	DependencyHealthOk       DependencyHealth = "OK"
+	DependencyHealthDegraded DependencyHealth = "DEGRADED"
+	DependencyHealthDown     DependencyHealth = "DOWN"
+)
+
+var AllDependencyHealth = []DependencyHealth{
+	DependencyHealthOk,
+	DependencyHealthDegraded,
+	DependencyHealthDown,
+}
+
+func (e DependencyHealth) IsValid() bool {
+	switch e {
+	case DependencyHealthOk, DependencyHealthDegraded, DependencyHealthDown:
+		return true
+	}
+	return false
+}
+
+func (e DependencyHealth) String() string {
+	return string(e)
+}
+
+func (e *DependencyHealth) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DependencyHealth(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DependencyHealth", str)
+	}
+	return nil
+}
+
+func (e DependencyHealth) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DependencyHealth) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DependencyHealth) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

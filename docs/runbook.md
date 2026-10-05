@@ -48,9 +48,24 @@ leg is active, and in `real` mode one more names the password backend.
 
 ## Health
 
-`GET /health` answers `200 {"status":"ok","mode":"real"}` while the process serves HTTP. It
-doesn't check Redis or the backends; a backend that's down shows up as GraphQL errors with
-`code = Unavailable` in the `graphql error` log lines.
+Point the liveness probe at `GET /livez` and the readiness probe at `GET /readyz` (the chart in
+sneakers-release sets these). `/livez` checks only the process, so an outage never restarts the
+pod; `/readyz` answers `503` while a required dependency is down and recovers on its own when it
+returns. Its body names the failing dependency and an error class (see [api.md](api.md),
+"Health"). `GET /health` is unchanged and checks nothing.
+
+What the gateway needs, and why:
+
+| Dependency | Required | Why |
+|---|---|---|
+| Valkey | yes (real mode) | Sessions, pending logins and OAuth state live there; no request can be authenticated without it. |
+| Kratos | yes (real mode) | Every password login and factor check. |
+| identity | yes | Every request resolves its actor (roles, groups) through identity. |
+| vault, workflow, audit, notify, SSH broker | no | Each backs some operations; the rest still work, so the gateway reports `degraded`. |
+| Hydra, Polis | no (when enabled) | Only machine OIDC tokens and SSO sign-in need them. |
+
+A backend that's down also shows up as GraphQL errors with `code = Unavailable` in the
+`graphql error` log lines, and a dependency's state change logs one `health:` line.
 
 ## Sessions
 

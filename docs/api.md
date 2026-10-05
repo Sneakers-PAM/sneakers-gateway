@@ -156,9 +156,17 @@ from identity), the origin of `OAUTH_PUBLIC_URL` (`publicUrl`), the appliance ve
   report them in `sneakers-dep-postgres` and `sneakers-dep-rabbitmq` (one entry per distinct
   version, so services that disagree all show).
 
-`status` is `OK`, `UNAVAILABLE` (configured, but it didn't answer within its timeout) or
-`NOT_CONFIGURED` (not part of this deployment, such as Kratos in noauth mode, or RabbitMQ while no
-service uses a broker). A component that doesn't answer never fails the query.
+`status` is `OK`, `UNAVAILABLE` (configured, but it didn't answer within its timeout, or a service
+answered that it isn't ready) or `NOT_CONFIGURED` (not part of this deployment, such as Kratos in
+noauth mode, or RabbitMQ while no service uses a broker). A component that doesn't answer never
+fails the query.
+
+`dependencies` is a component's readiness by dependency: for each service, what its health check
+reports in its `sneakers-health` header; for the gateway, its own readiness (see "Health" below).
+Each entry has `name`, `state` (`OK`, `DEGRADED` or `DOWN`), `required`, `error` (a class:
+`timeout`, `refused`, `unavailable`, `unauthenticated` or `error`, never the error text) and
+`version` when known. It's null for a component that reports none (an older build, or a
+third-party service). Entries with a name or state outside those tokens are dropped.
 
 The component part is cached for 30 seconds. Only names, versions, commits and statuses leave the
 gateway: never an address, URL, credential, error text or response body, and a version that isn't
@@ -255,8 +263,21 @@ These are outside the session gate, like `/health`.
 
 ## Health
 
-`GET /health` answers `{"status":"ok","mode":"<AUTH_MODE>"}`. It doesn't check Redis or the
-backends. The running build is in the `diagnostics` query; the image build stamps it from its
+Three unauthenticated endpoints:
+
+- `GET /livez`: liveness. Always `200 {"status":"ok"}` while the process answers; it checks no
+  dependency, so an outage never restarts the gateway.
+- `GET /readyz`: readiness. `200` while every required dependency is up, `503` while one is down.
+  The body lists each dependency:
+  `{"status":"ok|degraded|down","dependencies":[{"name":"valkey","state":"ok","required":true,"checkedAt":"2026-10-05T12:00:00Z"}]}`,
+  with `error` (one of the classes above) on a failing one. Required: Valkey and Kratos in
+  `AUTH_MODE=real`, and identity in every mode. Vault, workflow, audit, notify, the SSH broker,
+  Hydra (when enabled) and Polis (when configured) are optional: one failing makes the status
+  `degraded`, still `200`. Each dependency is checked with a 1-second timeout and the results are
+  cached for 5 seconds, so probes don't load the dependencies.
+- `GET /health`: `{"status":"ok","mode":"<AUTH_MODE>"}`, unchanged; it checks nothing.
+
+The running build is in the `diagnostics` query; the image build stamps it from its
 `VERSION` and `COMMIT` build arguments
 (`docker build --build-arg VERSION=v0.1.0 --build-arg COMMIT="$(git rev-parse HEAD)" .`).
 
