@@ -329,7 +329,7 @@ These are outside the session gate, like `/livez` and `/readyz`.
 
 ## Health
 
-Two unauthenticated endpoints, served by go-buildinfo (`github.com/Bugs5382/go-buildinfo`):
+Two unauthenticated endpoints served by go-buildinfo, plus the smoke route below (`github.com/Bugs5382/go-buildinfo`):
 
 - `GET /livez`: liveness. Always `200 {"status":"ok"}` while the process answers; it checks no
   dependency, so an outage never restarts the gateway.
@@ -344,6 +344,15 @@ Two unauthenticated endpoints, served by go-buildinfo (`github.com/Bugs5382/go-b
 Both carry the build in the `Sneakers-Version` and `Sneakers-Commit` headers, and `/readyz` adds
 `Sneakers-Depstate-<name>` (`ok`, `degraded` or `down`) for each dependency. There is no plain
 `/health` route.
+
+`GET /smoke` is the appliance's post-upgrade check: unauthenticated, outside the product routes
+like `/readyz`, and never cached. It makes a real read through identity (`GetSetupState`) and
+vault (`GetSecuritySettings`), each of which reads its database, checks that workflow and audit
+are serving, and pings the session store in `AUTH_MODE=real`. It answers `200` when every check
+passes and `503` otherwise:
+`{"ok":false,"checks":[{"name":"identity","ok":true},{"name":"vault","ok":false,"error":"unavailable"}]}`.
+A failure carries its class only, never the error text; each check has 3 seconds. Nothing in it
+writes.
 
 The running build is also in the `diagnostics` query; the image build stamps it from its
 `VERSION` and `COMMIT` build arguments into go-buildinfo's `Version` and `Commit`

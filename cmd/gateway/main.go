@@ -173,7 +173,7 @@ func (p *sessionTTLProvider) refresh(ctx context.Context) (time.Duration, error)
 // already-clamped session lifetime (admin-configured via vault SecuritySettings)
 // and is evaluated on every session write and cookie refresh, so the store
 // expiry and the sliding renewal always track the live setting.
-func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityServiceClient, ttlFn func() time.Duration, secure bool) (*bff.Handler, *bredis.Client, error) {
+func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityServiceClient, ttlFn func() time.Duration, secure bool, sessionCutoff func() time.Time) (*bff.Handler, *bredis.Client, error) {
 	rc, err := bff.ParseRedisURL(ctx, env("REDIS_URL", "redis://localhost:26379/0"))
 	if err != nil {
 		return nil, nil, err
@@ -191,7 +191,7 @@ func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityService
 	}
 	h := &bff.Handler{
 		MFAMaxAge:  mfaMaxAge,
-		Store:      bff.NewRedisStore(rc, ttlFn),
+		Store:      bff.EndSessionsBefore(bff.NewRedisStore(rc, ttlFn), sessionCutoff, log.NewLogger(serviceName)),
 		Identity:   identity,
 		Pending:    bff.NewRedisPendingStore(rc, pendingTTL),
 		OAuthStore: bff.NewRedisOAuthStore(rc),
@@ -409,7 +409,7 @@ func main() {
 				}
 			}
 		}()
-		bffH, valkey, err := newRealAuthHandler(ctx, identityClient, ttlProvider.get, secureCookies)
+		bffH, valkey, err := newRealAuthHandler(ctx, identityClient, ttlProvider.get, secureCookies, watcher.SessionsEndedAt)
 		if err != nil {
 			logger.Fatal().Err(err).Msg("auth setup")
 		}
@@ -511,6 +511,9 @@ func main() {
 	if err := mountHealth(mux, checker); err != nil {
 		logger.Fatal().Err(err).Msg("health routes")
 	}
+	// The appliance's post-upgrade check: real reads through the core
+	// backends, uncached, outside auth like /readyz.
+	mux.Handle("/smoke", smokeHandler(smokeChecks(identityClient, vaultClient, conns, valkeyPing), reqLog))
 	gqlResolver.Diag = newDiagnostics(os.Getenv, authMode, conns, valkeyInfo, reqLog)
 	gqlResolver.Diag.GatewayDependencies = gatewayDependencies(checker)
 

@@ -34,6 +34,7 @@ import (
 const (
 	KeyMaintenance       = "maintenance"
 	KeyMaintenanceReason = "maintenanceReason"
+	KeySessionsEndedAt   = "sessionsEndedAt"
 )
 
 // On is the value a switch key holds when it's on.
@@ -176,6 +177,16 @@ func (w *Watcher) Get(key string) string {
 // Maintenance reports the ConfigMap's maintenance state, for maintenance.New.
 func (w *Watcher) Maintenance() (bool, string) {
 	return w.Get(KeyMaintenance) == On, w.Get(KeyMaintenanceReason)
+}
+
+// SessionsEndedAt is the time before which every session is ended
+// (RFC 3339), for bff.EndSessionsBefore; zero when it's unset or not a time.
+func (w *Watcher) SessionsEndedAt() time.Time {
+	t, err := time.Parse(time.RFC3339, w.Get(KeySessionsEndedAt))
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 // Run reads the ConfigMap now and then every interval until ctx ends.
