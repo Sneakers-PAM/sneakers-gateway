@@ -1630,7 +1630,7 @@ func (r *queryResolver) Diagnostics(ctx context.Context) (*Diagnostics, error) {
 }
 
 // Maintenance is the resolver for the maintenance field.
-func (r *queryResolver) Maintenance(_ context.Context) (*Maintenance, error) {
+func (r *queryResolver) Maintenance(ctx context.Context) (*Maintenance, error) {
 	on, reason := r.Resolver.Maintenance.State()
 	m := &Maintenance{ReadOnly: on}
 	if on && reason != "" {
