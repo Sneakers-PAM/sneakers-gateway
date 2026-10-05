@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package setup serves the unauthenticated first-run endpoints (mounted outside
-// the auth/session middleware, like /health): GET /setup/state and POST
+// the auth/session middleware, like /livez and /readyz): GET /setup/state and POST
 // /setup/bootstrap. The bootstrap write is guarded by SETUP_TOKEN here and the
 // no-root invariant in identity.
 package setup

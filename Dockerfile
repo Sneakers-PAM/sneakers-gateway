@@ -7,7 +7,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags "-X github.com/Sneakers-PAM/sneakers-gateway/internal/buildinfo.Version=${VERSION} -X github.com/Sneakers-PAM/sneakers-gateway/internal/buildinfo.Commit=${COMMIT}" -o /out/gateway ./cmd/gateway
+RUN CGO_ENABLED=0 go build -ldflags "-X github.com/Bugs5382/go-buildinfo.Version=${VERSION} -X github.com/Bugs5382/go-buildinfo.Commit=${COMMIT}" -o /out/gateway ./cmd/gateway
 
 FROM gcr.io/distroless/static:nonroot
 COPY --from=build /out/gateway /gateway

@@ -489,8 +489,13 @@ func main() {
 	conns := diagServices{
 		identity: idConn, vault: conn, workflow: wfConn, audit: auditConn, notify: nConn, sshbroker: sshbrokerConn, connector: connectorConn,
 	}
-	checker := newHealthChecker(os.Getenv, authMode, conns, valkeyPing, reqLog)
-	mountHealth(mux, checker, authMode)
+	checker, err := newChecker(reqLog, healthDeps(os.Getenv, authMode, conns, valkeyPing))
+	if err != nil {
+		logger.Fatal().Err(err).Msg("health checker")
+	}
+	if err := mountHealth(mux, checker); err != nil {
+		logger.Fatal().Err(err).Msg("health routes")
+	}
 	gqlResolver.Diag = newDiagnostics(os.Getenv, authMode, conns, valkeyInfo, reqLog)
 	gqlResolver.Diag.GatewayDependencies = gatewayDependencies(checker)
 
@@ -512,7 +517,7 @@ func main() {
 	mux.Handle("/machine/graphql", cors(machineH.MachineActor(machineGQL)))
 
 	// First-run admin bootstrap (/setup). Mounted OUTSIDE the auth/session
-	// middleware (alongside /health) — the whole point is to create the first
+	// middleware (alongside /livez and /readyz) — the whole point is to create the first
 	// admin before anyone can log in. The write is guarded by SETUP_TOKEN here and
 	// the no-root invariant in identity. Wrapped in cors so the UI /setup
 	// page can call it cross-origin in dev.

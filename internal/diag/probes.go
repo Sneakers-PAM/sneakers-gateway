@@ -63,8 +63,10 @@ func first(md metadata.MD, key string) string {
 }
 
 // HTTPVersion reads a JSON answer with a "version" (and optional "commit")
-// field, the shape Kratos, Hydra, Polis and the MCP server answer with. An
-// empty URL means the component isn't configured.
+// field, the shape Kratos, Hydra and Polis answer with. An answer without a
+// version in its body is read from its Sneakers-Version and Sneakers-Commit
+// headers instead, which the MCP server's /livez carries. An empty URL means
+// the component isn't configured.
 func HTTPVersion(name string, client *http.Client, endpoint string) Probe {
 	return func(ctx context.Context) Component {
 		if endpoint == "" {
@@ -74,8 +76,12 @@ func HTTPVersion(name string, client *http.Client, endpoint string) Probe {
 			Version string `json:"version"`
 			Commit  string `json:"commit"`
 		}
-		if !getJSON(ctx, client, endpoint, "", &body) {
+		hdr, ok := fetchJSON(ctx, client, endpoint, "", &body)
+		if !ok {
 			return Component{Name: name, Status: StatusUnavailable}
+		}
+		if body.Version == "" {
+			body.Version, body.Commit = hdr.Get(HTTPHeaderVersion), hdr.Get(HTTPHeaderCommit)
 		}
 		return Component{Name: name, Version: body.Version, Commit: body.Commit, Status: StatusOK}
 	}
@@ -84,9 +90,15 @@ func HTTPVersion(name string, client *http.Client, endpoint string) Probe {
 // getJSON GETs endpoint and decodes a 200 answer into out, reporting whether
 // it worked. The error itself is dropped: it can name hosts and addresses.
 func getJSON(ctx context.Context, client *http.Client, endpoint, bearer string, out any) bool {
+	_, ok := fetchJSON(ctx, client, endpoint, bearer, out)
+	return ok
+}
+
+// fetchJSON is getJSON that also returns the answer's headers.
+func fetchJSON(ctx context.Context, client *http.Client, endpoint, bearer string, out any) (http.Header, bool) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil) // #nosec G704 -- endpoint is operator configuration or the in-cluster API server, plus a fixed path, never request input
 	if err != nil {
-		return false
+		return nil, false
 	}
 	req.Header.Set("Accept", "application/json")
 	if bearer != "" {
@@ -94,13 +106,13 @@ func getJSON(ctx context.Context, client *http.Client, endpoint, bearer string, 
 	}
 	res, err := client.Do(req) // #nosec G704 -- see above
 	if err != nil {
-		return false
+		return nil, false
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
-		return false
+		return nil, false
 	}
-	return json.NewDecoder(io.LimitReader(res.Body, maxBody)).Decode(out) == nil
+	return res.Header, json.NewDecoder(io.LimitReader(res.Body, maxBody)).Decode(out) == nil
 }
 
 // Valkey reads the server version from INFO server text (valkey_version,

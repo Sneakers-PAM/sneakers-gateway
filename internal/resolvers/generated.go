@@ -4976,7 +4976,8 @@ type DependencyState {
   state: DependencyHealth!
   # Whether the component's readiness fails while this is down.
   required: Boolean!
-  # When it isn't OK: timeout, refused, unavailable, unauthenticated or error.
+  # When it isn't OK: timeout, refused, unavailable, unauthenticated or error,
+  # or go-buildinfo's connection-refused, dns, network, canceled or panic.
   error: String
   version: String
 }

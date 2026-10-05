@@ -198,13 +198,15 @@ from identity), the origin of `OAUTH_PUBLIC_URL` (`publicUrl`), the appliance ve
 
 - **Services** (`services`): identity, vault, workflow, audit, notify, sshbroker and connector,
   read from the response headers of each one's standard gRPC health check (`sneakers-version`,
-  `sneakers-commit`); mcp from its `GET /health`. A service that answers without the headers (an
-  older build) shows version `unknown`.
+  `sneakers-commit`); mcp from `MCP_HEALTH_URL`, its `GET /livez` (the `Sneakers-Version` and
+  `Sneakers-Commit` response headers, or `version` and `commit` in the body where an older build
+  has them). A service that answers without the headers (an older build) shows version `unknown`.
 - **Third party** (`thirdParty`): kratos (`/admin/version`), hydra (`/version`), polis
   (`/api/health`), valkey (`INFO server` on the session store), kubernetes (the API server's
   `GET /version`, with the pod's ServiceAccount token), and postgres and rabbitmq as the services
   report them in `sneakers-dep-postgres` and `sneakers-dep-rabbitmq` (one entry per distinct
-  version, so services that disagree all show).
+  version, so services that disagree all show; a service reporting `unknown` counts as not
+  reporting).
 
 `status` is `OK`, `UNAVAILABLE` (configured, but it didn't answer within its timeout, or a service
 answered that it isn't ready) or `NOT_CONFIGURED` (not part of this deployment, such as Kratos in
@@ -214,7 +216,8 @@ fails the query.
 `dependencies` is a component's readiness by dependency: for each service, what its health check
 reports in its `sneakers-health` header; for the gateway, its own readiness (see "Health" below).
 Each entry has `name`, `state` (`OK`, `DEGRADED` or `DOWN`), `required`, `error` (a class:
-`timeout`, `refused`, `unavailable`, `unauthenticated` or `error`, never the error text) and
+`timeout`, `refused`, `unavailable`, `unauthenticated` or `error`, or go-buildinfo's
+`connection-refused`, `dns`, `network`, `canceled` or `panic`; never the error text) and
 `version` when known. It's null for a component that reports none (an older build, or a
 third-party service). Entries with a name or state outside those tokens are dropped.
 
@@ -309,26 +312,28 @@ With `OAUTH_PUBLIC_URL` set, the gateway is an OAuth 2.0 authorization server fo
 | `POST /setup/bootstrap` | Create the first admin. Needs `setupToken` in the body to equal `SETUP_TOKEN` (both trimmed of surrounding whitespace). |
 | `POST /setup/seed` | Install the vault's built-in types and baseline, after bootstrap. Same token, plus the `userId` bootstrap returned: the seed acts as that admin and creates their personal folder. Without it, 400. |
 
-These are outside the session gate, like `/health`.
+These are outside the session gate, like `/livez` and `/readyz`.
 
 ## Health
 
-Three unauthenticated endpoints:
+Two unauthenticated endpoints, served by go-buildinfo (`github.com/Bugs5382/go-buildinfo`):
 
 - `GET /livez`: liveness. Always `200 {"status":"ok"}` while the process answers; it checks no
   dependency, so an outage never restarts the gateway.
 - `GET /readyz`: readiness. `200` while every required dependency is up, `503` while one is down.
-  The body lists each dependency:
-  `{"status":"ok|degraded|down","dependencies":[{"name":"valkey","state":"ok","required":true,"checkedAt":"2026-10-05T12:00:00Z"}]}`,
+  The body carries the build and lists each dependency:
+  `{"status":"ok|degraded|down","ready":true,"build":{"version":"v0.1.0","commit":"...","goVersion":"...","modified":false},"dependencies":[{"name":"valkey","state":"ok","required":true,"checkedAt":"2026-10-05T12:00:00Z"}]}`,
   with `error` (one of the classes above) on a failing one. Required: Valkey and Kratos in
   `AUTH_MODE=real`, and identity in every mode. Vault, workflow, audit, notify, the SSH broker,
   Hydra (when enabled) and Polis (when configured) are optional: one failing makes the status
   `degraded`, still `200`. Each dependency is checked with a 1-second timeout and the results are
   cached for 5 seconds, so probes don't load the dependencies.
-- `GET /health`: `{"status":"ok","mode":"<AUTH_MODE>"}`, unchanged; it checks nothing.
+Both carry the build in the `Sneakers-Version` and `Sneakers-Commit` headers, and `/readyz` adds
+`Sneakers-Depstate-<name>` (`ok`, `degraded` or `down`) for each dependency. There is no plain
+`/health` route.
 
-The running build is in the `diagnostics` query; the image build stamps it from its
-`VERSION` and `COMMIT` build arguments
+The running build is also in the `diagnostics` query; the image build stamps it from its
+`VERSION` and `COMMIT` build arguments into go-buildinfo's `Version` and `Commit`
 (`docker build --build-arg VERSION=v0.1.0 --build-arg COMMIT="$(git rev-parse HEAD)" .`).
 
 ## CORS
