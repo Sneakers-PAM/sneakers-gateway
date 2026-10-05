@@ -47,8 +47,10 @@ func TestNewDiagnostics_RealModeReadsKratosHydraPolisAndMCP(t *testing.T) {
 			_, _ = w.Write([]byte(`{"version":"v2.3.0"}`))
 		case "/api/health":
 			_, _ = w.Write([]byte(`{"version":"25.2.0"}`))
-		case "/health":
-			_, _ = w.Write([]byte(`{"status":"ok","version":"v0.1.0","commit":"abc"}`))
+		case "/livez":
+			w.Header().Set("Sneakers-Version", "v0.1.0")
+			w.Header().Set("Sneakers-Commit", "abc")
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -60,7 +62,7 @@ func TestNewDiagnostics_RealModeReadsKratosHydraPolisAndMCP(t *testing.T) {
 		"HYDRA_JWKS_URL":   srv.URL + "/.well-known/jwks.json",
 		"POLIS_PUBLIC_URL": "https://sso.example.org",
 		"POLIS_ISSUER_URL": srv.URL,
-		"MCP_HEALTH_URL":   srv.URL + "/health",
+		"MCP_HEALTH_URL":   srv.URL + "/livez",
 	}
 	info := func(context.Context) (string, error) { return "valkey_version:8.1.1\r\n", nil }
 	r := newDiagnostics(func(k string) string { return vars[k] }, "real", diagServices{}, info, log.Nop()).Report(context.Background())

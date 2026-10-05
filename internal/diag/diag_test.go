@@ -312,3 +312,42 @@ func TestCollector_GatewayCarriesItsOwnDependencies(t *testing.T) {
 		t.Fatalf("gateway = %+v", r.Gateway)
 	}
 }
+
+// TestHTTPVersion_FallsBackToBuildHeaders reads a component whose answer has
+// no version in its body (go-buildinfo's /livez) from its Sneakers-Version
+// and Sneakers-Commit headers.
+func TestHTTPVersion_FallsBackToBuildHeaders(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Sneakers-Version", "v0.1.0")
+		w.Header().Set("Sneakers-Commit", "feedbeef")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer srv.Close()
+	got := HTTPVersion("mcp", srv.Client(), srv.URL+"/livez")(context.Background())
+	if got.Status != StatusOK || got.Version != "v0.1.0" || got.Commit != "feedbeef" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+// TestCollector_UnknownDependencyVersionIsUnreported: a service that couldn't
+// read its database's version reports it as unknown, which counts as not
+// reported rather than as a version.
+func TestCollector_UnknownDependencyVersionIsUnreported(t *testing.T) {
+	c := &Collector{Services: []Probe{func(context.Context) Component {
+		return Component{Name: "audit", Status: StatusOK, deps: map[string]string{"postgres": Unknown}}
+	}}}
+	if pg := find(c.Report(context.Background()).ThirdParty, "postgres"); pg.Status != StatusUnavailable || pg.Version != Unknown {
+		t.Fatalf("postgres = %+v, want UNAVAILABLE and unknown", pg)
+	}
+}
+
+// TestParseDependencies_KeepsGoBuildinfoClasses keeps the error classes
+// go-buildinfo reports beside the original ones.
+func TestParseDependencies_KeepsGoBuildinfoClasses(t *testing.T) {
+	for _, class := range []string{"connection-refused", "dns", "network", "canceled", "panic"} {
+		got := parseDependencies(`{"dependencies":[{"name":"postgres","state":"down","required":true,"error":"` + class + `"}]}`)
+		if len(got) != 1 || got[0].Error != class {
+			t.Errorf("%s: %+v", class, got)
+		}
+	}
+}

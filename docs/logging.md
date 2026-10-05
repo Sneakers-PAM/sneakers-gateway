@@ -26,7 +26,7 @@ Each fresh read of the component versions for the `diagnostics` query writes one
 
 ## Readiness
 
-A dependency that starts failing writes one `warn` line, `health: dependency failing`, with `dependency`, `required`, `state` (`down` or `degraded`) and `error_class`; one that recovers writes an `info` line, `health: dependency recovered`. Nothing is logged while a state holds, and never the address or the error text.
+A dependency that starts failing writes one `warn` line, `dependency check failing`, with `dependency`, `required`, `from`, `to` (`down` or `degraded`) and `error_class`; one that recovers writes an `info` line, `dependency recovered`. Nothing is logged while a state holds, and never the address or the error text.
 
 ## Secret-use batches
 

@@ -52,7 +52,7 @@ Point the liveness probe at `GET /livez` and the readiness probe at `GET /readyz
 sneakers-release sets these). `/livez` checks only the process, so an outage never restarts the
 pod; `/readyz` answers `503` while a required dependency is down and recovers on its own when it
 returns. Its body names the failing dependency and an error class (see [api.md](api.md),
-"Health"). `GET /health` is unchanged and checks nothing.
+"Health"). There is no plain `/health` route.
 
 What the gateway needs, and why:
 
@@ -65,7 +65,8 @@ What the gateway needs, and why:
 | Hydra, Polis | no (when enabled) | Only machine OIDC tokens and SSO sign-in need them. |
 
 A backend that's down also shows up as GraphQL errors with `code = Unavailable` in the
-`graphql error` log lines, and a dependency's state change logs one `health:` line.
+`graphql error` log lines, and a dependency's state change logs one `dependency check failing`
+or `dependency recovered` line.
 
 ## Sessions
 

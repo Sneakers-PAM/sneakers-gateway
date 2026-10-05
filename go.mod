@@ -7,6 +7,7 @@ tool github.com/99designs/gqlgen
 require (
 	github.com/99designs/gqlgen v0.17.90
 	github.com/Bugs5382/go-apperr v1.1.0
+	github.com/Bugs5382/go-buildinfo v1.0.0
 	github.com/Bugs5382/go-log v1.3.0
 	github.com/Bugs5382/go-otel v1.3.2
 	github.com/Bugs5382/go-redis v1.2.0
@@ -18,7 +19,7 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0
 	go.opentelemetry.io/otel/trace v1.45.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d
-	google.golang.org/grpc v1.83.2
+	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.11
 )
 

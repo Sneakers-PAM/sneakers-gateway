@@ -42,6 +42,13 @@ const (
 	HeaderHealth = "sneakers-health"
 )
 
+// The build headers an HTTP service answers with (go-buildinfo's
+// httpbuildinfo with the sneakers prefix).
+const (
+	HTTPHeaderVersion = "Sneakers-Version"
+	HTTPHeaderCommit  = "Sneakers-Commit"
+)
+
 // The dependency states a service reports.
 const (
 	DepOK       = "ok"
@@ -212,11 +219,12 @@ func runAll(ctx context.Context, probes []Probe) []Component {
 }
 
 // depEntries turns the services' reports of one dependency into entries: one
-// per distinct version, so services that disagree are all shown.
+// per distinct version, so services that disagree are all shown. A version
+// reported as unknown counts as not reported.
 func depEntries(services []Component, name string, expected bool) []Component {
 	var versions []string
 	for _, s := range services {
-		if v := cleanOptional(s.deps[name]); v != "" && !slices.Contains(versions, v) {
+		if v := cleanOptional(s.deps[name]); v != "" && v != Unknown && !slices.Contains(versions, v) {
 			versions = append(versions, v)
 		}
 	}
@@ -257,7 +265,8 @@ func cleanOptional(s string) string {
 var (
 	depNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 	depStates      = []string{DepOK, DepDegraded, DepDown}
-	depErrors      = []string{"timeout", "refused", "unavailable", "unauthenticated", "error"}
+	depErrors      = []string{"timeout", "refused", "unavailable", "unauthenticated", "error",
+		"connection-refused", "dns", "network", "canceled", "panic"}
 )
 
 // parseDependencies reads a sneakers-health header. Entries with a name or

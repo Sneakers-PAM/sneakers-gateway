@@ -102,7 +102,7 @@ above, plus Kratos (`KRATOS_ADMIN_URL`, real mode), Hydra (when `HYDRA_ENABLED`)
 | Variable | Default | Meaning |
 |---|---|---|
 | `CONNECTOR_ADDR` | (none) | The connector's gRPC `host:port` (its `GRPC_PORT`, 9090 by default), read only for its build. Unset shows the connector as not configured. |
-| `MCP_HEALTH_URL` | (none) | The MCP server's health URL, for example `http://sneakers-mcp:9101/health`. Unset shows mcp as not configured. |
+| `MCP_HEALTH_URL` | (none) | Where the diagnostics read the MCP server's build, its liveness route: for example `http://sneakers-mcp:9101/livez`. Unset shows mcp as not configured. |
 | `HYDRA_ADMIN_URL` | (the origin of `HYDRA_JWKS_URL`) | Where Hydra's `/version` (diagnostics) and `/health/ready` (readiness) are read. |
 | `SNEAKERS_APPLIANCE_VERSION` | (none) | Set by the appliance to its own version; unset means not on the appliance. |
 | `OAUTH_PUBLIC_URL` | (none) | Its origin is shown as `publicUrl`. |

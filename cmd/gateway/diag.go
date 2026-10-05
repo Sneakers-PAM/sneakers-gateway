@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	buildinfo "github.com/Bugs5382/go-buildinfo"
 	log "github.com/Bugs5382/go-log"
-	"github.com/Sneakers-PAM/sneakers-gateway/internal/buildinfo"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/diag"
 	"google.golang.org/grpc"
 )
@@ -26,7 +26,7 @@ type diagServices struct {
 // configuration. valkeyInfo is nil when the gateway has no Valkey client.
 func newDiagnostics(getenv func(string) string, authMode string, s diagServices, valkeyInfo func(context.Context) (string, error), lg log.Logger) *diag.Collector {
 	httpc := &http.Client{Timeout: 2 * time.Second}
-	v, c := buildinfo.Info()
+	bi := buildinfo.Get()
 
 	kratos := ""
 	if authMode == "real" {
@@ -46,7 +46,7 @@ func newDiagnostics(getenv func(string) string, authMode string, s diagServices,
 	}
 
 	return &diag.Collector{
-		Gateway:   diag.Component{Name: "gateway", Version: v, Commit: c, Status: diag.StatusOK},
+		Gateway:   diag.Component{Name: "gateway", Version: bi.Version, Commit: bi.Commit, Status: diag.StatusOK},
 		PublicURL: getenv("OAUTH_PUBLIC_URL"),
 		Appliance: getenv("SNEAKERS_APPLIANCE_VERSION"),
 		Services: []diag.Probe{
