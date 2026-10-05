@@ -257,6 +257,11 @@ type Lease struct {
 	Returned  *bool  `json:"returned,omitempty"`
 }
 
+type Maintenance struct {
+	ReadOnly bool    `json:"readOnly"`
+	Reason   *string `json:"reason,omitempty"`
+}
+
 type MintAPITokenResult struct {
 	Token    string    `json:"token"`
 	APIToken *APIToken `json:"apiToken"`

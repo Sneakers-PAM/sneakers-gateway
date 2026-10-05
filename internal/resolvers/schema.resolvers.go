@@ -1629,6 +1629,16 @@ func (r *queryResolver) Diagnostics(ctx context.Context) (*Diagnostics, error) {
 	return r.diagnostics(ctx)
 }
 
+// Maintenance is the resolver for the maintenance field.
+func (r *queryResolver) Maintenance(ctx context.Context) (*Maintenance, error) {
+	on, reason := r.Resolver.Maintenance.State()
+	m := &Maintenance{ReadOnly: on}
+	if on && reason != "" {
+		m.Reason = &reason
+	}
+	return m, nil
+}
+
 // SecretStats is the resolver for the secretStats subscription: it pushes the
 // acting user's dashboard rollup over the WebSocket. RACI scoping is automatic —
 // actorOf(ctx) carries the socket's authenticated actor (resolved from the

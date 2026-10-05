@@ -14,6 +14,7 @@ import (
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	workflowv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/workflow/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/diag"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/maintenance"
 
 	log "github.com/Bugs5382/go-log"
 )
@@ -44,6 +45,8 @@ type Resolver struct {
 	Now func() time.Time
 	// Log receives request-scoped lines; nil writes nothing.
 	Log log.Logger
+	// Maintenance is the read-only maintenance state; nil is always off.
+	Maintenance *maintenance.Mode
 }
 
 // workflowActorOf is the acting user for the workflow service (its
