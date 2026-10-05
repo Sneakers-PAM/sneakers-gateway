@@ -118,3 +118,11 @@ func TestSessionTTLProviderFallbackOnUnavailable(t *testing.T) {
 		t.Fatalf("retained TTL = %v (cached %v), want %v", got2, p2.get(), 45*time.Minute)
 	}
 }
+
+func TestMCPEnabledByDefault(t *testing.T) {
+	for v, want := range map[string]bool{"": true, "true": true, " TRUE ": true, "1": true, "false": false, " False": false, "0": false} {
+		if got := mcpEnabledFrom(v); got != want {
+			t.Errorf("MCP_ENABLED=%q: enabled=%v, want %v", v, got, want)
+		}
+	}
+}

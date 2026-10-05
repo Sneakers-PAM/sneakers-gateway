@@ -169,6 +169,9 @@ type Handler struct {
 	// read off the token, since the token's iss was already checked by the
 	// verifier and this is the gateway's own trusted value, not caller input.
 	MachineOidcIssuer string
+	// MCPDisabled refuses MCP agent tokens on the machine API with
+	// MCP_DISABLED (MCP_ENABLED=false).
+	MCPDisabled bool
 }
 
 // mfaFlags reports the client-facing MFA posture for a session: enrollmentRequired

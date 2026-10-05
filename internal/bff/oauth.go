@@ -345,7 +345,7 @@ func (o *OAuth) token(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, err := o.Handler.Identity.MintUserToken(r.Context(), &identityv1.MintUserTokenRequest{
-		UserId: grant.UserID, Label: grant.Label, ClientName: grant.ClientName,
+		UserId: grant.UserID, Label: grant.Label, ClientName: grant.ClientName, ClientKind: ClientKindMCP,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
