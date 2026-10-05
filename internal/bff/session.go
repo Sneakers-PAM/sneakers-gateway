@@ -43,6 +43,9 @@ type Session struct {
 	// completes enrollment, so the not-enforced setup banner reflects reality
 	// without an identity round-trip on every session check.
 	Enrolled bool `json:"enrolled"`
+	// IssuedAt is when the session was created. A session issued before the
+	// appliance's sessionsEndedAt is ended (see EndSessionsBefore).
+	IssuedAt time.Time `json:"issued_at,omitzero"`
 }
 
 // SessionStore is the persistence seam. memStore is the dev/single-gateway

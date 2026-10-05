@@ -78,6 +78,9 @@ or `dependency recovered` line.
   half-session that can only enroll one. Admins can remove a user's TOTP factor with
   `/auth/mfa/admin/remove-totp` when a device is lost; the user's sessions end.
 - A login waits `MFA_PENDING_TTL` (5 minutes) for its second factor, then has to start again.
+- On the appliance, entering maintenance signs everyone out: the appliance ConfigMap's
+  `sessionsEndedAt` ends every session issued before it (see [appliance.md](appliance.md)).
+  Sessions created before this release carry no issue time, so they end at the first such cutoff.
 
 ## Single sign-on
 

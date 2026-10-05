@@ -16,6 +16,7 @@ absent, forbidden, error) is logged once.
 |---|---|---|
 | `maintenance` | `on`, anything else is off | `on` puts the gateway in read-only maintenance (see [api.md](api.md), "Maintenance"). `MAINTENANCE_READONLY` turns it on as well, whatever the ConfigMap says. |
 | `maintenanceReason` | free text | Shown as the `maintenance` query's `reason` while it's on. |
+| `sessionsEndedAt` | an RFC 3339 time | Every session issued before it is ended: the next request with it gets the signed-out answer and the session is deleted, on every replica and after a restart. Sessions issued later work, so people can sign in again. The appliance sets it when it enters maintenance. A value that isn't a time is ignored. |
 
 ## Access
 

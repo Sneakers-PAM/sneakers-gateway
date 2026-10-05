@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const cmPath = "/api/v1/namespaces/sneakers/configmaps/sneakers-appliance"
@@ -115,5 +116,28 @@ func TestABadPollIntervalIsRefused(t *testing.T) {
 	env := map[string]string{"KUBERNETES_SERVICE_HOST": "192.0.2.1", "APPLIANCE_POLL_INTERVAL": "soon"}
 	if _, err := FromEnv(func(k string) string { return env[k] }, nil); err == nil {
 		t.Fatal("APPLIANCE_POLL_INTERVAL=soon was accepted")
+	}
+}
+
+func TestSessionsEndedAtIsReadAsATime(t *testing.T) {
+	a, srv := newAPIServer(t)
+	w := newWatcher(t, srv)
+	w.Refresh(context.Background())
+	if !w.SessionsEndedAt().IsZero() {
+		t.Fatal("a cutoff with no key set")
+	}
+	a.body.Store(`{"data":{"sessionsEndedAt":"2026-10-05T02:00:00Z"}}`)
+	w.Refresh(context.Background())
+	if got := w.SessionsEndedAt(); !got.Equal(time.Date(2026, 10, 5, 2, 0, 0, 0, time.UTC)) {
+		t.Fatalf("SessionsEndedAt() = %v", got)
+	}
+	a.body.Store(`{"data":{"sessionsEndedAt":"last night"}}`)
+	w.Refresh(context.Background())
+	if !w.SessionsEndedAt().IsZero() {
+		t.Fatal("a value that isn't a time was used as a cutoff")
+	}
+	var none *Watcher
+	if !none.SessionsEndedAt().IsZero() {
+		t.Fatal("a nil watcher gave a cutoff")
 	}
 }
