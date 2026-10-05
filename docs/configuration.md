@@ -92,6 +92,24 @@ off, the gateway makes no Hydra calls, and a JWT-shaped bearer is refused.
 | `HYDRA_JWKS_URL` | `http://sneakers-hydra:4444/.well-known/jwks.json` | Hydra's signing keys. |
 | `HYDRA_AUDIENCE` | `sneakers-mcp` | The expected `aud`. |
 
+## Diagnostics
+
+The `diagnostics` query (see [api.md](api.md), "Diagnostics") reads every configured backend
+above, plus Kratos (`KRATOS_ADMIN_URL`, real mode), Hydra (when `HYDRA_ENABLED`), Polis (when
+`POLIS_PUBLIC_URL` is set, at `POLIS_ISSUER_URL`) and the session store. These add to that:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CONNECTOR_ADDR` | (none) | The connector's gRPC `host:port` (its `GRPC_PORT`, 9090 by default), read only for its build. Unset shows the connector as not configured. |
+| `MCP_HEALTH_URL` | (none) | The MCP server's health URL, for example `http://sneakers-mcp:9101/health`. Unset shows mcp as not configured. |
+| `HYDRA_ADMIN_URL` | (the origin of `HYDRA_JWKS_URL`) | Where Hydra's `/version` is read. |
+| `SNEAKERS_APPLIANCE_VERSION` | (none) | Set by the appliance to its own version; unset means not on the appliance. |
+| `OAUTH_PUBLIC_URL` | (none) | Its origin is shown as `publicUrl`. |
+
+The Kubernetes version needs nothing set: in a pod, the gateway reads the API server's
+`/version` with the mounted ServiceAccount CA and token, and shows Kubernetes as not configured
+when either is missing.
+
 ## Telemetry and logging
 
 | Variable | Default | Meaning |

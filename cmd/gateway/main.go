@@ -21,6 +21,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	log "github.com/Bugs5382/go-log"
 	otel "github.com/Bugs5382/go-otel"
+	bredis "github.com/Bugs5382/go-redis"
 	auditv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/audit/v1"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 	notifyv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/notify/v1"
@@ -170,10 +171,10 @@ func (p *sessionTTLProvider) refresh(ctx context.Context) (time.Duration, error)
 // already-clamped session lifetime (admin-configured via vault SecuritySettings)
 // and is evaluated on every session write and cookie refresh, so the store
 // expiry and the sliding renewal always track the live setting.
-func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityServiceClient, ttlFn func() time.Duration, secure bool) (*bff.Handler, error) {
+func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityServiceClient, ttlFn func() time.Duration, secure bool) (*bff.Handler, *bredis.Client, error) {
 	rc, err := bff.ParseRedisURL(ctx, env("REDIS_URL", "redis://localhost:26379/0"))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// pendingTTL bounds the 2-step login window: after a successful password
 	// step the session token is parked for at most this long awaiting the second
@@ -184,7 +185,7 @@ func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityService
 	}
 	mfaMaxAge, err := bff.ParseMFAMaxAge(os.Getenv)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	h := &bff.Handler{
 		MFAMaxAge:  mfaMaxAge,
@@ -209,13 +210,13 @@ func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityService
 		)
 		secret, err := polisClientSecret("real", os.Getenv)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		h.Polis.ClientSecret = secret
 		h.SSORedirectBase = env("SSO_REDIRECT_BASE", "")
 		h.SSOAppBase = env("SSO_APP_BASE", "/")
 	}
-	return h, nil
+	return h, rc, nil
 }
 
 //nolint:gocognit,gocyclo // wires every client, route and auth mode in one place
@@ -308,7 +309,19 @@ func main() {
 	defer func() { _ = sshbrokerConn.Close() }()
 	sshbrokerClient := sshbrokerv1.NewSSHBrokerServiceClient(sshbrokerConn)
 
-	gql := handler.New(resolvers.NewExecutableSchema(resolvers.Config{Resolvers: &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, HydraIssuer: hydraIssuer}}))
+	// The connector is optional here: it's a pull-based worker, so the gateway
+	// dials it only to read its build for the diagnostics.
+	var connectorConn grpc.ClientConnInterface
+	if addr := env("CONNECTOR_ADDR", ""); addr != "" {
+		cc, err := grpc.NewClient(addr, backendOpts...)
+		if err != nil {
+			logger.Fatal().Err(err).Str("connector", addr).Msg("dial connector")
+		}
+		defer func() { _ = cc.Close() }()
+		connectorConn = cc
+	}
+	gqlResolver := &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, HydraIssuer: hydraIssuer}
+	gql := handler.New(resolvers.NewExecutableSchema(resolvers.Config{Resolvers: gqlResolver}))
 	gql.AddTransport(transport.Options{})
 	gql.AddTransport(transport.POST{})
 	gql.Use(extension.Introspection{})
@@ -342,6 +355,9 @@ func main() {
 	}
 	cors := corsP.wrap
 	mux := http.NewServeMux()
+	// valkeyInfo reads the session store's INFO for the diagnostics; it stays
+	// nil (not configured) in noauth mode, which has no Valkey client.
+	var valkeyInfo func(context.Context) (string, error)
 	if authMode == "real" {
 		// Session timeout is admin-configured (vault SecuritySettings), not an env
 		// var: seed the cache from vault at startup and refresh it in the background
@@ -369,10 +385,11 @@ func main() {
 				}
 			}
 		}()
-		bffH, err := newRealAuthHandler(ctx, identityClient, ttlProvider.get, secureCookies)
+		bffH, valkey, err := newRealAuthHandler(ctx, identityClient, ttlProvider.get, secureCookies)
 		if err != nil {
 			logger.Fatal().Err(err).Msg("auth setup")
 		}
+		valkeyInfo = func(ctx context.Context) (string, error) { return valkey.Redis().Info(ctx, "server").Result() }
 		bffH.Log = reqLog
 		bffH.Audit = auditClient
 		// MCP /login: the OAuth native-app authorization server that issues
@@ -459,6 +476,9 @@ func main() {
 		})
 		mux.Handle("/graphql", cors(withActor(identityClient, gql)))
 	}
+	gqlResolver.Diag = newDiagnostics(os.Getenv, authMode, diagServices{
+		identity: idConn, vault: conn, workflow: wfConn, audit: auditConn, notify: nConn, sshbroker: sshbrokerConn, connector: connectorConn,
+	}, valkeyInfo, reqLog)
 
 	// Machine bearer-auth path (with a pluggable OIDC leg): a SEPARATE GraphQL
 	// endpoint for non-human callers, gated by bff.MachineActor instead of the human SessionActor/no-auth gates above —

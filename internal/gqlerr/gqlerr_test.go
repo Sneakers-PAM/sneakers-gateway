@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/gqlerr"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -102,5 +103,29 @@ func TestPresentCodeNames(t *testing.T) {
 		if ge.Extensions["code"] != name {
 			t.Fatalf("%v: code = %v, want %s", c, ge.Extensions["code"], name)
 		}
+	}
+}
+
+func TestPresentCarriesTheDomain(t *testing.T) {
+	err := withInfo(t, codes.FailedPrecondition, "held", "sneakers.workflow", "CHECKOUT_LEASE_HELD", nil)
+	if got := gqlerr.Present(context.Background(), err).Extensions["domain"]; got != "sneakers.workflow" {
+		t.Fatalf("domain = %v, want sneakers.workflow", got)
+	}
+}
+
+func TestPresentCarriesTheTraceID(t *testing.T) {
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{0x4b, 0xf9, 0x2f, 0x35, 0x77, 0xb3, 0x4d, 0xa6, 0xa3, 0xce, 0x92, 0x9d, 0x0e, 0x0e, 0x47, 0x36},
+		SpanID:     trace.SpanID{0x00, 0xf0, 0x67, 0xaa, 0x0b, 0xa9, 0x02, 0xb7},
+		TraceFlags: trace.FlagsSampled,
+	})
+	ctx := trace.ContextWithSpanContext(context.Background(), sc)
+	for _, err := range []error{status.Error(codes.Unavailable, "down"), errors.New("plain")} {
+		if got := gqlerr.Present(ctx, err).Extensions["traceId"]; got != "4bf92f3577b34da6a3ce929d0e0e4736" {
+			t.Fatalf("%v: traceId = %v", err, got)
+		}
+	}
+	if _, has := gqlerr.Present(context.Background(), errors.New("plain")).Extensions["traceId"]; has {
+		t.Fatal("no span, no traceId expected")
 	}
 }

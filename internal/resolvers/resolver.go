@@ -13,6 +13,7 @@ import (
 	sshbrokerv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/sshbroker/v1"
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	workflowv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/workflow/v1"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/diag"
 )
 
 // This file is not regenerated. It's the dependency-injection root.
@@ -31,6 +32,8 @@ type Resolver struct {
 	// the issuer itself is always this trusted server-side value, never
 	// caller-supplied. Empty when Hydra is not configured.
 	HydraIssuer string
+	// Diag gathers the component versions for the diagnostics query.
+	Diag *diag.Collector
 }
 
 // workflowActorOf is the acting user for the workflow service (its

@@ -1608,6 +1608,11 @@ func (r *queryResolver) UserTokens(ctx context.Context, userID string) ([]*UserT
 	return r.listUserTokens(ctx, userID)
 }
 
+// Diagnostics is the resolver for the diagnostics field.
+func (r *queryResolver) Diagnostics(ctx context.Context) (*Diagnostics, error) {
+	return r.diagnostics(ctx)
+}
+
 // SecretStats is the resolver for the secretStats subscription: it pushes the
 // acting user's dashboard rollup over the WebSocket. RACI scoping is automatic —
 // actorOf(ctx) carries the socket's authenticated actor (resolved from the

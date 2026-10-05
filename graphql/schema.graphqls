@@ -784,6 +784,54 @@ type Query {
   useGrants: [UseGrant!]!
   # Site-admin: another user's personal tokens.
   userTokens(userId: String!): [UserToken!]!
+  # Build and version facts for a support report: the caller, the gateway,
+  # every Sneakers-PAM service and the third-party services the gateway can
+  # reach. Any signed-in user; no arguments, so the actor is always the
+  # caller. Cached for about 30 seconds. Never carries tokens, secrets,
+  # addresses or error text.
+  diagnostics: Diagnostics!
+}
+
+type Diagnostics {
+  # When the component versions were read (RFC 3339, UTC); they're cached, so
+  # this can be up to 30 seconds old.
+  generatedAt: String!
+  # This read's own trace id.
+  traceId: String!
+  actor: DiagnosticsActor!
+  # The origin of the configured public URL (scheme and host only).
+  publicUrl: String!
+  # The appliance's version; null when not running on the appliance.
+  appliance: String
+  gateway: ComponentVersion!
+  # identity, vault, workflow, audit, notify, sshbroker, connector and mcp.
+  services: [ComponentVersion!]!
+  # kratos, hydra, polis, valkey, postgres, rabbitmq and kubernetes.
+  thirdParty: [ComponentVersion!]!
+}
+
+# The caller, as identity knows them.
+type DiagnosticsActor {
+  id: String!
+  username: String!
+  roles: [String!]!
+}
+
+type ComponentVersion {
+  name: String!
+  # Null when it couldn't be read; "unknown" when the component answered
+  # without one.
+  version: String
+  commit: String
+  status: ComponentStatus!
+}
+
+enum ComponentStatus {
+  OK
+  # Configured, but it didn't answer.
+  UNAVAILABLE
+  # Not part of this deployment.
+  NOT_CONFIGURED
 }
 
 input CreateSecretInput {

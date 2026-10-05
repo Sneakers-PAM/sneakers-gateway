@@ -35,7 +35,10 @@ authenticates, and where to read more.
   - `code`: the canonical gRPC code name, such as `PERMISSION_DENIED` or `FAILED_PRECONDITION`;
   - `reason`: present when the service gave a stable reason for the refusal, such as
     `CHECKOUT_LEASE_HELD` (see "Refusal reasons" below);
-  - `metadata`: present when the reason carries details, such as `holder_user_id`.
+  - `metadata`: present when the reason carries details, such as `holder_user_id`;
+  - `domain`: the reason's domain, such as `sneakers.workflow`, beside `reason`;
+  - `traceId`: the request's trace id, on every error (backend or not) while tracing is on, so a
+    report can be matched to the logs.
 
   Match on `code` and `reason`, never on the message text after `desc =`.
 
@@ -135,6 +138,33 @@ leases, so the gateway asks the workflow first and refuses a restore while someo
 (`CHECKOUT_LEASE_HELD` with `holder_user_id`); if that lookup fails, the restore doesn't run. Only a site admin or root can grant or
 revoke the role (identity enforces it). Machine callers never get the recovery surface.
 
+### Diagnostics
+
+`diagnostics` takes no arguments and answers any signed-in user with the facts a support report
+needs: `generatedAt`, this read's `traceId`, the caller (`actor`: id, username and roles, read
+from identity), the origin of `OAUTH_PUBLIC_URL` (`publicUrl`), the appliance version
+(`appliance`, from `SNEAKERS_APPLIANCE_VERSION`, null off the appliance), and a `ComponentVersion`
+(name, version, commit and status) for the gateway, each service and each third-party service:
+
+- **Services** (`services`): identity, vault, workflow, audit, notify, sshbroker and connector,
+  read from the response headers of each one's standard gRPC health check (`sneakers-version`,
+  `sneakers-commit`); mcp from its `GET /health`. A service that answers without the headers (an
+  older build) shows version `unknown`.
+- **Third party** (`thirdParty`): kratos (`/admin/version`), hydra (`/version`), polis
+  (`/api/health`), valkey (`INFO server` on the session store), kubernetes (the API server's
+  `GET /version`, with the pod's ServiceAccount token), and postgres and rabbitmq as the services
+  report them in `sneakers-dep-postgres` and `sneakers-dep-rabbitmq` (one entry per distinct
+  version, so services that disagree all show).
+
+`status` is `OK`, `UNAVAILABLE` (configured, but it didn't answer within its timeout) or
+`NOT_CONFIGURED` (not part of this deployment, such as Kratos in noauth mode, or RabbitMQ while no
+service uses a broker). A component that doesn't answer never fails the query.
+
+The component part is cached for 30 seconds. Only names, versions, commits and statuses leave the
+gateway: never an address, URL, credential, error text or response body, and a version that isn't
+a plain version string (letters, digits, `.`, `_`, `+` and `-`, at most 64 characters) is shown as
+`unknown`.
+
 ## Login and sessions (`AUTH_MODE=real`)
 
 All are JSON over `POST` unless noted. Endpoints that act for a signed-in user need the session
@@ -226,7 +256,9 @@ These are outside the session gate, like `/health`.
 ## Health
 
 `GET /health` answers `{"status":"ok","mode":"<AUTH_MODE>"}`. It doesn't check Redis or the
-backends.
+backends. The running build is in the `diagnostics` query; the image build stamps it from its
+`VERSION` and `COMMIT` build arguments
+(`docker build --build-arg VERSION=v0.1.0 --build-arg COMMIT="$(git rev-parse HEAD)" .`).
 
 ## CORS
 
