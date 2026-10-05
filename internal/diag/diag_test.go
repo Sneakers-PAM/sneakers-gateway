@@ -129,7 +129,9 @@ func TestValkey_ParsesInfo(t *testing.T) {
 	if got.Version != "7.2.4" {
 		t.Fatalf("redis-only INFO: got %+v, want 7.2.4", got)
 	}
-	got = Valkey(func(context.Context) (string, error) { return "", errors.New("dial tcp valkey.example.test:6379: refused") })(context.Background())
+	got = Valkey(func(context.Context) (string, error) {
+		return "", errors.New("dial tcp valkey.example.test:6379: refused")
+	})(context.Background())
 	if got.Status != StatusUnavailable || got.Version != "" {
 		t.Fatalf("error: got %+v, want UNAVAILABLE", got)
 	}
