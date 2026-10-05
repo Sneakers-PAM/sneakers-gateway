@@ -64,6 +64,10 @@ go tool gqlgen generate --config gqlgen-machine.yml
 - [docs/machine-graphql.md](docs/machine-graphql.md) and [docs/machine-automation.md](docs/machine-automation.md): the machine API in detail.
 - [docs/cookies.md](docs/cookies.md), [docs/logging.md](docs/logging.md) and [docs/error-codes.md](docs/error-codes.md).
 
+## 🙏 Acknowledgements
+
+Sneakers-PAM was originally written by [@Bugs5382](https://github.com/Bugs5382).
+
 ## ⚖️ License
 
 Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
