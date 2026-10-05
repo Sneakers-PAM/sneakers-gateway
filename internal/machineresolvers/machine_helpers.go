@@ -10,12 +10,14 @@ package machineresolvers
 
 import (
 	"context"
+	"net/url"
 	"slices"
 	"strings"
 
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/safeconv"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -227,13 +229,39 @@ func secretTypesOf(types []*vaultv1.SecretType) []*SecretTypeSummary {
 }
 
 func (r *Resolver) secretUseOf(u *vaultv1.SecretUse) *SecretUse {
-	return &SecretUse{
+	out := &SecretUse{
 		ID: u.GetId(), SecretID: u.GetSecretId(), SecretName: u.GetSecretName(), FieldKey: u.GetFieldKey(),
 		Argv: append([]string{}, u.GetArgv()...), State: strings.TrimPrefix(u.GetState().String(), "SECRET_USE_STATE_"),
 		ExpiresAtUnix: safeconv.IntFromInt64(u.GetExpiresAtUnix()),
 		ApprovalURL:   strings.TrimRight(r.PublicURL, "/") + "/approvals",
 		Reveal:        u.GetReveal(),
 	}
+	if id := u.GetRunId(); id != "" {
+		out.RunID = &id
+		if r.ApprovalRunLinks {
+			out.ApprovalURL += "/run/" + url.PathEscape(id)
+		}
+	}
+	return out
+}
+
+// prepareRefusal gives vault's InvalidArgument for a prepare (a bad argv,
+// run id or purpose) the stable reason SECRET_USE_REQUEST_INVALID, keeping
+// vault's message, which names the field. Other refusals, and one that already
+// carries a reason, pass through.
+func prepareRefusal(err error) error {
+	st, ok := status.FromError(err)
+	if !ok || st.Code() != codes.InvalidArgument {
+		return err
+	}
+	for _, d := range st.Details() {
+		if _, ok := d.(*errdetails.ErrorInfo); ok {
+			return err
+		}
+	}
+	coded, _ := status.New(codes.InvalidArgument, st.Message()).
+		WithDetails(&errdetails.ErrorInfo{Domain: "sneakers.gateway", Reason: "SECRET_USE_REQUEST_INVALID"})
+	return coded.Err()
 }
 
 func targetOf(t *vaultv1.Target) *MachineTarget {

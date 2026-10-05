@@ -27,3 +27,7 @@ Each fresh read of the component versions for the `diagnostics` query writes one
 ## Readiness
 
 A dependency that starts failing writes one `warn` line, `health: dependency failing`, with `dependency`, `required`, `state` (`down` or `degraded`) and `error_class`; one that recovers writes an `info` line, `health: dependency recovered`. Nothing is logged while a state holds, and never the address or the error text.
+
+## Secret-use batches
+
+`decideSecretUses` writes one `info` line, `secret uses: batch decided`, with `user_id`, `decision`, `count`, `decided` and `refused`, and a `debug` line per item (`secret uses: decided` with `use_id` and `run_id`, or `secret uses: refused` with `use_id` and `reason`). A batch refused before any decision (step-up needed, wrong factor) writes a `warn` line. A vault refusal the gateway can't map writes an `error` line with `use_id` and the gRPC `code`, and the item comes back `UNAVAILABLE`. When identity can't name the tokens, a `warn` line `secret uses: token names unavailable, showing client labels` is written. `secretUseRun` writes a `debug` line with `run_id` and `count`. Values and factors are never logged.

@@ -14,6 +14,8 @@ import (
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	workflowv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/workflow/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/diag"
+
+	log "github.com/Bugs5382/go-log"
 )
 
 // This file is not regenerated. It's the dependency-injection root.
@@ -34,6 +36,14 @@ type Resolver struct {
 	HydraIssuer string
 	// Diag gathers the component versions for the diagnostics query.
 	Diag *diag.Collector
+	// MFAMaxAge is how recent the session's second factor must be to approve
+	// pending secret uses without a new one (MFA_MAX_AGE). Zero means
+	// bff.DefaultMFAMaxAge.
+	MFAMaxAge time.Duration
+	// Now is the clock; nil means time.Now.
+	Now func() time.Time
+	// Log receives request-scoped lines; nil writes nothing.
+	Log log.Logger
 }
 
 // workflowActorOf is the acting user for the workflow service (its

@@ -320,7 +320,15 @@ func main() {
 		defer func() { _ = cc.Close() }()
 		connectorConn = cc
 	}
-	gqlResolver := &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, HydraIssuer: hydraIssuer}
+	mfaMaxAge, err := bff.ParseMFAMaxAge(os.Getenv)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("MFA_MAX_AGE")
+	}
+	runLinks, err := approvalRunLinks(os.Getenv("APPROVAL_RUN_LINKS"))
+	if err != nil {
+		logger.Fatal().Err(err).Msg("APPROVAL_RUN_LINKS")
+	}
+	gqlResolver := &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, HydraIssuer: hydraIssuer, MFAMaxAge: mfaMaxAge, Log: reqLog}
 	gql := handler.New(resolvers.NewExecutableSchema(resolvers.Config{Resolvers: gqlResolver}))
 	gql.AddTransport(transport.Options{})
 	gql.AddTransport(transport.POST{})
@@ -496,7 +504,7 @@ func main() {
 	// hydraVerifier/hydraIssuer are computed once, above, by newHydraVerifier.
 	machineH := &bff.Handler{Identity: identityClient, MachineOidcVerifier: hydraVerifier, MachineOidcIssuer: hydraIssuer}
 	machineGQL := handler.New(machineresolvers.NewExecutableSchema(machineresolvers.Config{
-		Resolvers: &machineresolvers.Resolver{Vault: vaultClient, PublicURL: env("OAUTH_PUBLIC_URL", "")},
+		Resolvers: &machineresolvers.Resolver{Vault: vaultClient, PublicURL: env("OAUTH_PUBLIC_URL", ""), ApprovalRunLinks: runLinks},
 	}))
 	machineGQL.AddTransport(transport.POST{})
 	machineGQL.Use(gqllog.ErrorLog{Log: reqLog, Actor: resolvers.CallerID})
@@ -553,7 +561,7 @@ func main() {
 		_ = srv.Shutdown(shutCtx)
 	}()
 
-	logger.Info().Str("http", httpPort).Str("auth_mode", authMode).Str("vault", vaultAddr).Str("identity", identityAddr).Str("workflow", workflowAddr).Str("audit", auditAddr).Str("notify", notifyAddr).Str("sshbroker", sshbrokerAddr).Str("otlp", otlp).Msg("gateway starting (/graphql)")
+	logger.Info().Str("http", httpPort).Str("auth_mode", authMode).Str("vault", vaultAddr).Str("identity", identityAddr).Str("workflow", workflowAddr).Str("audit", auditAddr).Str("notify", notifyAddr).Str("sshbroker", sshbrokerAddr).Str("otlp", otlp).Bool("approval_run_links", runLinks).Msg("gateway starting (/graphql)")
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Fatal().Err(err).Msg("http server exited")
 	}

@@ -39,7 +39,7 @@ workload identity (see [api.md](api.md), "Service-to-service authentication").
 |---|---|---|
 | `REDIS_URL` | `redis://localhost:26379/0` | Redis for sessions, pending logins and the OAuth store. `rediss://` enables TLS. The gateway won't start in `real` mode if Redis doesn't answer. |
 | `MFA_ENFORCED` | `true` | `false` or `0` makes the second factor optional (the client shows a setup banner); anything else enforces it, so a user without a verified factor can reach only the enrollment endpoints. |
-| `MFA_MAX_AGE` | `5m` | How recent a second factor must be to add or remove a factor (a Go duration from `1m` to `1h`; anything else stops the gateway at boot). Set it to the same value as the vault and the workflow. |
+| `MFA_MAX_AGE` | `5m` | How recent a second factor must be to add or remove a factor, or to approve a batch of pending secret uses without a new one (a Go duration from `1m` to `1h`; anything else stops the gateway at boot). Set it to the same value as the vault and the workflow. |
 | `MFA_PENDING_TTL` | `5m` | How long a login waits for its second factor after the password step (a Go duration). |
 
 The session lifetime isn't an environment variable: it's the vault security setting
@@ -79,6 +79,7 @@ SSO is off unless `POLIS_PUBLIC_URL` is set. Setup's SSO provisioning is off unl
 | Variable | Default | Meaning |
 |---|---|---|
 | `OAUTH_PUBLIC_URL` | (none) | The public URL of the UI. When set (and `AUTH_MODE=real`), the gateway serves the OAuth authorization server for native clients under `/oauth2/` and `/.well-known/oauth-authorization-server`. The machine API also uses it to build links. |
+| `APPROVAL_RUN_LINKS` | `false` | `true` points a pending secret use's `approvalUrl` at its run's page, `<OAUTH_PUBLIC_URL>/approvals/run/<runId>`, when it has a run id. Turn it on once the web serves that page; until then every link is `<OAUTH_PUBLIC_URL>/approvals`. A value that isn't a boolean stops the gateway at boot. |
 
 ## Machine OIDC (Ory Hydra)
 

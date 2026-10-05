@@ -616,6 +616,48 @@ type SecretUse {
   expiresAtUnix: Int!
   # The value goes to the token itself, not to a command; argv is empty.
   reveal: Boolean!
+  # Groups the uses one agent run raised. A display hint from the agent, never an authority.
+  runId: ID
+  # The agent's own words for its task, empty when it gave none. Show it as plain text.
+  purpose: String!
+  # The token's name, or the client label when the name can't be found.
+  requester: String!
+}
+
+# The caller's own pending, unexpired uses with one run id.
+type SecretUseRun {
+  runId: ID!
+  uses: [SecretUse!]!
+  # When the session's second factor stops covering an approval; 0 when it doesn't now.
+  mfaFreshUntilUnix: Int!
+}
+
+enum SecretUseDecision {
+  APPROVE
+  DENY
+}
+
+# Why one use in a batch wasn't decided.
+enum SecretUseRefusal {
+  EXPIRED
+  ALREADY_DECIDED
+  NOT_FOUND
+  NOT_PERMITTED
+  UNAVAILABLE
+}
+
+type SecretUseOutcome {
+  id: ID!
+  decided: Boolean!
+  # Set when decided.
+  use: SecretUse
+  # Set when refused.
+  reason: SecretUseRefusal
+}
+
+type DecideSecretUsesResult {
+  # One per distinct id, in request order.
+  outcomes: [SecretUseOutcome!]!
 }
 
 type UseGrantProgram {
@@ -780,6 +822,8 @@ type Query {
   myTokens: [UserToken!]!
   # Uses your personal tokens are waiting for you to approve.
   pendingSecretUses: [SecretUse!]!
+  # Your pending uses from one agent run.
+  secretUseRun(runId: ID!): SecretUseRun!
   # Your use grants.
   useGrants: [UseGrant!]!
   # Site-admin: another user's personal tokens.
@@ -1001,6 +1045,11 @@ type Mutation {
   revokeMyToken(id: ID!): UserToken!
   # Approving needs a fresh second factor; denying does not.
   decideSecretUse(id: ID!, approve: Boolean!, factor: FactorInput): SecretUse!
+  # Decide 1 to 20 of your pending uses at once, each through the single-use
+  # path with its own checks and audit. APPROVE needs a session factor within
+  # MFA_MAX_AGE or a factor here, checked once; DENY needs neither. A refused
+  # item doesn't stop the others.
+  decideSecretUses(ids: [ID!]!, decision: SecretUseDecision!, factor: FactorInput): DecideSecretUsesResult!
   # Creating a grant needs a fresh second factor and one of your own tokens.
   createUseGrant(input: UseGrantInput!, factor: FactorInput!): UseGrant!
   revokeUseGrant(id: ID!): UseGrant!

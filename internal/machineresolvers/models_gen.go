@@ -125,6 +125,7 @@ type SecretUse struct {
 	ExpiresAtUnix int      `json:"expiresAtUnix"`
 	ApprovalURL   string   `json:"approvalUrl"`
 	Reveal        bool     `json:"reveal"`
+	RunID         *string  `json:"runId,omitempty"`
 }
 
 type TypeChangeAutomation struct {

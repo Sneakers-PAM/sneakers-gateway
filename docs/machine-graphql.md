@@ -21,6 +21,16 @@
 
 `targetsForPrincipal(query, connectionId)` lists the targets the caller can see, each with `sshHostKeys` (the pinned SSH host keys; `[]` when not pinned). `saveTargetForPrincipal(input)` creates or updates one; `sshHostKeys` in the input is the whole pin list, left out to keep the current pins. Changing the pins needs a human site admin, so a token gets `PermissionDenied` if it sends a different list. See [api.md](api.md#targets-and-ssh-host-keys).
 
+## Secret uses
+
+Personal tokens only. `prepareSecretUse(secretId, fieldKey, argv, clientLabel, reveal, runId, purpose)` asks to use one field for the exact command in `argv` (or, with `reveal: true`, for the value itself); `secretUse(id)` polls it and `redeemSecretUse(id)` collects the value once, after approval.
+
+- `runId` (optional, `[A-Za-z0-9_-]{1,64}`) groups the uses one agent run raises so the owner decides them on one page; pass the same one on every request of one task. It groups for display only and grants nothing.
+- `purpose` (optional, at most 200 characters of plain text, no control characters) is the agent's own words for its task, shown to the owner.
+- Vault checks both. A bad `argv`, `runId` or `purpose` is `INVALID_ARGUMENT` with reason `SECRET_USE_REQUEST_INVALID` (domain `sneakers.gateway`) and vault's message, which names the field.
+- `secretUseRun(runId)` lists this token's own pending uses in that run, so an agent can show what is still waiting.
+- `SecretUse.runId` is the use's run, null without one. `approvalUrl` is `<OAUTH_PUBLIC_URL>/approvals`, or `<OAUTH_PUBLIC_URL>/approvals/run/<runId>` for a use with a run id while `APPROVAL_RUN_LINKS` is on (see [configuration.md](configuration.md)).
+
 ## Change type
 
 `changeSecretTypeForPrincipal(id, newTypeId, fieldMapping, fields)` needs Author on the secret and returns `TypeChangedSecret { secret, fieldKeys, movedToNotesKeys, automation }`. `movedToNotesKeys` lists the old field keys (never values) whose values had no field in the new type and were appended to its notes field. Vault applies the value rules: nothing is dropped, sensitive values only move into sensitive fields, and the prior values stay in version history. Any type may be converted into or out of any other, including rotation/heartbeat types (AD, Windows, database accounts) and the certificate type. Dropping checkout from a plain checkout type is still refused.

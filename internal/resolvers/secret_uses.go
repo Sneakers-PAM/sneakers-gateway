@@ -16,7 +16,10 @@ import (
 // Matches the bff login purpose so one emailed code serves any factor check.
 const mfaEmailPurpose = "login"
 
-var errFactorRequired = errors.New("a fresh second factor is required")
+var (
+	errFactorRequired    = errors.New("a fresh second factor is required")
+	errFactorNotAccepted = errors.New("second factor was not accepted")
+)
 
 // requireFactor refuses before vault is asked: releasing a secret to a token,
 // or pre-approving that, must be the human at the keyboard, not a stolen session.
@@ -45,7 +48,7 @@ func (r *Resolver) requireFactor(ctx context.Context, userID string, f *FactorIn
 		return err
 	}
 	if !ok {
-		return errors.New("second factor was not accepted")
+		return errFactorNotAccepted
 	}
 	return nil
 }
@@ -72,12 +75,17 @@ func (r *Resolver) ownsToken(ctx context.Context, userID, tokenID string) (bool,
 }
 
 func secretUseOf(u *vaultv1.SecretUse) *SecretUse {
-	return &SecretUse{
+	out := &SecretUse{
 		ID: u.GetId(), SecretName: u.GetSecretName(), FieldKey: u.GetFieldKey(),
 		Argv: append([]string{}, u.GetArgv()...), ClientLabel: u.GetClientLabel(), Reveal: u.GetReveal(),
 		State:         strings.TrimPrefix(u.GetState().String(), "SECRET_USE_STATE_"),
 		ExpiresAtUnix: safeconv.IntFromInt64(u.GetExpiresAtUnix()),
+		Purpose:       u.GetPurpose(), Requester: u.GetClientLabel(),
 	}
+	if id := u.GetRunId(); id != "" {
+		out.RunID = &id
+	}
+	return out
 }
 
 func useGrantOf(g *vaultv1.UseGrant) *UseGrant {

@@ -132,6 +132,49 @@ reveal or check-out needs a step-up. Where a reveal needs one is set globally by
 (`inherit`, `require` or `off`, shown as `Folder.revealStepUp`; inherited down the tree; site
 admins only). Machine callers never carry the time.
 
+### Pending secret uses and runs
+
+A personal token asks to use a secret field with the machine `prepareSecretUse`; when the secret
+needs approval the use waits, `PENDING`, for its owner. An agent groups the uses it raises in one
+task under a run id (`prepareSecretUse(runId, purpose)`, see
+[machine-graphql.md](machine-graphql.md#secret-uses)), so the owner decides them on one page with
+one factor. Service accounts have no pending uses.
+
+- `pendingSecretUses` lists all the caller's pending uses; `secretUseRun(runId)` lists the ones of
+  one run, with `mfaFreshUntilUnix`, the time the session's second factor stops covering an
+  approval (`0` when it doesn't now; the window is `MFA_MAX_AGE`), so the page can hide the factor
+  input while it's open. The run lists only the signed-in owner's own uses.
+- `SecretUse` carries `runId` (null without one), `purpose` (the agent's own words, empty without
+  them; show them as plain text, never as product copy) and `requester` (the token's name from
+  identity, or the use's client label when identity can't say).
+- `decideSecretUse(id, approve, factor)` decides one use. Approving needs `factor`.
+- `decideSecretUses(ids, decision, factor)` decides 1 to 20 distinct ids (a repeated id is decided
+  once) and returns one `SecretUseOutcome` per id, in request order: `decided` with the `use`, or
+  a `reason`. `APPROVE` needs the session's second factor within `MFA_MAX_AGE` (prove it with
+  `POST /auth/mfa/step-up`, which also opens the window for a follow-up batch) or a `factor` here,
+  checked once for the batch and opening no window. `DENY` needs neither. Every id still goes
+  through the vault's single-use `DecideSecretUse`, one at a time in request order, with its own
+  checks and audit event; a refused item never stops the others.
+
+A refused item's `reason`:
+
+| `reason` | Meaning |
+|---|---|
+| `EXPIRED` | The use expired before it was decided. |
+| `ALREADY_DECIDED` | The use was already approved, denied or redeemed. |
+| `NOT_FOUND` | No such use. |
+| `NOT_PERMITTED` | The use isn't the caller's to decide. |
+| `UNAVAILABLE` | The vault couldn't decide it now; try again. |
+
+The whole batch fails, deciding nothing, only for these (domain `sneakers.gateway`), or for a
+caller who isn't signed in:
+
+| `code` | `reason` | Meaning |
+|---|---|---|
+| `INVALID_ARGUMENT` | `BATCH_SIZE_INVALID` | No ids, or more than 20 distinct ones. Checked before the factor. |
+| `FAILED_PRECONDITION` | `STEP_UP_REQUIRED` | `APPROVE` without a `factor` and outside the session's window: step up and retry. |
+| `UNAUTHENTICATED` | `FACTOR_NOT_ACCEPTED` | The `factor` given was wrong. |
+
 ### Recovery
 
 A secret's prior values are a separate recovery surface. `secretVersions` lists the versions and
