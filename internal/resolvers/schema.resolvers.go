@@ -222,15 +222,19 @@ func (r *mutationResolver) RestoreSecretVersion(ctx context.Context, secretID st
 // BreakGlassSecret is the resolver for the breakGlassSecret field: a TOTP MFA
 // step-up in front of the vault's emergency-access reveal. The vault call is
 // only made once the acting user's current code has been verified against
-// their confirmed factor; a missing/invalid code never reaches the vault.
+// their confirmed factor; a missing/invalid code never reaches the vault and is
+// refused with UNAUTHENTICATED, reason BREAK_GLASS_CODE_INVALID.
 func (r *mutationResolver) BreakGlassSecret(ctx context.Context, secretID string, reason string, code string) ([]*KeyValue, error) {
 	actor := actorOf(ctx)
+	if code == "" {
+		return nil, errBreakGlassCodeInvalid()
+	}
 	vr, err := r.Identity.VerifyTotp(ctx, &identityv1.VerifyTotpRequest{UserId: actor.GetUserId(), Code: code})
 	if err != nil {
 		return nil, err
 	}
 	if !vr.GetOk() {
-		return nil, fmt.Errorf("invalid or missing MFA code")
+		return nil, errBreakGlassCodeInvalid()
 	}
 	resp, err := r.Vault.BreakGlassSecret(ctx, &vaultv1.BreakGlassSecretRequest{Actor: actor, SecretId: secretID, Reason: reason})
 	if err != nil {

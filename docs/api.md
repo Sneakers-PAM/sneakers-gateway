@@ -65,6 +65,13 @@ reason `STEP_UP_REQUIRED` (domain `sneakers.vault`): the client runs a step-up a
 group rule in `setFolderRuleset` or `setSecretRuleset` without `subjectId` is refused with
 `GROUP_ID_REQUIRED`.
 
+The gateway checks the break-glass MFA code itself, before the vault is called, so that refusal
+comes from domain `sneakers.gateway`:
+
+| Mutation | `code` | `reason` | Meaning |
+|---|---|---|---|
+| `breakGlassSecret` | `UNAUTHENTICATED` | `BREAK_GLASS_CODE_INVALID` | The TOTP code is wrong, missing or expired. Identity doesn't say which, so neither does the reason. Ask for a fresh code. |
+
 Other vault reasons a client may see (domain `sneakers.vault`):
 
 | `code` | `reason` | Meaning |
