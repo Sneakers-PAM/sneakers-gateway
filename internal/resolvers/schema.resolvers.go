@@ -767,7 +767,12 @@ func (r *mutationResolver) DecideSecretUse(ctx context.Context, id string, appro
 	if err != nil {
 		return nil, err
 	}
-	return secretUseOf(resp.GetUse()), nil
+	return withRequester(secretUseOf(resp.GetUse()), resp.GetUse(), r.tokenNames(ctx, me)), nil
+}
+
+// DecideSecretUses is the resolver for the decideSecretUses field.
+func (r *mutationResolver) DecideSecretUses(ctx context.Context, ids []string, decision SecretUseDecision, factor *FactorInput) (*DecideSecretUsesResult, error) {
+	return r.decideSecretUses(ctx, ids, decision, factor)
 }
 
 // CreateUseGrant is the resolver for the createUseGrant field.
@@ -1574,18 +1579,25 @@ func (r *queryResolver) MyTokens(ctx context.Context) ([]*UserToken, error) {
 
 // PendingSecretUses is the resolver for the pendingSecretUses field.
 func (r *queryResolver) PendingSecretUses(ctx context.Context) ([]*SecretUse, error) {
-	if _, err := signedIn(ctx); err != nil {
+	me, err := signedIn(ctx)
+	if err != nil {
 		return nil, err
 	}
 	resp, err := r.Vault.ListPendingSecretUses(ctx, &vaultv1.ListPendingSecretUsesRequest{Actor: actorOf(ctx)})
 	if err != nil {
 		return nil, err
 	}
+	names := r.tokenNames(ctx, me)
 	out := make([]*SecretUse, 0, len(resp.GetUses()))
 	for _, u := range resp.GetUses() {
-		out = append(out, secretUseOf(u))
+		out = append(out, withRequester(secretUseOf(u), u, names))
 	}
 	return out, nil
+}
+
+// SecretUseRun is the resolver for the secretUseRun field.
+func (r *queryResolver) SecretUseRun(ctx context.Context, runID string) (*SecretUseRun, error) {
+	return r.secretUseRun(ctx, runID)
 }
 
 // UseGrants is the resolver for the useGrants field.

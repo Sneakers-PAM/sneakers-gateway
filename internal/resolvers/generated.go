@@ -136,6 +136,10 @@ type ComplexityRoot struct {
 		UseTLS      func(childComplexity int) int
 	}
 
+	DecideSecretUsesResult struct {
+		Outcomes func(childComplexity int) int
+	}
+
 	DependencyState struct {
 		Error    func(childComplexity int) int
 		Name     func(childComplexity int) int
@@ -277,6 +281,7 @@ type ComplexityRoot struct {
 		CreateServiceAccount     func(childComplexity int, name string, description string) int
 		CreateUseGrant           func(childComplexity int, input UseGrantInput, factor FactorInput) int
 		DecideSecretUse          func(childComplexity int, id string, approve bool, factor *FactorInput) int
+		DecideSecretUses         func(childComplexity int, ids []string, decision SecretUseDecision, factor *FactorInput) int
 		DeleteConnection         func(childComplexity int, id string) int
 		DeleteFolder             func(childComplexity int, id string, reassignToID *string) int
 		DeletePasswordPolicy     func(childComplexity int, id string) int
@@ -396,6 +401,7 @@ type ComplexityRoot struct {
 		SecretRuleset             func(childComplexity int, secretID string) int
 		SecretStats               func(childComplexity int) int
 		SecretTypes               func(childComplexity int) int
+		SecretUseRun              func(childComplexity int, runID string) int
 		SecretVersions            func(childComplexity int, secretID string) int
 		SecretsByStatus           func(childComplexity int, status string) int
 		SecretsInFolder           func(childComplexity int, folderID string, includeRetired *bool) int
@@ -511,9 +517,25 @@ type ComplexityRoot struct {
 		ExpiresAtUnix func(childComplexity int) int
 		FieldKey      func(childComplexity int) int
 		ID            func(childComplexity int) int
+		Purpose       func(childComplexity int) int
+		Requester     func(childComplexity int) int
 		Reveal        func(childComplexity int) int
+		RunID         func(childComplexity int) int
 		SecretName    func(childComplexity int) int
 		State         func(childComplexity int) int
+	}
+
+	SecretUseOutcome struct {
+		Decided func(childComplexity int) int
+		ID      func(childComplexity int) int
+		Reason  func(childComplexity int) int
+		Use     func(childComplexity int) int
+	}
+
+	SecretUseRun struct {
+		MfaFreshUntilUnix func(childComplexity int) int
+		RunID             func(childComplexity int) int
+		Uses              func(childComplexity int) int
 	}
 
 	SecretVersion struct {
@@ -677,6 +699,7 @@ type MutationResolver interface {
 	SetUserDisabled(ctx context.Context, userID string, disabled bool) (*User, error)
 	RevokeMyToken(ctx context.Context, id string) (*UserToken, error)
 	DecideSecretUse(ctx context.Context, id string, approve bool, factor *FactorInput) (*SecretUse, error)
+	DecideSecretUses(ctx context.Context, ids []string, decision SecretUseDecision, factor *FactorInput) (*DecideSecretUsesResult, error)
 	CreateUseGrant(ctx context.Context, input UseGrantInput, factor FactorInput) (*UseGrant, error)
 	RevokeUseGrant(ctx context.Context, id string) (*UseGrant, error)
 	SendMfaEmailCode(ctx context.Context) (bool, error)
@@ -737,6 +760,7 @@ type QueryResolver interface {
 	APITokens(ctx context.Context, serviceAccountID string) ([]*APIToken, error)
 	MyTokens(ctx context.Context) ([]*UserToken, error)
 	PendingSecretUses(ctx context.Context) ([]*SecretUse, error)
+	SecretUseRun(ctx context.Context, runID string) (*SecretUseRun, error)
 	UseGrants(ctx context.Context) ([]*UseGrant, error)
 	UserTokens(ctx context.Context, userID string) ([]*UserToken, error)
 	Diagnostics(ctx context.Context) (*Diagnostics, error)
@@ -1188,6 +1212,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Connection.UseTLS(childComplexity), true
+
+	case "DecideSecretUsesResult.outcomes":
+		if e.ComplexityRoot.DecideSecretUsesResult.Outcomes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DecideSecretUsesResult.Outcomes(childComplexity), true
 
 	case "DependencyState.error":
 		if e.ComplexityRoot.DependencyState.Error == nil {
@@ -1857,6 +1888,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DecideSecretUse(childComplexity, args["id"].(string), args["approve"].(bool), args["factor"].(*FactorInput)), true
+	case "Mutation.decideSecretUses":
+		if e.ComplexityRoot.Mutation.DecideSecretUses == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_decideSecretUses_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DecideSecretUses(childComplexity, args["ids"].([]string), args["decision"].(SecretUseDecision), args["factor"].(*FactorInput)), true
 	case "Mutation.deleteConnection":
 		if e.ComplexityRoot.Mutation.DeleteConnection == nil {
 			break
@@ -2834,6 +2876,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SecretTypes(childComplexity), true
+	case "Query.secretUseRun":
+		if e.ComplexityRoot.Query.SecretUseRun == nil {
+			break
+		}
+
+		args, err := ec.field_Query_secretUseRun_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SecretUseRun(childComplexity, args["runId"].(string)), true
 	case "Query.secretVersions":
 		if e.ComplexityRoot.Query.SecretVersions == nil {
 			break
@@ -3421,12 +3474,30 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretUse.ID(childComplexity), true
+	case "SecretUse.purpose":
+		if e.ComplexityRoot.SecretUse.Purpose == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUse.Purpose(childComplexity), true
+	case "SecretUse.requester":
+		if e.ComplexityRoot.SecretUse.Requester == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUse.Requester(childComplexity), true
 	case "SecretUse.reveal":
 		if e.ComplexityRoot.SecretUse.Reveal == nil {
 			break
 		}
 
 		return e.ComplexityRoot.SecretUse.Reveal(childComplexity), true
+	case "SecretUse.runId":
+		if e.ComplexityRoot.SecretUse.RunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUse.RunID(childComplexity), true
 	case "SecretUse.secretName":
 		if e.ComplexityRoot.SecretUse.SecretName == nil {
 			break
@@ -3439,6 +3510,50 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretUse.State(childComplexity), true
+
+	case "SecretUseOutcome.decided":
+		if e.ComplexityRoot.SecretUseOutcome.Decided == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUseOutcome.Decided(childComplexity), true
+	case "SecretUseOutcome.id":
+		if e.ComplexityRoot.SecretUseOutcome.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUseOutcome.ID(childComplexity), true
+	case "SecretUseOutcome.reason":
+		if e.ComplexityRoot.SecretUseOutcome.Reason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUseOutcome.Reason(childComplexity), true
+	case "SecretUseOutcome.use":
+		if e.ComplexityRoot.SecretUseOutcome.Use == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUseOutcome.Use(childComplexity), true
+
+	case "SecretUseRun.mfaFreshUntilUnix":
+		if e.ComplexityRoot.SecretUseRun.MfaFreshUntilUnix == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUseRun.MfaFreshUntilUnix(childComplexity), true
+	case "SecretUseRun.runId":
+		if e.ComplexityRoot.SecretUseRun.RunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUseRun.RunID(childComplexity), true
+	case "SecretUseRun.uses":
+		if e.ComplexityRoot.SecretUseRun.Uses == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUseRun.Uses(childComplexity), true
 
 	case "SecretVersion.active":
 		if e.ComplexityRoot.SecretVersion.Active == nil {
@@ -4597,6 +4712,48 @@ type SecretUse {
   expiresAtUnix: Int!
   # The value goes to the token itself, not to a command; argv is empty.
   reveal: Boolean!
+  # Groups the uses one agent run raised. A display hint from the agent, never an authority.
+  runId: ID
+  # The agent's own words for its task, empty when it gave none. Show it as plain text.
+  purpose: String!
+  # The token's name, or the client label when the name can't be found.
+  requester: String!
+}
+
+# The caller's own pending, unexpired uses with one run id.
+type SecretUseRun {
+  runId: ID!
+  uses: [SecretUse!]!
+  # When the session's second factor stops covering an approval; 0 when it doesn't now.
+  mfaFreshUntilUnix: Int!
+}
+
+enum SecretUseDecision {
+  APPROVE
+  DENY
+}
+
+# Why one use in a batch wasn't decided.
+enum SecretUseRefusal {
+  EXPIRED
+  ALREADY_DECIDED
+  NOT_FOUND
+  NOT_PERMITTED
+  UNAVAILABLE
+}
+
+type SecretUseOutcome {
+  id: ID!
+  decided: Boolean!
+  # Set when decided.
+  use: SecretUse
+  # Set when refused.
+  reason: SecretUseRefusal
+}
+
+type DecideSecretUsesResult {
+  # One per distinct id, in request order.
+  outcomes: [SecretUseOutcome!]!
 }
 
 type UseGrantProgram {
@@ -4761,6 +4918,8 @@ type Query {
   myTokens: [UserToken!]!
   # Uses your personal tokens are waiting for you to approve.
   pendingSecretUses: [SecretUse!]!
+  # Your pending uses from one agent run.
+  secretUseRun(runId: ID!): SecretUseRun!
   # Your use grants.
   useGrants: [UseGrant!]!
   # Site-admin: another user's personal tokens.
@@ -4982,6 +5141,11 @@ type Mutation {
   revokeMyToken(id: ID!): UserToken!
   # Approving needs a fresh second factor; denying does not.
   decideSecretUse(id: ID!, approve: Boolean!, factor: FactorInput): SecretUse!
+  # Decide 1 to 20 of your pending uses at once, each through the single-use
+  # path with its own checks and audit. APPROVE needs a session factor within
+  # MFA_MAX_AGE or a factor here, checked once; DENY needs neither. A refused
+  # item doesn't stop the others.
+  decideSecretUses(ids: [ID!]!, decision: SecretUseDecision!, factor: FactorInput): DecideSecretUsesResult!
   # Creating a grant needs a fresh second factor and one of your own tokens.
   createUseGrant(input: UseGrantInput!, factor: FactorInput!): UseGrant!
   revokeUseGrant(id: ID!): UseGrant!
@@ -5260,6 +5424,14 @@ func (ec *executionContext) childFields_Connection(ctx context.Context, field gr
 		return ec.fieldContext_Connection_targetCount(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Connection", field.Name)
+}
+
+func (ec *executionContext) childFields_DecideSecretUsesResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "outcomes":
+		return ec.fieldContext_DecideSecretUsesResult_outcomes(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type DecideSecretUsesResult", field.Name)
 }
 
 func (ec *executionContext) childFields_DependencyState(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -5770,8 +5942,40 @@ func (ec *executionContext) childFields_SecretUse(ctx context.Context, field gra
 		return ec.fieldContext_SecretUse_expiresAtUnix(ctx, field)
 	case "reveal":
 		return ec.fieldContext_SecretUse_reveal(ctx, field)
+	case "runId":
+		return ec.fieldContext_SecretUse_runId(ctx, field)
+	case "purpose":
+		return ec.fieldContext_SecretUse_purpose(ctx, field)
+	case "requester":
+		return ec.fieldContext_SecretUse_requester(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecretUse", field.Name)
+}
+
+func (ec *executionContext) childFields_SecretUseOutcome(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_SecretUseOutcome_id(ctx, field)
+	case "decided":
+		return ec.fieldContext_SecretUseOutcome_decided(ctx, field)
+	case "use":
+		return ec.fieldContext_SecretUseOutcome_use(ctx, field)
+	case "reason":
+		return ec.fieldContext_SecretUseOutcome_reason(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SecretUseOutcome", field.Name)
+}
+
+func (ec *executionContext) childFields_SecretUseRun(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "runId":
+		return ec.fieldContext_SecretUseRun_runId(ctx, field)
+	case "uses":
+		return ec.fieldContext_SecretUseRun_uses(ctx, field)
+	case "mfaFreshUntilUnix":
+		return ec.fieldContext_SecretUseRun_mfaFreshUntilUnix(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SecretUseRun", field.Name)
 }
 
 func (ec *executionContext) childFields_SecretVersion(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -6571,6 +6775,36 @@ func (ec *executionContext) field_Mutation_decideSecretUse_args(ctx context.Cont
 		return nil, err
 	}
 	args["approve"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "factor",
+		func(ctx context.Context, v any) (*FactorInput, error) {
+			return ec.unmarshalOFactorInput2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFactorInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["factor"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_decideSecretUses_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "ids",
+		func(ctx context.Context, v any) ([]string, error) {
+			return ec.unmarshalNID2ᚕstringᚄ(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["ids"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "decision",
+		func(ctx context.Context, v any) (SecretUseDecision, error) {
+			return ec.unmarshalNSecretUseDecision2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseDecision(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["decision"] = arg1
 	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "factor",
 		func(ctx context.Context, v any) (*FactorInput, error) {
 			return ec.unmarshalOFactorInput2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFactorInput(ctx, v)
@@ -7847,6 +8081,20 @@ func (ec *executionContext) field_Query_secretRuleset_args(ctx context.Context, 
 		return nil, err
 	}
 	args["secretId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_secretUseRun_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "runId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["runId"] = arg0
 	return args, nil
 }
 
@@ -9743,6 +9991,38 @@ func (ec *executionContext) _Connection_targetCount(ctx context.Context, field g
 }
 func (ec *executionContext) fieldContext_Connection_targetCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Connection", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _DecideSecretUsesResult_outcomes(ctx context.Context, field graphql.CollectedField, obj *DecideSecretUsesResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DecideSecretUsesResult_outcomes(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Outcomes, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*SecretUseOutcome) graphql.Marshaler {
+			return ec.marshalNSecretUseOutcome2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseOutcomeᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DecideSecretUsesResult_outcomes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DecideSecretUsesResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretUseOutcome(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _DependencyState_name(ctx context.Context, field graphql.CollectedField, obj *DependencyState) (ret graphql.Marshaler) {
@@ -13994,6 +14274,50 @@ func (ec *executionContext) fieldContext_Mutation_decideSecretUse(ctx context.Co
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_decideSecretUses(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_decideSecretUses(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DecideSecretUses(ctx, fc.Args["ids"].([]string), fc.Args["decision"].(SecretUseDecision), fc.Args["factor"].(*FactorInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *DecideSecretUsesResult) graphql.Marshaler {
+			return ec.marshalNDecideSecretUsesResult2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDecideSecretUsesResult(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_decideSecretUses(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DecideSecretUsesResult(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_decideSecretUses_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_createUseGrant(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -16845,6 +17169,50 @@ func (ec *executionContext) fieldContext_Query_pendingSecretUses(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_secretUseRun(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_secretUseRun(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SecretUseRun(ctx, fc.Args["runId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *SecretUseRun) graphql.Marshaler {
+			return ec.marshalNSecretUseRun2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseRun(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_secretUseRun(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretUseRun(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_secretUseRun_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_useGrants(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -18811,6 +19179,254 @@ func (ec *executionContext) _SecretUse_reveal(ctx context.Context, field graphql
 }
 func (ec *executionContext) fieldContext_SecretUse_reveal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SecretUse", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _SecretUse_runId(ctx context.Context, field graphql.CollectedField, obj *SecretUse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUse_runId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RunID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOID2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUse_runId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretUse", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _SecretUse_purpose(ctx context.Context, field graphql.CollectedField, obj *SecretUse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUse_purpose(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Purpose, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUse_purpose(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretUse", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretUse_requester(ctx context.Context, field graphql.CollectedField, obj *SecretUse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUse_requester(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Requester, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUse_requester(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretUse", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretUseOutcome_id(ctx context.Context, field graphql.CollectedField, obj *SecretUseOutcome) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUseOutcome_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUseOutcome_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretUseOutcome", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _SecretUseOutcome_decided(ctx context.Context, field graphql.CollectedField, obj *SecretUseOutcome) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUseOutcome_decided(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Decided, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUseOutcome_decided(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretUseOutcome", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _SecretUseOutcome_use(ctx context.Context, field graphql.CollectedField, obj *SecretUseOutcome) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUseOutcome_use(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Use, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *SecretUse) graphql.Marshaler {
+			return ec.marshalOSecretUse2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUse(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUseOutcome_use(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SecretUseOutcome",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretUse(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SecretUseOutcome_reason(ctx context.Context, field graphql.CollectedField, obj *SecretUseOutcome) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUseOutcome_reason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Reason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *SecretUseRefusal) graphql.Marshaler {
+			return ec.marshalOSecretUseRefusal2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseRefusal(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUseOutcome_reason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretUseOutcome", field, false, false, errors.New("field of type SecretUseRefusal does not have child fields"))
+}
+
+func (ec *executionContext) _SecretUseRun_runId(ctx context.Context, field graphql.CollectedField, obj *SecretUseRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUseRun_runId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RunID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUseRun_runId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretUseRun", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _SecretUseRun_uses(ctx context.Context, field graphql.CollectedField, obj *SecretUseRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUseRun_uses(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Uses, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*SecretUse) graphql.Marshaler {
+			return ec.marshalNSecretUse2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUseRun_uses(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SecretUseRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretUse(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SecretUseRun_mfaFreshUntilUnix(ctx context.Context, field graphql.CollectedField, obj *SecretUseRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUseRun_mfaFreshUntilUnix(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MfaFreshUntilUnix, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUseRun_mfaFreshUntilUnix(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretUseRun", field, false, false, errors.New("field of type Int does not have child fields"))
 }
 
 func (ec *executionContext) _SecretVersion_versionNo(ctx context.Context, field graphql.CollectedField, obj *SecretVersion) (ret graphql.Marshaler) {
@@ -23055,6 +23671,45 @@ func (ec *executionContext) _Connection(ctx context.Context, sel ast.SelectionSe
 	return out
 }
 
+var decideSecretUsesResultImplementors = []string{"DecideSecretUsesResult"}
+
+func (ec *executionContext) _DecideSecretUsesResult(ctx context.Context, sel ast.SelectionSet, obj *DecideSecretUsesResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, decideSecretUsesResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DecideSecretUsesResult")
+		case "outcomes":
+			out.Values[i] = ec._DecideSecretUsesResult_outcomes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var dependencyStateImplementors = []string{"DependencyState"}
 
 func (ec *executionContext) _DependencyState(ctx context.Context, sel ast.SelectionSet, obj *DependencyState) graphql.Marshaler {
@@ -24323,6 +24978,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "decideSecretUse":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_decideSecretUse(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "decideSecretUses":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_decideSecretUses(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -25623,6 +26285,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "secretUseRun":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_secretUseRun(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "useGrants":
 			field := field
 
@@ -26290,6 +26974,115 @@ func (ec *executionContext) _SecretUse(ctx context.Context, sel ast.SelectionSet
 			}
 		case "reveal":
 			out.Values[i] = ec._SecretUse_reveal(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "runId":
+			out.Values[i] = ec._SecretUse_runId(ctx, field, obj)
+		case "purpose":
+			out.Values[i] = ec._SecretUse_purpose(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requester":
+			out.Values[i] = ec._SecretUse_requester(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var secretUseOutcomeImplementors = []string{"SecretUseOutcome"}
+
+func (ec *executionContext) _SecretUseOutcome(ctx context.Context, sel ast.SelectionSet, obj *SecretUseOutcome) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, secretUseOutcomeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SecretUseOutcome")
+		case "id":
+			out.Values[i] = ec._SecretUseOutcome_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "decided":
+			out.Values[i] = ec._SecretUseOutcome_decided(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "use":
+			out.Values[i] = ec._SecretUseOutcome_use(ctx, field, obj)
+		case "reason":
+			out.Values[i] = ec._SecretUseOutcome_reason(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var secretUseRunImplementors = []string{"SecretUseRun"}
+
+func (ec *executionContext) _SecretUseRun(ctx context.Context, sel ast.SelectionSet, obj *SecretUseRun) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, secretUseRunImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SecretUseRun")
+		case "runId":
+			out.Values[i] = ec._SecretUseRun_runId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "uses":
+			out.Values[i] = ec._SecretUseRun_uses(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mfaFreshUntilUnix":
+			out.Values[i] = ec._SecretUseRun_mfaFreshUntilUnix(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -27586,6 +28379,20 @@ func (ec *executionContext) unmarshalNCreateSecretInput2githubᚗcomᚋSneakers�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNDecideSecretUsesResult2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDecideSecretUsesResult(ctx context.Context, sel ast.SelectionSet, v DecideSecretUsesResult) graphql.Marshaler {
+	return ec._DecideSecretUsesResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDecideSecretUsesResult2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDecideSecretUsesResult(ctx context.Context, sel ast.SelectionSet, v *DecideSecretUsesResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DecideSecretUsesResult(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNDependencyHealth2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDependencyHealth(ctx context.Context, v any) (DependencyHealth, error) {
 	var res DependencyHealth
 	err := res.UnmarshalGQL(v)
@@ -28421,6 +29228,56 @@ func (ec *executionContext) marshalNSecretUse2ᚖgithubᚗcomᚋSneakersᚑPAM�
 	return ec._SecretUse(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNSecretUseDecision2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseDecision(ctx context.Context, v any) (SecretUseDecision, error) {
+	var res SecretUseDecision
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSecretUseDecision2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseDecision(ctx context.Context, sel ast.SelectionSet, v SecretUseDecision) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNSecretUseOutcome2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseOutcomeᚄ(ctx context.Context, sel ast.SelectionSet, v []*SecretUseOutcome) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNSecretUseOutcome2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseOutcome(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNSecretUseOutcome2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseOutcome(ctx context.Context, sel ast.SelectionSet, v *SecretUseOutcome) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SecretUseOutcome(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNSecretUseRun2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseRun(ctx context.Context, sel ast.SelectionSet, v SecretUseRun) graphql.Marshaler {
+	return ec._SecretUseRun(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSecretUseRun2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseRun(ctx context.Context, sel ast.SelectionSet, v *SecretUseRun) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SecretUseRun(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNSecretVersion2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretVersionᚄ(ctx context.Context, sel ast.SelectionSet, v []*SecretVersion) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -29164,6 +30021,29 @@ func (ec *executionContext) marshalOSecret2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsn
 		return graphql.Null
 	}
 	return ec._Secret(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOSecretUse2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUse(ctx context.Context, sel ast.SelectionSet, v *SecretUse) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._SecretUse(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOSecretUseRefusal2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseRefusal(ctx context.Context, v any) (*SecretUseRefusal, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(SecretUseRefusal)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOSecretUseRefusal2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseRefusal(ctx context.Context, sel ast.SelectionSet, v *SecretUseRefusal) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalOString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {

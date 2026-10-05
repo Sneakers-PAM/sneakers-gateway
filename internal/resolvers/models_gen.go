@@ -127,6 +127,10 @@ type CreateSecretInput struct {
 	Fields    []*KeyValueInput `json:"fields"`
 }
 
+type DecideSecretUsesResult struct {
+	Outcomes []*SecretUseOutcome `json:"outcomes"`
+}
+
 type DependencyState struct {
 	Name     string           `json:"name"`
 	State    DependencyHealth `json:"state"`
@@ -450,6 +454,22 @@ type SecretUse struct {
 	State         string   `json:"state"`
 	ExpiresAtUnix int      `json:"expiresAtUnix"`
 	Reveal        bool     `json:"reveal"`
+	RunID         *string  `json:"runId,omitempty"`
+	Purpose       string   `json:"purpose"`
+	Requester     string   `json:"requester"`
+}
+
+type SecretUseOutcome struct {
+	ID      string            `json:"id"`
+	Decided bool              `json:"decided"`
+	Use     *SecretUse        `json:"use,omitempty"`
+	Reason  *SecretUseRefusal `json:"reason,omitempty"`
+}
+
+type SecretUseRun struct {
+	RunID             string       `json:"runId"`
+	Uses              []*SecretUse `json:"uses"`
+	MfaFreshUntilUnix int          `json:"mfaFreshUntilUnix"`
 }
 
 type SecretVersion struct {
@@ -1356,6 +1376,122 @@ func (e *RotationState) UnmarshalJSON(b []byte) error {
 }
 
 func (e RotationState) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type SecretUseDecision string
+
+const (
+	SecretUseDecisionApprove SecretUseDecision = "APPROVE"
+	SecretUseDecisionDeny    SecretUseDecision = "DENY"
+)
+
+var AllSecretUseDecision = []SecretUseDecision{
+	SecretUseDecisionApprove,
+	SecretUseDecisionDeny,
+}
+
+func (e SecretUseDecision) IsValid() bool {
+	switch e {
+	case SecretUseDecisionApprove, SecretUseDecisionDeny:
+		return true
+	}
+	return false
+}
+
+func (e SecretUseDecision) String() string {
+	return string(e)
+}
+
+func (e *SecretUseDecision) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SecretUseDecision(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SecretUseDecision", str)
+	}
+	return nil
+}
+
+func (e SecretUseDecision) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SecretUseDecision) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SecretUseDecision) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type SecretUseRefusal string
+
+const (
+	SecretUseRefusalExpired        SecretUseRefusal = "EXPIRED"
+	SecretUseRefusalAlreadyDecided SecretUseRefusal = "ALREADY_DECIDED"
+	SecretUseRefusalNotFound       SecretUseRefusal = "NOT_FOUND"
+	SecretUseRefusalNotPermitted   SecretUseRefusal = "NOT_PERMITTED"
+	SecretUseRefusalUnavailable    SecretUseRefusal = "UNAVAILABLE"
+)
+
+var AllSecretUseRefusal = []SecretUseRefusal{
+	SecretUseRefusalExpired,
+	SecretUseRefusalAlreadyDecided,
+	SecretUseRefusalNotFound,
+	SecretUseRefusalNotPermitted,
+	SecretUseRefusalUnavailable,
+}
+
+func (e SecretUseRefusal) IsValid() bool {
+	switch e {
+	case SecretUseRefusalExpired, SecretUseRefusalAlreadyDecided, SecretUseRefusalNotFound, SecretUseRefusalNotPermitted, SecretUseRefusalUnavailable:
+		return true
+	}
+	return false
+}
+
+func (e SecretUseRefusal) String() string {
+	return string(e)
+}
+
+func (e *SecretUseRefusal) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SecretUseRefusal(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SecretUseRefusal", str)
+	}
+	return nil
+}
+
+func (e SecretUseRefusal) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SecretUseRefusal) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SecretUseRefusal) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

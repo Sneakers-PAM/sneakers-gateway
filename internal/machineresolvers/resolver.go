@@ -24,4 +24,8 @@ type Resolver struct {
 	Vault vaultv1.VaultServiceClient
 	// PublicURL is the Sneakers UI base, for the approval link on a secret use.
 	PublicURL string
+	// ApprovalRunLinks points a use's approvalUrl at its run's page,
+	// <PublicURL>/approvals/run/<runId>, when it has a run id
+	// (APPROVAL_RUN_LINKS). Off, every link is <PublicURL>/approvals.
+	ApprovalRunLinks bool
 }

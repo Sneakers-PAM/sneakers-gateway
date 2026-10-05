@@ -147,6 +147,8 @@ type SecretUse {
   expiresAtUnix: Int!
   approvalUrl: String!
   reveal: Boolean!
+  # The run this use belongs to, when the caller gave one.
+  runId: String
 }
 
 type RedeemedSecretUse {
@@ -251,6 +253,10 @@ type Query {
 
   # Poll a use this token prepared.
   secretUse(id: ID!): SecretUse!
+
+  # This token's own pending uses in one run, so an agent can show what is
+  # still waiting. Personal tokens only.
+  secretUseRun(runId: String!): [SecretUse!]!
 }
 
 type Mutation {
@@ -337,7 +343,10 @@ type Mutation {
   # Ask to use one secret field for the exact command in argv. Personal tokens only.
   # reveal: true asks for the value itself (no argv), for a secret that
   # requires token approval.
-  prepareSecretUse(secretId: ID!, fieldKey: String!, argv: [String!], clientLabel: String, reveal: Boolean): SecretUse!
+  # runId ([A-Za-z0-9_-]{1,64}) groups the uses one agent run raises, so the
+  # owner approves them on one page; purpose (at most 200 characters of plain
+  # text) is the agent's own words for its task. Both are optional.
+  prepareSecretUse(secretId: ID!, fieldKey: String!, argv: [String!], clientLabel: String, reveal: Boolean, runId: String, purpose: String): SecretUse!
 
   # Release the value of an approved use, once, to the token that prepared it.
   redeemSecretUse(id: ID!): RedeemedSecretUse!

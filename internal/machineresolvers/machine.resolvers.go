@@ -217,13 +217,13 @@ func (r *mutationResolver) SetSecretAutomationForPrincipal(ctx context.Context, 
 }
 
 // PrepareSecretUse is the resolver for the prepareSecretUse field.
-func (r *mutationResolver) PrepareSecretUse(ctx context.Context, secretID string, fieldKey string, argv []string, clientLabel *string, reveal *bool) (*SecretUse, error) {
+func (r *mutationResolver) PrepareSecretUse(ctx context.Context, secretID string, fieldKey string, argv []string, clientLabel *string, reveal *bool, runID *string, purpose *string) (*SecretUse, error) {
 	resp, err := r.Vault.PrepareSecretUse(ctx, &vaultv1.PrepareSecretUseRequest{
 		Actor: resolvers.MachineActorOf(ctx), SecretId: secretID, FieldKey: fieldKey, Argv: argv, ClientLabel: deref(clientLabel),
-		Reveal: reveal != nil && *reveal,
+		Reveal: reveal != nil && *reveal, RunId: deref(runID), Purpose: deref(purpose),
 	})
 	if err != nil {
-		return nil, err
+		return nil, prepareRefusal(err)
 	}
 	return r.secretUseOf(resp.GetUse()), nil
 }
@@ -344,6 +344,19 @@ func (r *queryResolver) SecretUse(ctx context.Context, id string) (*SecretUse, e
 		return nil, err
 	}
 	return r.secretUseOf(resp.GetUse()), nil
+}
+
+// SecretUseRun is the resolver for the secretUseRun field.
+func (r *queryResolver) SecretUseRun(ctx context.Context, runID string) ([]*SecretUse, error) {
+	resp, err := r.Vault.ListPendingSecretUses(ctx, &vaultv1.ListPendingSecretUsesRequest{Actor: resolvers.MachineActorOf(ctx), RunId: runID})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*SecretUse, 0, len(resp.GetUses()))
+	for _, u := range resp.GetUses() {
+		out = append(out, r.secretUseOf(u))
+	}
+	return out, nil
 }
 
 // Automation is the resolver for the automation field. Vault's response
