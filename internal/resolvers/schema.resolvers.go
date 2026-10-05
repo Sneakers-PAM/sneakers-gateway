@@ -1639,6 +1639,11 @@ func (r *queryResolver) Maintenance(ctx context.Context) (*Maintenance, error) {
 	return m, nil
 }
 
+// Appliance is the resolver for the appliance field.
+func (r *queryResolver) Appliance(ctx context.Context) (*Appliance, error) {
+	return applianceOf(r.Resolver.Appliance), nil
+}
+
 // SecretStats is the resolver for the secretStats subscription: it pushes the
 // acting user's dashboard rollup over the WebSocket. RACI scoping is automatic —
 // actorOf(ctx) carries the socket's authenticated actor (resolved from the

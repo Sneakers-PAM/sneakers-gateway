@@ -93,3 +93,30 @@ func TestOAuthMintsAnMCPToken(t *testing.T) {
 		t.Fatalf("client_kind = %q, want %s", got, ClientKindMCP)
 	}
 }
+
+func TestMachineAPIOffRefusesCLIAndServiceAccountTokens(t *testing.T) {
+	for _, kind := range []string{"cli", ""} {
+		rec, ran := serveMachineRec(&Handler{Identity: userTokenIdentity(kind), MachineAPIDisabled: true}, "snk_u_cli")
+		if ran || rec.Code != http.StatusForbidden || refusalCode(t, rec) != CodeMachineAPIDisabled {
+			t.Fatalf("kind %q: ran=%v status=%d body=%s", kind, ran, rec.Code, rec.Body)
+		}
+		if !strings.Contains(rec.Body.String(), "MACHINE_API_ENABLED") {
+			t.Fatalf("the refusal doesn't name the setting: %s", rec.Body)
+		}
+	}
+	fid := &fakeIdentity{}
+	rec, ran := serveMachineRec(&Handler{Identity: fid, MachineAPIDisabled: true}, "sk_service_account_token")
+	if ran || rec.Code != http.StatusForbidden || refusalCode(t, rec) != CodeMachineAPIDisabled {
+		t.Fatalf("service-account token: ran=%v status=%d body=%s", ran, rec.Code, rec.Body)
+	}
+	if fid.verifyApiTokenReq != nil {
+		t.Fatal("a refused service-account token was still sent to identity")
+	}
+}
+
+func TestMachineAPIOffLeavesMCPAgentTokensToTheMCPSwitch(t *testing.T) {
+	rec, ran := serveMachineRec(&Handler{Identity: userTokenIdentity("mcp"), MachineAPIDisabled: true}, "snk_u_agent")
+	if !ran || rec.Code != http.StatusOK {
+		t.Fatalf("ran=%v status=%d", ran, rec.Code)
+	}
+}

@@ -12,8 +12,18 @@ absent, forbidden, error) is logged once.
 
 ## Keys the gateway reads
 
+The `appliance` query (see [api.md](api.md), "Appliance") returns them; it says `present: false`
+when there is no ConfigMap.
+
 | Key | Values | Effect |
 |---|---|---|
+| `version` | the appliance version | The `appliance` query's `version`. |
+| `productState` | `starting`, `ok`, `degraded`, `down`, `maintenance`, `stopped` | `productState`. |
+| `mcp` | `on`, `off`, `degraded` | `mcp`, for the "MCP: off" notice. |
+| `mcpRevokePending` | `true`, anything else is false | `mcpRevokePending`: the MCP is off but revoking its agent tokens hasn't finished. |
+| `machineApi` | `on`, `off` | `machineApi`. |
+| `tlsMode` | `self-signed`, `upload`, `csr`, `acme` | `tlsMode`, for the "TLS: self-signed" banner. |
+| `tlsNotAfter` | an RFC 3339 time | `tlsNotAfter`, for the expiry warning. |
 | `maintenance` | `on`, anything else is off | `on` puts the gateway in read-only maintenance (see [api.md](api.md), "Maintenance"). `MAINTENANCE_READONLY` turns it on as well, whatever the ConfigMap says. |
 | `maintenanceReason` | free text | Shown as the `maintenance` query's `reason` while it's on. |
 | `sessionsEndedAt` | an RFC 3339 time | Every session issued before it is ended: the next request with it gets the signed-out answer and the session is deleted, on every replica and after a restart. Sessions issued later work, so people can sign in again. The appliance sets it when it enters maintenance. A value that isn't a time is ignored. |

@@ -141,3 +141,25 @@ func TestSessionsEndedAtIsReadAsATime(t *testing.T) {
 		t.Fatal("a nil watcher gave a cutoff")
 	}
 }
+
+func TestPresentFollowsTheConfigMap(t *testing.T) {
+	a, srv := newAPIServer(t)
+	w := newWatcher(t, srv)
+	if w.Present() {
+		t.Fatal("present before any read")
+	}
+	w.Refresh(context.Background())
+	if !w.Present() {
+		t.Fatal("not present after the ConfigMap was found")
+	}
+	a.status.Store(http.StatusForbidden)
+	w.Refresh(context.Background())
+	if !w.Present() {
+		t.Fatal("a refusal dropped the last state")
+	}
+	a.status.Store(http.StatusNotFound)
+	w.Refresh(context.Background())
+	if w.Present() {
+		t.Fatal("still present after the ConfigMap went away")
+	}
+}

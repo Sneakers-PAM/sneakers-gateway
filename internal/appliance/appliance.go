@@ -32,6 +32,13 @@ import (
 
 // The ConfigMap keys the gateway reads (docs/appliance.md).
 const (
+	KeyVersion           = "version"
+	KeyProductState      = "productState"
+	KeyMCP               = "mcp"
+	KeyMCPRevokePending  = "mcpRevokePending"
+	KeyMachineAPI        = "machineApi"
+	KeyTLSMode           = "tlsMode"
+	KeyTLSNotAfter       = "tlsNotAfter"
 	KeyMaintenance       = "maintenance"
 	KeyMaintenanceReason = "maintenanceReason"
 	KeySessionsEndedAt   = "sessionsEndedAt"
@@ -62,6 +69,7 @@ type Watcher struct {
 
 	mu        sync.RWMutex
 	data      map[string]string
+	present   bool
 	lastState string
 }
 
@@ -164,6 +172,17 @@ func (w *Watcher) Data() map[string]string {
 	return out
 }
 
+// Present reports whether the last read found the ConfigMap: true on the
+// appliance, false on a plain Kubernetes install.
+func (w *Watcher) Present() bool {
+	if w == nil {
+		return false
+	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.present
+}
+
 // Get returns one key's value, or "" when it's unset.
 func (w *Watcher) Get(key string) string {
 	if w == nil {
@@ -220,9 +239,9 @@ func (w *Watcher) Refresh(ctx context.Context) {
 	w.mu.Lock()
 	switch state {
 	case stateFound:
-		w.data = data
+		w.data, w.present = data, true
 	case stateAbsent:
-		w.data = map[string]string{}
+		w.data, w.present = map[string]string{}, false
 	}
 	changed := state != w.lastState
 	w.lastState = state

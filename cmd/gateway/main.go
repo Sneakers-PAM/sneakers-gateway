@@ -62,9 +62,10 @@ func envTrue(k string) bool {
 	return v == "1" || strings.EqualFold(v, "true")
 }
 
-// mcpEnabledFrom reads MCP_ENABLED: on unless it's "false" or "0" (any case,
-// spaces trimmed), so an install that never sets it keeps the MCP.
-func mcpEnabledFrom(v string) bool {
+// switchOn reads an on-by-default switch (MCP_ENABLED,
+// MACHINE_API_ENABLED): on unless it's "false" or "0" (any case,
+// spaces trimmed), so an install that never sets it keeps the feature.
+func switchOn(v string) bool {
 	v = strings.TrimSpace(v)
 	return v != "0" && !strings.EqualFold(v, "false")
 }
@@ -349,7 +350,7 @@ func main() {
 	maintenanceForced := envTrue("MAINTENANCE_READONLY")
 	maintenanceMode := maintenance.New(maintenanceForced, watcher.Maintenance)
 	logger.Info().Bool("maintenance_readonly", maintenanceForced).Bool("appliance_configmap", watcher != nil).Msg("maintenance mode config")
-	gqlResolver := &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, HydraIssuer: hydraIssuer, MFAMaxAge: mfaMaxAge, Log: reqLog, Maintenance: maintenanceMode}
+	gqlResolver := &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, HydraIssuer: hydraIssuer, MFAMaxAge: mfaMaxAge, Log: reqLog, Maintenance: maintenanceMode, Appliance: watcher}
 	gql := handler.New(resolvers.NewExecutableSchema(resolvers.Config{Resolvers: gqlResolver}))
 	gql.AddTransport(transport.Options{})
 	gql.AddTransport(transport.POST{})
@@ -387,8 +388,9 @@ func main() {
 	mux := http.NewServeMux()
 	// MCP off: the OAuth routes that mint MCP agent tokens answer
 	// MCP_DISABLED, and the machine API refuses the agent tokens (below).
-	mcpEnabled := mcpEnabledFrom(os.Getenv("MCP_ENABLED"))
-	logger.Info().Bool("mcp_enabled", mcpEnabled).Msg("mcp switch")
+	mcpEnabled := switchOn(os.Getenv("MCP_ENABLED"))
+	machineAPIEnabled := switchOn(os.Getenv("MACHINE_API_ENABLED"))
+	logger.Info().Bool("mcp_enabled", mcpEnabled).Bool("machine_api_enabled", machineAPIEnabled).Msg("mcp and machine-API switches")
 	if !mcpEnabled {
 		mux.Handle("/oauth2/", bff.MCPOff())
 		mux.Handle("/.well-known/oauth-authorization-server", bff.MCPOff())
@@ -540,7 +542,7 @@ func main() {
 	// own executable schema (internal/machineresolvers, graphql/machine.graphqls)
 	// so the human /graphql surface above is never touched by this mount.
 	// hydraVerifier/hydraIssuer are computed once, above, by newHydraVerifier.
-	machineH := &bff.Handler{Identity: identityClient, MachineOidcVerifier: hydraVerifier, MachineOidcIssuer: hydraIssuer, MCPDisabled: !mcpEnabled}
+	machineH := &bff.Handler{Identity: identityClient, MachineOidcVerifier: hydraVerifier, MachineOidcIssuer: hydraIssuer, MCPDisabled: !mcpEnabled, MachineAPIDisabled: !machineAPIEnabled}
 	machineGQL := handler.New(machineresolvers.NewExecutableSchema(machineresolvers.Config{
 		Resolvers: &machineresolvers.Resolver{Vault: vaultClient, PublicURL: env("OAUTH_PUBLIC_URL", ""), ApprovalRunLinks: runLinks},
 	}))

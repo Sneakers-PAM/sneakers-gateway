@@ -19,6 +19,19 @@ type APIToken struct {
 	CreatedBy        string `json:"createdBy"`
 }
 
+type Appliance struct {
+	Present           bool    `json:"present"`
+	Version           *string `json:"version,omitempty"`
+	ProductState      *string `json:"productState,omitempty"`
+	Mcp               *string `json:"mcp,omitempty"`
+	McpRevokePending  bool    `json:"mcpRevokePending"`
+	MachineAPI        *string `json:"machineApi,omitempty"`
+	TLSMode           *string `json:"tlsMode,omitempty"`
+	TLSNotAfter       *string `json:"tlsNotAfter,omitempty"`
+	Maintenance       bool    `json:"maintenance"`
+	MaintenanceReason *string `json:"maintenanceReason,omitempty"`
+}
+
 type ApprovalComment struct {
 	ID           string `json:"id"`
 	AuthorUserID string `json:"authorUserId"`
