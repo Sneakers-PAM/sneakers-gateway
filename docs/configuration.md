@@ -39,7 +39,7 @@ workload identity (see [api.md](api.md), "Service-to-service authentication").
 |---|---|---|
 | `REDIS_URL` | `redis://localhost:26379/0` | Redis for sessions, pending logins and the OAuth store. `rediss://` enables TLS. The gateway won't start in `real` mode if Redis doesn't answer. |
 | `MFA_ENFORCED` | `true` | `false` or `0` makes the second factor optional (the client shows a setup banner); anything else enforces it, so a user without a verified factor can reach only the enrollment endpoints. |
-| `MFA_MAX_AGE` | `5m` | How recent a second factor must be to add or remove a factor, or to approve a batch of pending secret uses without a new one (a Go duration from `1m` to `1h`; anything else stops the gateway at boot). Set it to the same value as the vault and the workflow. |
+| `MFA_MAX_AGE` | `30m` | The step-up window: how recent a second factor must be to add or remove a factor, or to approve or confirm pending secret uses without a new one. After one step-up there are no further prompts until it ends. A Go duration from `0` to `4h`; `0` means every action needs its own step-up. Anything else stops the gateway at boot. Set it to the same value as the vault and the workflow. Login MFA is separate. |
 | `MFA_PENDING_TTL` | `5m` | How long a login waits for its second factor after the password step (a Go duration). |
 
 The session lifetime isn't an environment variable: it's the vault security setting
