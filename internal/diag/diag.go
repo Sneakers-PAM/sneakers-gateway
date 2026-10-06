@@ -88,6 +88,11 @@ type Component struct {
 	// Dependencies is the component's readiness by dependency; nil when it
 	// didn't report one.
 	Dependencies []Dependency `json:"dependencies,omitempty"`
+	// LastContactAt is the last time this component was verified to have
+	// called in (RFC 3339, UTC); empty when the component doesn't report one.
+	// Set by MultiProbe entries such as the connector workers, never by a
+	// health-check Probe.
+	LastContactAt string `json:"lastContactAt,omitempty"`
 	// deps holds the dependency versions a service reported (sneakers-dep-*
 	// headers), keyed by dependency name. Never serialised.
 	deps map[string]string
@@ -96,6 +101,11 @@ type Component struct {
 // Probe reads one component. It never fails: an unreachable component comes
 // back with StatusUnavailable.
 type Probe func(ctx context.Context) Component
+
+// MultiProbe reads a variable number of same-kind components, such as one
+// entry per connector worker vault has heard from. It never fails: a probe
+// that couldn't read anything returns nil, which contributes no entries.
+type MultiProbe func(ctx context.Context) []Component
 
 // Report is what the diagnostics query returns.
 type Report struct {
@@ -126,6 +136,10 @@ type Collector struct {
 	Appliance  string
 	Services   []Probe
 	ThirdParty []Probe
+	// Connectors reads the pull-based connector workers, one Component per
+	// worker, appended to Services; nil when it isn't wired (no vault
+	// client).
+	Connectors MultiProbe
 	// GatewayDependencies gives the gateway's own readiness by dependency.
 	GatewayDependencies func(context.Context) []Dependency
 	Now                 func() time.Time
@@ -179,6 +193,7 @@ func (c *Collector) collect(ctx context.Context, now time.Time) Report {
 	ctx, cancel := context.WithTimeout(ctx, collectTimeout)
 	defer cancel()
 	services := runAll(ctx, c.Services)
+	services = append(services, c.connectors(ctx)...)
 	third := runAll(ctx, c.ThirdParty)
 	for _, d := range sharedDeps {
 		third = append(third, depEntries(services, d.name, d.expected)...)
@@ -196,6 +211,22 @@ func (c *Collector) collect(ctx context.Context, now time.Time) Report {
 		Services:    services,
 		ThirdParty:  third,
 	}
+}
+
+// connectors runs c.Connectors, cleaning each entry's version and commit the
+// same way runAll does. A nil Connectors, or one that reads nothing, adds no
+// entries.
+func (c *Collector) connectors(ctx context.Context) []Component {
+	if c.Connectors == nil {
+		return nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	out := c.Connectors(cctx)
+	for i := range out {
+		out[i].Version, out[i].Commit = clean(out[i].Version), clean(out[i].Commit)
+	}
+	return out
 }
 
 // runAll runs the probes in parallel, keeping their order.

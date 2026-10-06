@@ -68,6 +68,9 @@ func componentOf(c diag.Component) *ComponentVersion {
 	if c.Commit != "" {
 		v.Commit = &c.Commit
 	}
+	if c.LastContactAt != "" {
+		v.LastContactAt = &c.LastContactAt
+	}
 	return v
 }
 

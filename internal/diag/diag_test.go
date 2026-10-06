@@ -178,6 +178,43 @@ func TestCollector_ReportAndCache(t *testing.T) {
 	}
 }
 
+// TestCollector_ConnectorsAppendToServices: the Connectors MultiProbe's
+// entries land in Services alongside the single-component probes, cleaned
+// the same way.
+func TestCollector_ConnectorsAppendToServices(t *testing.T) {
+	c := &Collector{
+		Services: []Probe{func(context.Context) Component { return Component{Name: "identity", Status: StatusOK} }},
+		Connectors: func(context.Context) []Component {
+			return []Component{
+				{Name: "connector:worker-a", Version: "v0.1.0", Status: StatusOK, LastContactAt: "2026-10-05T12:00:00Z"},
+				{Name: "connector:worker-b", Status: StatusOK},
+			}
+		},
+	}
+	r := c.Report(context.Background())
+	a := find(r.Services, "connector:worker-a")
+	if a.Version != "v0.1.0" || a.LastContactAt != "2026-10-05T12:00:00Z" {
+		t.Fatalf("connector:worker-a = %+v", a)
+	}
+	b := find(r.Services, "connector:worker-b")
+	if b.Version != Unknown {
+		t.Fatalf("connector:worker-b (empty version) = %+v, want cleaned to unknown", b)
+	}
+	if find(r.Services, "identity").Status != StatusOK {
+		t.Fatalf("the single-component probe's entry is missing: %+v", r.Services)
+	}
+}
+
+// TestCollector_NilConnectorsAddsNoEntries confirms a nil Connectors probe
+// (no vault client wired) adds nothing, rather than a placeholder.
+func TestCollector_NilConnectorsAddsNoEntries(t *testing.T) {
+	c := &Collector{Services: []Probe{func(context.Context) Component { return Component{Name: "identity", Status: StatusOK} }}}
+	r := c.Report(context.Background())
+	if len(r.Services) != 1 {
+		t.Fatalf("services = %+v, want just identity", r.Services)
+	}
+}
+
 func TestCollector_NoPostgresReported(t *testing.T) {
 	c := &Collector{Services: []Probe{func(context.Context) Component { return Component{Name: "audit", Status: StatusUnavailable} }}}
 	if pg := find(c.Report(context.Background()).ThirdParty, "postgres"); pg.Status != StatusUnavailable || pg.Version != "unknown" {

@@ -217,13 +217,19 @@ install `present` is false and every other field is null or false. See
 needs: `generatedAt`, this read's `traceId`, the caller (`actor`: id, username and roles, read
 from identity), the origin of `OAUTH_PUBLIC_URL` (`publicUrl`), the appliance version
 (`appliance`, from `SNEAKERS_APPLIANCE_VERSION`, null off the appliance), and a `ComponentVersion`
-(name, version, commit and status) for the gateway, each service and each third-party service:
+(name, version, commit, status and, for a connector, `lastContactAt`) for the gateway, each service
+and each third-party service:
 
-- **Services** (`services`): identity, vault, workflow, audit, notify, sshbroker and connector,
-  read from the response headers of each one's standard gRPC health check (`sneakers-version`,
+- **Services** (`services`): identity, vault, workflow, audit, notify and sshbroker, read from the
+  response headers of each one's standard gRPC health check (`sneakers-version`,
   `sneakers-commit`); mcp from `MCP_HEALTH_URL`, its `GET /livez` (the `Sneakers-Version` and
   `Sneakers-Commit` response headers, or `version` and `commit` in the body where an older build
   has them). A service that answers without the headers (an older build) shows version `unknown`.
+  One `connector:<worker id>` entry per connector worker vault has heard from, read through vault's
+  `ListConnectors` (the gateway never dials a connector: it's a pull-based worker). Its
+  `lastContactAt` is the last verified pull-API call; `version`/`commit` are `unknown` for a worker
+  that has never sent one. No connectors at all means no `connector:*` entries, not a single
+  `NOT_CONFIGURED` placeholder.
 - **Third party** (`thirdParty`): kratos (`/admin/version`), hydra (`/version`), polis
   (`/api/health`), valkey (`INFO server` on the session store), kubernetes (the API server's
   `GET /version`, with the pod's ServiceAccount token), and postgres and rabbitmq as the services

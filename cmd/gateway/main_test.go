@@ -38,14 +38,18 @@ func TestClampSessionTTL(t *testing.T) {
 	}
 }
 
-// fakeVault is a minimal VaultServiceClient stub: only GetSecuritySettings is
-// implemented; every other method is unused by these tests. Embedding the
-// interface satisfies the type without hand-writing the full surface.
+// fakeVault is a minimal VaultServiceClient stub: only the methods this
+// package's tests use are implemented; every other method is unused.
+// Embedding the interface satisfies the type without hand-writing the full
+// surface.
 type fakeVault struct {
 	vaultv1.VaultServiceClient
 	seconds int32
 	err     error
 	calls   int
+
+	connectors    *vaultv1.ListConnectorsResponse
+	connectorsErr error
 }
 
 func (f *fakeVault) GetSecuritySettings(_ context.Context, _ *vaultv1.GetSecuritySettingsRequest, _ ...grpc.CallOption) (*vaultv1.GetSecuritySettingsResponse, error) {
@@ -56,6 +60,10 @@ func (f *fakeVault) GetSecuritySettings(_ context.Context, _ *vaultv1.GetSecurit
 	return &vaultv1.GetSecuritySettingsResponse{
 		Settings: &vaultv1.SecuritySettings{SessionTtlSeconds: f.seconds},
 	}, nil
+}
+
+func (f *fakeVault) ListConnectors(context.Context, *vaultv1.ListConnectorsRequest, ...grpc.CallOption) (*vaultv1.ListConnectorsResponse, error) {
+	return f.connectors, f.connectorsErr
 }
 
 // TestSessionTTLProviderSourcedFromSettings verifies the provider reads the TTL
