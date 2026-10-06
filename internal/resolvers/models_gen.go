@@ -76,6 +76,9 @@ type AuditRecord struct {
 	ActorUserID string       `json:"actorUserId"`
 	ActorName   string       `json:"actorName"`
 	Subject     string       `json:"subject"`
+	SubjectKind string       `json:"subjectKind"`
+	SubjectID   string       `json:"subjectId"`
+	SubjectName *string      `json:"subjectName,omitempty"`
 	GroupID     string       `json:"groupId"`
 	Sensitive   bool         `json:"sensitive"`
 	Attributes  []*AuditAttr `json:"attributes"`

@@ -248,6 +248,7 @@ func (r *Resolver) listAuditRecords(ctx context.Context, actorUserID, subject *s
 	}
 	recs := resp.GetRecords()
 	names := r.resolveActorNames(ctx, recs)
+	subjectNames := r.resolveSubjectNames(ctx, actorOf(ctx), recs)
 	// Newest-first: the audit chain is stored oldest→newest, but the log reads
 	// most-recent first.
 	out := make([]*AuditRecord, 0, len(recs))
@@ -257,9 +258,124 @@ func (r *Resolver) listAuditRecords(ctx context.Context, actorUserID, subject *s
 		if name == "" {
 			name = rec.GetActorUserId()
 		}
-		out = append(out, gqlAuditRecord(rec, name))
+		var subjectName *string
+		if n, ok := subjectNames[subjectBaseID(rec.GetSubject())]; ok {
+			subjectName = &n
+		}
+		out = append(out, gqlAuditRecord(rec, name, subjectName))
 	}
 	return out, nil
+}
+
+// resolveSubjectNames batch-resolves the page's distinct audit subjects to
+// display names, one lookup per kind present rather than per record: a
+// secret subject goes through GetSecret (actor-scoped, so a secret the actor
+// can't read is simply left unresolved); folder, target and service-account
+// subjects are matched against one actor-scoped list call apiece; user
+// subjects reuse the same identity lookup as actor names. A subject whose
+// kind this gateway doesn't classify, or that doesn't resolve (deleted,
+// unknown, no access), is left out of the map — gqlAuditRecord then reports
+// no subjectName for it, never an error.
+func (r *Resolver) resolveSubjectNames(ctx context.Context, actor *vaultv1.ActorContext, records []*auditv1.AuditRecord) map[string]string {
+	byKind := make(map[string][]string)
+	seen := make(map[string]bool)
+	for _, rec := range records {
+		subj := subjectBaseID(rec.GetSubject())
+		if subj == "" || seen[subj] {
+			continue
+		}
+		seen[subj] = true
+		if kind := subjectKind(subj); kind != "unknown" {
+			byKind[kind] = append(byKind[kind], subj)
+		}
+	}
+	bySubject := make(map[string]string)
+	r.resolveSubjectSecretNames(ctx, actor, byKind["secret"], bySubject)
+	r.resolveSubjectFolderNames(ctx, actor, byKind["folder"], bySubject)
+	r.resolveSubjectTargetNames(ctx, actor, byKind["target"], bySubject)
+	r.resolveSubjectServiceAccountNames(ctx, byKind["service_account"], bySubject)
+	r.resolveSubjectUserNames(ctx, byKind["user"], bySubject)
+	return bySubject
+}
+
+// resolveSubjectSecretNames resolves each secret id through GetSecret, one
+// call per id since there's no batch read: actor-scoped, so a secret the
+// actor can't read is simply left out of out.
+func (r *Resolver) resolveSubjectSecretNames(ctx context.Context, actor *vaultv1.ActorContext, ids []string, out map[string]string) {
+	for _, id := range ids {
+		resp, err := r.Vault.GetSecret(ctx, &vaultv1.GetSecretRequest{Actor: actor, Id: id})
+		if err != nil {
+			continue
+		}
+		out[id] = resp.GetSecret().GetName()
+	}
+}
+
+// resolveSubjectFolderNames matches ids against one actor-scoped ListFolders
+// call.
+func (r *Resolver) resolveSubjectFolderNames(ctx context.Context, actor *vaultv1.ActorContext, ids []string, out map[string]string) {
+	if len(ids) == 0 {
+		return
+	}
+	resp, err := r.Vault.ListFolders(ctx, &vaultv1.ListFoldersRequest{Actor: actor})
+	if err != nil {
+		return
+	}
+	for _, f := range resp.GetFolders() {
+		if slices.Contains(ids, f.GetId()) {
+			out[f.GetId()] = f.GetName()
+		}
+	}
+}
+
+// resolveSubjectTargetNames matches ids against one actor-scoped ListTargets
+// call.
+func (r *Resolver) resolveSubjectTargetNames(ctx context.Context, actor *vaultv1.ActorContext, ids []string, out map[string]string) {
+	if len(ids) == 0 {
+		return
+	}
+	resp, err := r.Vault.ListTargets(ctx, &vaultv1.ListTargetsRequest{Actor: actor})
+	if err != nil {
+		return
+	}
+	for _, t := range resp.GetTargets() {
+		if slices.Contains(ids, t.GetId()) {
+			out[t.GetId()] = t.GetName()
+		}
+	}
+}
+
+// resolveSubjectServiceAccountNames matches ids against one
+// ListServiceAccounts call (site-admin-only, same as the audit log itself).
+func (r *Resolver) resolveSubjectServiceAccountNames(ctx context.Context, ids []string, out map[string]string) {
+	if len(ids) == 0 {
+		return
+	}
+	resp, err := r.Identity.ListServiceAccounts(ctx, &identityv1.ListServiceAccountsRequest{})
+	if err != nil {
+		return
+	}
+	for _, sa := range resp.GetServiceAccounts() {
+		if slices.Contains(ids, sa.GetId()) {
+			out[sa.GetId()] = sa.GetName()
+		}
+	}
+}
+
+// resolveSubjectUserNames resolves user ids via the same identity lookup as
+// actor names, but — unlike resolveActorNames — leaves an unresolved id out
+// of out rather than falling back to the raw id.
+func (r *Resolver) resolveSubjectUserNames(ctx context.Context, ids []string, out map[string]string) {
+	if len(ids) == 0 {
+		return
+	}
+	resp, err := r.Identity.ResolveUserLabels(ctx, &identityv1.ResolveUserLabelsRequest{Ids: ids})
+	if err != nil {
+		return
+	}
+	for _, l := range resp.GetLabels() {
+		out[l.GetId()] = l.GetName()
+	}
 }
 
 // resolveActorNames batch-resolves the distinct actor ids across the given

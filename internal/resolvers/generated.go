@@ -108,6 +108,9 @@ type ComplexityRoot struct {
 		Sensitive   func(childComplexity int) int
 		Seq         func(childComplexity int) int
 		Subject     func(childComplexity int) int
+		SubjectID   func(childComplexity int) int
+		SubjectKind func(childComplexity int) int
+		SubjectName func(childComplexity int) int
 		Tier        func(childComplexity int) int
 	}
 
@@ -1177,6 +1180,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AuditRecord.Subject(childComplexity), true
+	case "AuditRecord.subjectId":
+		if e.ComplexityRoot.AuditRecord.SubjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuditRecord.SubjectID(childComplexity), true
+	case "AuditRecord.subjectKind":
+		if e.ComplexityRoot.AuditRecord.SubjectKind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuditRecord.SubjectKind(childComplexity), true
+	case "AuditRecord.subjectName":
+		if e.ComplexityRoot.AuditRecord.SubjectName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuditRecord.SubjectName(childComplexity), true
 	case "AuditRecord.tier":
 		if e.ComplexityRoot.AuditRecord.Tier == nil {
 			break
@@ -5031,6 +5052,15 @@ type AuditRecord {
   # Human-readable actor label resolved via identity (falls back to the id).
   actorName: String!
   subject: String!
+  # The subject's record kind ("secret" | "folder" | "target" | "user" |
+  # "service_account" | "unknown"), resolved from the subject string's id
+  # prefix. subjectId is the same id as subject, broken out so the caller
+  # doesn't have to parse it.
+  subjectKind: String!
+  subjectId: String!
+  # Resolved server-side, batched per page, and access-aware: null when the
+  # caller can't read the subject, or it's deleted, unknown, or unresolved.
+  subjectName: String
   groupId: String!
   sensitive: Boolean!
   attributes: [AuditAttr!]!
@@ -5865,6 +5895,12 @@ func (ec *executionContext) childFields_AuditRecord(ctx context.Context, field g
 		return ec.fieldContext_AuditRecord_actorName(ctx, field)
 	case "subject":
 		return ec.fieldContext_AuditRecord_subject(ctx, field)
+	case "subjectKind":
+		return ec.fieldContext_AuditRecord_subjectKind(ctx, field)
+	case "subjectId":
+		return ec.fieldContext_AuditRecord_subjectId(ctx, field)
+	case "subjectName":
+		return ec.fieldContext_AuditRecord_subjectName(ctx, field)
 	case "groupId":
 		return ec.fieldContext_AuditRecord_groupId(ctx, field)
 	case "sensitive":
@@ -10221,6 +10257,75 @@ func (ec *executionContext) _AuditRecord_subject(ctx context.Context, field grap
 	)
 }
 func (ec *executionContext) fieldContext_AuditRecord_subject(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuditRecord", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AuditRecord_subjectKind(ctx context.Context, field graphql.CollectedField, obj *AuditRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuditRecord_subjectKind(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectKind, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuditRecord_subjectKind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuditRecord", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AuditRecord_subjectId(ctx context.Context, field graphql.CollectedField, obj *AuditRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuditRecord_subjectId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuditRecord_subjectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuditRecord", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AuditRecord_subjectName(ctx context.Context, field graphql.CollectedField, obj *AuditRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuditRecord_subjectName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_AuditRecord_subjectName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("AuditRecord", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
@@ -25410,6 +25515,18 @@ func (ec *executionContext) _AuditRecord(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "subjectKind":
+			out.Values[i] = ec._AuditRecord_subjectKind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "subjectId":
+			out.Values[i] = ec._AuditRecord_subjectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "subjectName":
+			out.Values[i] = ec._AuditRecord_subjectName(ctx, field, obj)
 		case "groupId":
 			out.Values[i] = ec._AuditRecord_groupId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {

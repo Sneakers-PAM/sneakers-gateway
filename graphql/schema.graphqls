@@ -561,6 +561,15 @@ type AuditRecord {
   # Human-readable actor label resolved via identity (falls back to the id).
   actorName: String!
   subject: String!
+  # The subject's record kind ("secret" | "folder" | "target" | "user" |
+  # "service_account" | "unknown"), resolved from the subject string's id
+  # prefix. subjectId is the same id as subject, broken out so the caller
+  # doesn't have to parse it.
+  subjectKind: String!
+  subjectId: String!
+  # Resolved server-side, batched per page, and access-aware: null when the
+  # caller can't read the subject, or it's deleted, unknown, or unresolved.
+  subjectName: String
   groupId: String!
   sensitive: Boolean!
   attributes: [AuditAttr!]!
