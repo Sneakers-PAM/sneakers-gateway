@@ -598,6 +598,14 @@ type TargetConnectionInput struct {
 	IsDefault    bool   `json:"isDefault"`
 }
 
+type TargetHostKeyScan struct {
+	TargetID    string `json:"targetId"`
+	KeyType     string `json:"keyType"`
+	PublicKey   string `json:"publicKey"`
+	Fingerprint string `json:"fingerprint"`
+	Pinned      bool   `json:"pinned"`
+}
+
 type TargetInput struct {
 	ID           *string                  `json:"id,omitempty"`
 	Name         string                   `json:"name"`

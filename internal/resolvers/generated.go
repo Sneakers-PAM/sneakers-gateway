@@ -351,6 +351,7 @@ type ComplexityRoot struct {
 		MoveFolder               func(childComplexity int, id string, newParentID *string) int
 		OpenBreakGlassSession    func(childComplexity int, reason string, code string) int
 		OpenSSHSession           func(childComplexity int, secretID string, connectionID *string) int
+		PinTargetHostKey         func(childComplexity int, targetID string, fingerprint string) int
 		PrepareSecretReveal      func(childComplexity int, secretID string, fieldKey string, runID *string) int
 		RedeemSecretReveal       func(childComplexity int, id string) int
 		RemoveFolderRule         func(childComplexity int, id string) int
@@ -453,6 +454,7 @@ type ComplexityRoot struct {
 		PasswordPolicies          func(childComplexity int) int
 		PendingSecretUses         func(childComplexity int) int
 		ResolveUserLabels         func(childComplexity int, ids []string) int
+		ScanTargetHostKey         func(childComplexity int, targetID string) int
 		SearchUsers               func(childComplexity int, query string, limit *int) int
 		Secret                    func(childComplexity int, id string) int
 		SecretFields              func(childComplexity int, id string) int
@@ -662,6 +664,14 @@ type ComplexityRoot struct {
 		IsDefault    func(childComplexity int) int
 	}
 
+	TargetHostKeyScan struct {
+		Fingerprint func(childComplexity int) int
+		KeyType     func(childComplexity int) int
+		Pinned      func(childComplexity int) int
+		PublicKey   func(childComplexity int) int
+		TargetID    func(childComplexity int) int
+	}
+
 	UseGrant struct {
 		AllowReveal   func(childComplexity int) int
 		ExpiresAtUnix func(childComplexity int) int
@@ -714,6 +724,7 @@ type MutationResolver interface {
 	DeleteConnection(ctx context.Context, id string) (bool, error)
 	SaveTarget(ctx context.Context, input TargetInput) (*Target, error)
 	DeleteTarget(ctx context.Context, id string) (bool, error)
+	PinTargetHostKey(ctx context.Context, targetID string, fingerprint string) (*Target, error)
 	SavePasswordPolicy(ctx context.Context, input PasswordPolicyInput) (*PasswordPolicy, error)
 	DeletePasswordPolicy(ctx context.Context, id string) (bool, error)
 	UpdateSecuritySettings(ctx context.Context, input SecuritySettingsInput) (*SecuritySettings, error)
@@ -805,6 +816,7 @@ type QueryResolver interface {
 	ApprovalRequests(ctx context.Context) ([]*ApprovalRequest, error)
 	Connections(ctx context.Context) ([]*Connection, error)
 	Targets(ctx context.Context) ([]*Target, error)
+	ScanTargetHostKey(ctx context.Context, targetID string) (*TargetHostKeyScan, error)
 	PasswordPolicies(ctx context.Context) ([]*PasswordPolicy, error)
 	SecuritySettings(ctx context.Context) (*SecuritySettings, error)
 	SecretTypes(ctx context.Context) ([]*SecretType, error)
@@ -2407,6 +2419,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.OpenSSHSession(childComplexity, args["secretId"].(string), args["connectionId"].(*string)), true
+	case "Mutation.pinTargetHostKey":
+		if e.ComplexityRoot.Mutation.PinTargetHostKey == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_pinTargetHostKey_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.PinTargetHostKey(childComplexity, args["targetId"].(string), args["fingerprint"].(string)), true
 	case "Mutation.prepareSecretReveal":
 		if e.ComplexityRoot.Mutation.PrepareSecretReveal == nil {
 			break
@@ -3197,6 +3220,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.ResolveUserLabels(childComplexity, args["ids"].([]string)), true
+	case "Query.scanTargetHostKey":
+		if e.ComplexityRoot.Query.ScanTargetHostKey == nil {
+			break
+		}
+
+		args, err := ec.field_Query_scanTargetHostKey_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.ScanTargetHostKey(childComplexity, args["targetId"].(string)), true
 	case "Query.searchUsers":
 		if e.ComplexityRoot.Query.SearchUsers == nil {
 			break
@@ -4209,6 +4243,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.TargetConnection.IsDefault(childComplexity), true
 
+	case "TargetHostKeyScan.fingerprint":
+		if e.ComplexityRoot.TargetHostKeyScan.Fingerprint == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetHostKeyScan.Fingerprint(childComplexity), true
+	case "TargetHostKeyScan.keyType":
+		if e.ComplexityRoot.TargetHostKeyScan.KeyType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetHostKeyScan.KeyType(childComplexity), true
+	case "TargetHostKeyScan.pinned":
+		if e.ComplexityRoot.TargetHostKeyScan.Pinned == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetHostKeyScan.Pinned(childComplexity), true
+	case "TargetHostKeyScan.publicKey":
+		if e.ComplexityRoot.TargetHostKeyScan.PublicKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetHostKeyScan.PublicKey(childComplexity), true
+	case "TargetHostKeyScan.targetId":
+		if e.ComplexityRoot.TargetHostKeyScan.TargetID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetHostKeyScan.TargetID(childComplexity), true
+
 	case "UseGrant.allowReveal":
 		if e.ComplexityRoot.UseGrant.AllowReveal == nil {
 			break
@@ -4882,6 +4947,20 @@ type Target {
   # sessions to it are refused.
   sshHostKeys: [String!]!
 }
+# The SSH host key a target offers, read by the SSH broker during the
+# handshake without authenticating. Nothing is pinned by reading it.
+type TargetHostKeyScan {
+  targetId: ID!
+  # The key's algorithm, e.g. ssh-ed25519.
+  keyType: String!
+  # The key in authorized_keys form, no comment.
+  publicKey: String!
+  # SHA256:<base64>, as ssh-keygen -l prints it. pinTargetHostKey takes
+  # exactly this value.
+  fingerprint: String!
+  # Whether the target already pins this key.
+  pinned: Boolean!
+}
 type TargetConnection {
   connectionId: ID!
   isDefault: Boolean!
@@ -5367,6 +5446,11 @@ type Query {
   approvalRequests: [ApprovalRequest!]!
   connections: [Connection!]!
   targets: [Target!]!
+  # Reads the SSH host key the target's SSH connection offers, for a person to
+  # check before pinning it with pinTargetHostKey. Site admins only (the same
+  # people who may change a target's pins); the broker rate-limits scans per
+  # user. Audited by the broker as hostkey.scan.
+  scanTargetHostKey(targetId: ID!): TargetHostKeyScan!
   passwordPolicies: [PasswordPolicy!]!
   securitySettings: SecuritySettings!
   secretTypes: [SecretType!]!
@@ -5567,6 +5651,11 @@ type Mutation {
   deleteConnection(id: ID!): Boolean!
   saveTarget(input: TargetInput!): Target!
   deleteTarget(id: ID!): Boolean!
+  # Pins the host key the target offers now, only when its fingerprint is
+  # exactly the one given (the one the person saw from scanTargetHostKey).
+  # A different key is refused with HOST_KEY_CHANGED and nothing is pinned.
+  # Site admins only. Adds to the target's existing pins.
+  pinTargetHostKey(targetId: ID!, fingerprint: String!): Target!
 
   savePasswordPolicy(input: PasswordPolicyInput!): PasswordPolicy!
   deletePasswordPolicy(id: ID!): Boolean!
@@ -6779,6 +6868,22 @@ func (ec *executionContext) childFields_TargetConnection(ctx context.Context, fi
 	return nil, fmt.Errorf("no field named %q was found under type TargetConnection", field.Name)
 }
 
+func (ec *executionContext) childFields_TargetHostKeyScan(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "targetId":
+		return ec.fieldContext_TargetHostKeyScan_targetId(ctx, field)
+	case "keyType":
+		return ec.fieldContext_TargetHostKeyScan_keyType(ctx, field)
+	case "publicKey":
+		return ec.fieldContext_TargetHostKeyScan_publicKey(ctx, field)
+	case "fingerprint":
+		return ec.fieldContext_TargetHostKeyScan_fingerprint(ctx, field)
+	case "pinned":
+		return ec.fieldContext_TargetHostKeyScan_pinned(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type TargetHostKeyScan", field.Name)
+}
+
 func (ec *executionContext) childFields_UseGrant(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "id":
@@ -7921,6 +8026,28 @@ func (ec *executionContext) field_Mutation_openSshSession_args(ctx context.Conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_pinTargetHostKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "targetId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["targetId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fingerprint",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["fingerprint"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_prepareSecretReveal_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -8890,6 +9017,20 @@ func (ec *executionContext) field_Query_resolveUserLabels_args(ctx context.Conte
 		return nil, err
 	}
 	args["ids"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_scanTargetHostKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "targetId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["targetId"] = arg0
 	return args, nil
 }
 
@@ -13587,6 +13728,50 @@ func (ec *executionContext) fieldContext_Mutation_deleteTarget(ctx context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_pinTargetHostKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_pinTargetHostKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().PinTargetHostKey(ctx, fc.Args["targetId"].(string), fc.Args["fingerprint"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Target) graphql.Marshaler {
+			return ec.marshalNTarget2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTarget(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_pinTargetHostKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Target(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_pinTargetHostKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_savePasswordPolicy(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -17960,6 +18145,50 @@ func (ec *executionContext) fieldContext_Query_targets(_ context.Context, field 
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Target(ctx, field)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_scanTargetHostKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_scanTargetHostKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().ScanTargetHostKey(ctx, fc.Args["targetId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *TargetHostKeyScan) graphql.Marshaler {
+			return ec.marshalNTargetHostKeyScan2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetHostKeyScan(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_scanTargetHostKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TargetHostKeyScan(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_scanTargetHostKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -22538,6 +22767,121 @@ func (ec *executionContext) _TargetConnection_isDefault(ctx context.Context, fie
 }
 func (ec *executionContext) fieldContext_TargetConnection_isDefault(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("TargetConnection", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _TargetHostKeyScan_targetId(ctx context.Context, field graphql.CollectedField, obj *TargetHostKeyScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetHostKeyScan_targetId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TargetID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetHostKeyScan_targetId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetHostKeyScan", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _TargetHostKeyScan_keyType(ctx context.Context, field graphql.CollectedField, obj *TargetHostKeyScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetHostKeyScan_keyType(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.KeyType, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetHostKeyScan_keyType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetHostKeyScan", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetHostKeyScan_publicKey(ctx context.Context, field graphql.CollectedField, obj *TargetHostKeyScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetHostKeyScan_publicKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PublicKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetHostKeyScan_publicKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetHostKeyScan", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetHostKeyScan_fingerprint(ctx context.Context, field graphql.CollectedField, obj *TargetHostKeyScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetHostKeyScan_fingerprint(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Fingerprint, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetHostKeyScan_fingerprint(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetHostKeyScan", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetHostKeyScan_pinned(ctx context.Context, field graphql.CollectedField, obj *TargetHostKeyScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetHostKeyScan_pinned(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Pinned, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetHostKeyScan_pinned(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetHostKeyScan", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _UseGrant_id(ctx context.Context, field graphql.CollectedField, obj *UseGrant) (ret graphql.Marshaler) {
@@ -27185,6 +27529,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "pinTargetHostKey":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_pinTargetHostKey(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "savePasswordPolicy":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_savePasswordPolicy(ctx, field)
@@ -28266,6 +28617,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_targets(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "scanTargetHostKey":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_scanTargetHostKey(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -30224,6 +30597,65 @@ func (ec *executionContext) _TargetConnection(ctx context.Context, sel ast.Selec
 			}
 		case "isDefault":
 			out.Values[i] = ec._TargetConnection_isDefault(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var targetHostKeyScanImplementors = []string{"TargetHostKeyScan"}
+
+func (ec *executionContext) _TargetHostKeyScan(ctx context.Context, sel ast.SelectionSet, obj *TargetHostKeyScan) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, targetHostKeyScanImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TargetHostKeyScan")
+		case "targetId":
+			out.Values[i] = ec._TargetHostKeyScan_targetId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "keyType":
+			out.Values[i] = ec._TargetHostKeyScan_keyType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "publicKey":
+			out.Values[i] = ec._TargetHostKeyScan_publicKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fingerprint":
+			out.Values[i] = ec._TargetHostKeyScan_fingerprint(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pinned":
+			out.Values[i] = ec._TargetHostKeyScan_pinned(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -32386,6 +32818,20 @@ func (ec *executionContext) marshalNTargetConnection2ᚖgithubᚗcomᚋSneakers�
 func (ec *executionContext) unmarshalNTargetConnectionInput2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetConnectionInput(ctx context.Context, v any) (*TargetConnectionInput, error) {
 	res, err := ec.unmarshalInputTargetConnectionInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTargetHostKeyScan2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetHostKeyScan(ctx context.Context, sel ast.SelectionSet, v TargetHostKeyScan) graphql.Marshaler {
+	return ec._TargetHostKeyScan(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTargetHostKeyScan2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetHostKeyScan(ctx context.Context, sel ast.SelectionSet, v *TargetHostKeyScan) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TargetHostKeyScan(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNTargetInput2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetInput(ctx context.Context, v any) (TargetInput, error) {

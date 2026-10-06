@@ -64,6 +64,15 @@ func (r *mutationResolver) DeleteTarget(ctx context.Context, id string) (bool, e
 	return resp.GetRemoved(), nil
 }
 
+// PinTargetHostKey is the resolver for the pinTargetHostKey field.
+func (r *mutationResolver) PinTargetHostKey(ctx context.Context, targetID string, fingerprint string) (*Target, error) {
+	t, err := r.pinTargetHostKey(ctx, targetID, fingerprint)
+	if err != nil {
+		return nil, err
+	}
+	return gqlTarget(t), nil
+}
+
 // SavePasswordPolicy is the resolver for the savePasswordPolicy field.
 func (r *mutationResolver) SavePasswordPolicy(ctx context.Context, input PasswordPolicyInput) (*PasswordPolicy, error) {
 	resp, err := r.Vault.SavePasswordPolicy(ctx, &vaultv1.SavePasswordPolicyRequest{Actor: actorOf(ctx), Policy: protoPolicyInput(input)})
@@ -1264,6 +1273,22 @@ func (r *queryResolver) Targets(ctx context.Context) ([]*Target, error) {
 		out = append(out, gqlTarget(t))
 	}
 	return out, nil
+}
+
+// ScanTargetHostKey is the resolver for the scanTargetHostKey field.
+func (r *queryResolver) ScanTargetHostKey(ctx context.Context, targetID string) (*TargetHostKeyScan, error) {
+	actor, err := hostKeyPinActor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	target, scan, err := r.scanHostKey(ctx, actor, targetID)
+	if err != nil {
+		return nil, err
+	}
+	return &TargetHostKeyScan{
+		TargetID: targetID, KeyType: scan.GetKeyType(), PublicKey: scan.GetPublicKey(),
+		Fingerprint: scan.GetFingerprintSha256(), Pinned: hostKeyPinned(target.GetSshHostKeys(), scan.GetPublicKey()),
+	}, nil
 }
 
 // PasswordPolicies is the resolver for the passwordPolicies field.
