@@ -22,7 +22,8 @@ import (
 
 // OAuth is the authorization server behind MCP /login: RFC 8252 native-app
 // sign-in with PKCE, issuing a personal token. The browser part runs on the
-// signed-in Sneakers session; consent needs a fresh second factor.
+// signed-in Sneakers session; consent needs a session factor within
+// MFA_MAX_AGE or a factor given with it, checked once.
 type OAuth struct {
 	Handler   *Handler
 	Store     OAuthStore
@@ -211,7 +212,8 @@ func (o *OAuth) pendingRequest(ctx context.Context, id string) (oauthRequest, bo
 }
 
 func (o *OAuth) consentDetails(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := o.Handler.authedSession(w, r); !ok {
+	sess, _, ok := o.Handler.authedSession(w, r)
+	if !ok {
 		return
 	}
 	req, ok := o.pendingRequest(r.Context(), r.PathValue("id"))
@@ -220,7 +222,9 @@ func (o *OAuth) consentDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c, _ := o.client(r.Context(), req.ClientID)
-	writeJSON(w, http.StatusOK, map[string]string{"clientName": c.Name, "redirectHost": hostOf(req.RedirectURI)})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"clientName": c.Name, "redirectHost": hostOf(req.RedirectURI), "factorRequired": !o.Handler.mfaFresh(sess),
+	})
 }
 
 func hostOf(raw string) string {
@@ -231,20 +235,24 @@ func hostOf(raw string) string {
 	return u.Host
 }
 
+// consentFactor is a second factor given with a consent; all empty means
+// none was given and the session's own must be within MFA_MAX_AGE.
+type consentFactor struct {
+	Kind              string `json:"kind"`
+	Code              string `json:"code"`
+	CredentialJSON    string `json:"credentialJson"`
+	WebauthnSessionID string `json:"webauthnSessionId"`
+}
+
 func (o *OAuth) consent(w http.ResponseWriter, r *http.Request) {
 	sess, _, ok := o.Handler.authedSession(w, r)
 	if !ok {
 		return
 	}
 	var in struct {
-		Approve bool   `json:"approve"`
-		Label   string `json:"label"`
-		Factor  struct {
-			Kind              string `json:"kind"`
-			Code              string `json:"code"`
-			CredentialJSON    string `json:"credentialJson"`
-			WebauthnSessionID string `json:"webauthnSessionId"`
-		} `json:"factor"`
+		Approve bool          `json:"approve"`
+		Label   string        `json:"label"`
+		Factor  consentFactor `json:"factor"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
@@ -261,14 +269,26 @@ func (o *OAuth) consent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"redirect": withQuery(req.RedirectURI, url.Values{"error": {"access_denied"}, "state": {req.State}})})
 		return
 	}
-	verified, err := o.Handler.verifyFactor(r.Context(), sess.UserID, in.Factor.Kind, in.Factor.Code, in.Factor.WebauthnSessionID, in.Factor.CredentialJSON)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "identity_unreachable"})
-		return
-	}
-	if !verified {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_code"})
-		return
+	lg := o.Handler.logger().Ctx(r.Context())
+	if in.Factor == (consentFactor{}) {
+		if !o.Handler.mfaFresh(sess) {
+			lg.Info("oauth consent refused: no factor given and the session's is older than MFA_MAX_AGE")
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "step_up_required"})
+			return
+		}
+		lg.Debug("oauth consent: session factor within MFA_MAX_AGE covers it")
+	} else {
+		verified, err := o.Handler.verifyFactor(r.Context(), sess.UserID, in.Factor.Kind, in.Factor.Code, in.Factor.WebauthnSessionID, in.Factor.CredentialJSON)
+		if err != nil {
+			lg.Error(err, "oauth consent: factor check failed")
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "identity_unreachable"})
+			return
+		}
+		if !verified {
+			lg.Info("oauth consent: factor not accepted")
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_code"})
+			return
+		}
 	}
 	if ok, err := o.Store.Take(r.Context(), "request:"+id, &req); !ok || err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "request_expired"})

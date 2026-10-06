@@ -313,3 +313,108 @@ func TestOAuthConsentPasskeyBeginReturnsAChallenge(t *testing.T) {
 		t.Fatalf("status=%d out=%+v req=%+v", rec.Code, out, fx.fid.waAssertBeginReq)
 	}
 }
+
+func (fx *oauthFixture) sessionMFAAt(t *testing.T, at time.Time) {
+	t.Helper()
+	sess, _, _ := fx.h.Store.Get(context.Background(), "sid-ada")
+	sess.MFAVerifiedAt = at
+	if err := fx.h.Store.Save(context.Background(), "sid-ada", sess); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (fx *oauthFixture) consentWith(t *testing.T, reqID string, factor map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	in := map[string]any{"approve": true, "label": "laptop"}
+	if factor != nil {
+		in["factor"] = factor
+	}
+	body, _ := json.Marshal(in)
+	return fx.do(t, http.MethodPost, "/oauth2/consent/"+reqID, body, nil, true)
+}
+
+func TestOAuthConsentAcceptsAFreshSessionFactorWithoutAnotherPrompt(t *testing.T) {
+	fx := newOAuthFixture(t)
+	fx.sessionMFAAt(t, time.Now().Add(-time.Minute))
+	reqID := fx.authorize(t, fx.register(t, loopback))
+
+	details := fx.do(t, http.MethodGet, "/oauth2/consent/"+reqID, nil, nil, true)
+	var d struct {
+		FactorRequired *bool `json:"factorRequired"`
+	}
+	_ = json.Unmarshal(details.Body.Bytes(), &d)
+	if d.FactorRequired == nil || *d.FactorRequired {
+		t.Fatalf("details with a fresh session factor: body=%s, want factorRequired=false", details.Body)
+	}
+
+	rec := fx.consentWith(t, reqID, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("consent with a fresh session factor: status=%d body=%s, want 200", rec.Code, rec.Body)
+	}
+	if fx.fid.verifyReq != nil {
+		t.Fatal("consent with a fresh session factor must not ask identity for another one")
+	}
+	var out struct{ Redirect string }
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if u, _ := url.Parse(out.Redirect); u.Query().Get("code") == "" {
+		t.Fatalf("redirect = %q, want a code", out.Redirect)
+	}
+}
+
+func TestOAuthConsentWithAStaleSessionFactorNeedsAFactor(t *testing.T) {
+	fx := newOAuthFixture(t)
+	fx.sessionMFAAt(t, time.Now().Add(-DefaultMFAMaxAge-time.Minute))
+	reqID := fx.authorize(t, fx.register(t, loopback))
+
+	details := fx.do(t, http.MethodGet, "/oauth2/consent/"+reqID, nil, nil, true)
+	var d struct {
+		FactorRequired *bool `json:"factorRequired"`
+	}
+	_ = json.Unmarshal(details.Body.Bytes(), &d)
+	if d.FactorRequired == nil || !*d.FactorRequired {
+		t.Fatalf("details with a stale session factor: body=%s, want factorRequired=true", details.Body)
+	}
+
+	rec := fx.consentWith(t, reqID, nil)
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "step_up_required") {
+		t.Fatalf("consent with a stale session factor and none given: status=%d body=%s, want 403 step_up_required", rec.Code, rec.Body)
+	}
+	if _, ok := fx.o.pendingRequest(context.Background(), reqID); !ok {
+		t.Fatal("a refused consent must leave the request pending for the retry with a factor")
+	}
+}
+
+func TestOAuthConsentWithAStaleSessionFactorAcceptsAValidFactor(t *testing.T) {
+	fx := newOAuthFixture(t)
+	fx.sessionMFAAt(t, time.Now().Add(-DefaultMFAMaxAge-time.Minute))
+	reqID := fx.authorize(t, fx.register(t, loopback))
+	rec := fx.consentWith(t, reqID, map[string]string{"kind": "totp", "code": "123456"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stale session plus a valid factor: status=%d body=%s, want 200", rec.Code, rec.Body)
+	}
+	if fx.fid.verifyReq.GetUserId() != "u-ada" || fx.fid.verifyReq.GetCode() != "123456" {
+		t.Fatalf("factor checked as %+v, want the signed-in user's code", fx.fid.verifyReq)
+	}
+}
+
+func TestOAuthConsentRefusesABadFactorEvenWithAFreshSession(t *testing.T) {
+	fx := newOAuthFixture(t)
+	fx.sessionMFAAt(t, time.Now().Add(-time.Minute))
+	reqID := fx.authorize(t, fx.register(t, loopback))
+	fx.fid.verifyOk = false
+	rec := fx.consentWith(t, reqID, map[string]string{"kind": "totp", "code": "000000"})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("bad factor: status=%d body=%s, want 401", rec.Code, rec.Body)
+	}
+	if fx.fid.verifyReq == nil {
+		t.Fatal("a factor given at consent must be verified")
+	}
+}
+
+func TestOAuthConsentWithNoSessionFactorNeedsAFactor(t *testing.T) {
+	fx := newOAuthFixture(t)
+	reqID := fx.authorize(t, fx.register(t, loopback))
+	if rec := fx.consentWith(t, reqID, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("no session factor time and none given: status=%d body=%s, want 403", rec.Code, rec.Body)
+	}
+}

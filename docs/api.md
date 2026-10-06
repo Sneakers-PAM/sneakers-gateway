@@ -359,6 +359,15 @@ With `OAUTH_PUBLIC_URL` set, the gateway is an OAuth 2.0 authorization server fo
 | `POST /oauth2/consent/{id}/email-code`, `POST /oauth2/consent/{id}/passkey/begin` | Step-up second factor for the consent. |
 | `POST /oauth2/token` | Exchange the code for a personal token. |
 
+Consent follows the same second-factor rule as approving pending secret uses: `GET
+/oauth2/consent/{id}` returns `factorRequired`, which is `false` while the session's second factor
+is within `MFA_MAX_AGE`. Then `POST /oauth2/consent/{id}` with `approve: true` and no `factor` is
+accepted, so a cold `/login` costs one MFA prompt (the sign-in) and a warm one costs none at
+consent. Once the session's factor is older than `MFA_MAX_AGE` (or the session never proved one, as
+after SSO), an approval with no `factor` answers 403 `{"error":"step_up_required"}` and the request
+stays pending for a retry with a factor. A `factor` that is given is always verified; a wrong one is
+401 `{"error":"invalid_code"}`. Denying needs no factor.
+
 A token minted here is recorded by identity with `client_kind: mcp`; one minted on the tokens page
 is `cli`. Together with Hydra client-credentials JWTs (audience `sneakers-mcp`), the `mcp` tokens
 are the MCP agent tokens.
