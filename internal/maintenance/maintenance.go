@@ -41,6 +41,7 @@ var HumanAllowed = []string{
 	"beginMfaPasskey",
 	"markNotificationRead",
 	"markAllNotificationsRead",
+	"closeBreakGlassSession",
 }
 
 // MachineAllowed are the /machine/graphql mutations that stay open in

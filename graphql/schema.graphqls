@@ -756,6 +756,45 @@ type MintApiTokenResult {
   apiToken: ApiToken!
 }
 
+# A break-glass browse session: a short-lived window a site admin opens with a
+# reason and an MFA code, in which every folder and secret is listed. It grants
+# no edit or manage rights. openedAt is the "entered" event and endedAt with
+# endReason the "left" one; reveals lists every secret revealed in it.
+type BreakGlassSession {
+  id: ID!
+  actorUserId: String!
+  # The actor's display label (the raw id when identity can't resolve it).
+  actorName: String!
+  reason: String!
+  # RFC3339, UTC.
+  openedAt: String!
+  expiresAt: String!
+  # Null while the session is open.
+  endedAt: String
+  # "exit", "expired" or "replaced"; null while open.
+  endReason: String
+  # Filled by breakGlassSessions only; empty elsewhere.
+  reveals: [BreakGlassReveal!]!
+}
+
+# One secret revealed in a break-glass session. Never a value.
+type BreakGlassReveal {
+  eventId: ID!
+  secretId: ID!
+  # The secret's current name; empty once the secret is gone.
+  secretName: String!
+  revealedAt: String!
+  postRotationScheduled: Boolean!
+  ownerNotified: Boolean!
+}
+
+# Everything a break-glass session lists: every folder (personal ones
+# included) and every live secret, as metadata only.
+type BreakGlassBrowse {
+  folders: [Folder!]!
+  secrets: [Secret!]!
+}
+
 type Query {
   users: [User!]!
   # A single user by id (identity directory), for the admin user-detail surface.
@@ -788,6 +827,15 @@ type Query {
   # Extension packs available to install (not yet installed).
   availableExtensions: [SecretType!]!
   folders: [Folder!]!
+  # Break-glass (site admin or root, web sessions only). The caller's open
+  # session for this web session, or null; null for anyone else.
+  breakGlassSession: BreakGlassSession
+  # Every folder and live secret while the session is open; folderId narrows
+  # the secrets. Refused with BREAK_GLASS_SESSION_CLOSED once it has ended.
+  breakGlassBrowse(sessionId: ID!, folderId: ID): BreakGlassBrowse!
+  # Break-glass sessions, newest first, each with the secrets revealed in it,
+  # for the audit log. limit defaults to 50, at most 200.
+  breakGlassSessions(limit: Int): [BreakGlassSession!]!
   secretsInFolder(folderId: String!, includeRetired: Boolean): [Secret!]!
   secret(id: ID!): Secret
   secretStats: SecretStats!
@@ -999,7 +1047,16 @@ type Mutation {
   # Emergency access: bypasses checkout-lock/approval-pending for a
   # read-eligible actor. Requires a fresh TOTP code (MFA step-up); high-severity
   # audit, owner notify, and forced post-use rotation are triggered server-side.
-  breakGlassSecret(secretId: String!, reason: String!, code: String!): [KeyValue!]!
+  # sessionId makes it a reveal inside a break-glass browse session: the
+  # session id is recorded with the reveal, and an empty reason takes the
+  # session's.
+  breakGlassSecret(secretId: String!, reason: String!, code: String!, sessionId: ID): [KeyValue!]!
+  # Opens a break-glass browse session (site admin or root, web sessions only)
+  # with a reason and a fresh TOTP code, under the same step-up rules as
+  # breakGlassSecret. Any session the caller has open ends as replaced.
+  openBreakGlassSession(reason: String!, code: String!): BreakGlassSession!
+  # Ends the caller's break-glass session. Stays open in read-only maintenance.
+  closeBreakGlassSession(id: ID!): BreakGlassSession!
   # Copies the primary sensitive field value (distinct audited "copy" event).
   copySecret(id: ID!): String
   # Soft-delete: hides the secret from default listings, recoverable via restoreSecret.

@@ -223,28 +223,20 @@ func (r *mutationResolver) RestoreSecretVersion(ctx context.Context, secretID st
 // step-up in front of the vault's emergency-access reveal. The vault call is
 // only made once the acting user's current code has been verified against
 // their confirmed factor; a missing/invalid code never reaches the vault and is
-// refused with UNAUTHENTICATED, reason BREAK_GLASS_CODE_INVALID.
-func (r *mutationResolver) BreakGlassSecret(ctx context.Context, secretID string, reason string, code string) ([]*KeyValue, error) {
-	actor := actorOf(ctx)
-	if code == "" {
-		return nil, errBreakGlassCodeInvalid()
-	}
-	vr, err := r.Identity.VerifyTotp(ctx, &identityv1.VerifyTotpRequest{UserId: actor.GetUserId(), Code: code})
-	if err != nil {
-		return nil, err
-	}
-	if !vr.GetOk() {
-		return nil, errBreakGlassCodeInvalid()
-	}
-	resp, err := r.Vault.BreakGlassSecret(ctx, &vaultv1.BreakGlassSecretRequest{Actor: actor, SecretId: secretID, Reason: reason})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*KeyValue, 0, len(resp.GetFields()))
-	for k, v := range resp.GetFields() {
-		out = append(out, &KeyValue{Key: k, Value: v})
-	}
-	return out, nil
+// refused with UNAUTHENTICATED, reason BREAK_GLASS_CODE_INVALID. With a
+// sessionId it is a reveal inside a break-glass browse session.
+func (r *mutationResolver) BreakGlassSecret(ctx context.Context, secretID string, reason string, code string, sessionID *string) ([]*KeyValue, error) {
+	return r.breakGlassReveal(ctx, secretID, reason, code, sessionID)
+}
+
+// OpenBreakGlassSession is the resolver for the openBreakGlassSession field.
+func (r *mutationResolver) OpenBreakGlassSession(ctx context.Context, reason string, code string) (*BreakGlassSession, error) {
+	return r.openBreakGlassSession(ctx, reason, code)
+}
+
+// CloseBreakGlassSession is the resolver for the closeBreakGlassSession field.
+func (r *mutationResolver) CloseBreakGlassSession(ctx context.Context, id string) (*BreakGlassSession, error) {
+	return r.closeBreakGlassSession(ctx, id)
 }
 
 // CopySecret is the resolver for the copySecret field.
@@ -1333,6 +1325,21 @@ func (r *queryResolver) Folders(ctx context.Context) ([]*Folder, error) {
 		out = append(out, gqlFolder(f))
 	}
 	return out, nil
+}
+
+// BreakGlassSession is the resolver for the breakGlassSession field.
+func (r *queryResolver) BreakGlassSession(ctx context.Context) (*BreakGlassSession, error) {
+	return r.currentBreakGlassSession(ctx)
+}
+
+// BreakGlassBrowse is the resolver for the breakGlassBrowse field.
+func (r *queryResolver) BreakGlassBrowse(ctx context.Context, sessionID string, folderID *string) (*BreakGlassBrowse, error) {
+	return r.breakGlassBrowse(ctx, sessionID, folderID)
+}
+
+// BreakGlassSessions is the resolver for the breakGlassSessions field.
+func (r *queryResolver) BreakGlassSessions(ctx context.Context, limit *int) ([]*BreakGlassSession, error) {
+	return r.breakGlassSessions(ctx, limit)
 }
 
 // SecretsInFolder is the resolver for the secretsInFolder field.
