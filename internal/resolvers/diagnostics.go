@@ -25,7 +25,7 @@ func (r *Resolver) diagnostics(ctx context.Context) (*Diagnostics, error) {
 	actor := &DiagnosticsActor{ID: actorID, Roles: []string{}}
 	if r.Identity != nil {
 		if resp, err := r.Identity.GetUser(ctx, &identityv1.GetUserRequest{Id: actorID}); err == nil {
-			actor.Username = resp.GetUser().GetUsername()
+			actor.Username = usernameOf(resp.GetUser())
 			if roles := resp.GetUser().GetRoles(); roles != nil {
 				actor.Roles = roles
 			}
@@ -92,6 +92,20 @@ func dependenciesOf(ds []diag.Dependency) []*DependencyState {
 		out = append(out, s)
 	}
 	return out
+}
+
+// usernameOf picks the diagnostics actor's display value: identity's
+// username when set, else the account's display name, else the account id.
+// Identity can return a user with no username (a pre-adoption or
+// seed-created row), and the panel must never show a blank value.
+func usernameOf(u *identityv1.User) string {
+	if n := u.GetUsername(); n != "" {
+		return n
+	}
+	if n := u.GetName(); n != "" {
+		return n
+	}
+	return u.GetId()
 }
 
 func traceID(ctx context.Context) string {

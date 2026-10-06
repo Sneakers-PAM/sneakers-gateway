@@ -30,7 +30,7 @@ func (f *diagIdentity) GetUser(_ context.Context, in *identityv1.GetUserRequest,
 	}}, nil
 }
 
-func newDiagClient(fi *diagIdentity, c *diag.Collector, actor string) *gqlclient.Client {
+func newDiagClient(fi identityv1.IdentityServiceClient, c *diag.Collector, actor string) *gqlclient.Client {
 	h := handler.New(NewExecutableSchema(Config{Resolvers: &Resolver{Identity: fi, Diag: c}}))
 	h.AddTransport(transport.POST{})
 	return gqlclient.New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -158,5 +158,40 @@ func TestDiagnostics_CarriesDependencyStates(t *testing.T) {
 	}
 	if d.Services[1].Dependencies != nil {
 		t.Fatalf("connector dependencies = %+v, want null", d.Services[1].Dependencies)
+	}
+}
+
+type diagIdentityUser struct {
+	identityv1.IdentityServiceClient
+	user *identityv1.User
+}
+
+func (f *diagIdentityUser) GetUser(_ context.Context, _ *identityv1.GetUserRequest, _ ...grpc.CallOption) (*identityv1.GetUserResponse, error) {
+	return &identityv1.GetUserResponse{User: f.user}, nil
+}
+
+func diagActorUsername(t *testing.T, user *identityv1.User) string {
+	t.Helper()
+	c := &diag.Collector{Gateway: diag.Component{Name: "gateway", Status: diag.StatusOK}}
+	var resp struct {
+		Diagnostics struct {
+			Actor struct{ Username string }
+		}
+	}
+	newDiagClient(&diagIdentityUser{user: user}, c, "u-morgan").MustPost(`{ diagnostics { actor { username } } }`, &resp)
+	return resp.Diagnostics.Actor.Username
+}
+
+func TestDiagnostics_ActorUsernameFallsBackToNameWhenUsernameIsEmpty(t *testing.T) {
+	got := diagActorUsername(t, &identityv1.User{Id: "u-morgan", Name: "Morgan Example"})
+	if got != "Morgan Example" {
+		t.Fatalf("username = %q, want the display name", got)
+	}
+}
+
+func TestDiagnostics_ActorUsernameFallsBackToIDWhenUsernameAndNameAreEmpty(t *testing.T) {
+	got := diagActorUsername(t, &identityv1.User{Id: "u-morgan"})
+	if got != "u-morgan" {
+		t.Fatalf("username = %q, want the account id", got)
 	}
 }
