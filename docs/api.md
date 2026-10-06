@@ -124,6 +124,34 @@ form (`ssh-ed25519 AAAA... comment`). An empty list means the target isn't pinne
   values as the vault's). The broker refuses every kind but a person, and passes the actor
   through to the vault when it reveals the key.
 
+### Target connections
+
+`Target.connections` (`[TargetConnection!]!`, each a `connectionId` plus `isDefault`) lists a
+target's connections in order, one connector protocol apiece, with exactly one default.
+`Target.connectionId` stays as an alias for the default entry, for a caller that hasn't moved to
+the list. `TargetInput.connectionId` is now optional: set `connections` instead to save more than
+one, or leave it as the sole field to keep saving a single connection the old way. The vault
+validates the list (every id must resolve to a connection, no two sharing a protocol, exactly one
+default) and normalizes a legacy single-`connectionId` save, same as it always has — see
+[sneakers-vault docs/api.md](https://github.com/Sneakers-PAM/sneakers-vault/blob/main/docs/api.md).
+
+`openSshSession(secretId, connectionId)` starts on the bound target's default connection unless
+`connectionId` names one of that target's own connections; naming any other id, or one that isn't
+`ssh`, is refused the same way an unresolvable target or connection already is.
+
+### Audit subject
+
+`AuditRecord.subjectKind`, `subjectId` and `subjectName` resolve the raw `subject` string (which
+stays, unchanged, for compatibility) to a record the web can link to: `subjectKind` is one of
+`secret`, `folder`, `target`, `user`, `service_account` or `unknown`, read off the id's prefix;
+`subjectId` is the same id with any `#field` suffix (a field-level action's subject, e.g.
+`secret-1#password`) stripped; `subjectName` is the resolved display name, or `null` when the
+caller can't read the subject, it's deleted, or its kind is `unknown`. Resolution is batched once
+per page of `auditRecords` — one call per kind present, not per record — through the same
+actor-scoped calls the rest of the schema uses (`GetSecret`, `ListFolders`, `ListTargets`,
+`ListServiceAccounts`, `ResolveUserLabels`), so access and visibility follow the caller exactly as
+they do everywhere else.
+
 ### Step-up
 
 The session remembers when it last proved a second factor: at sign-in, at enrollment, or through

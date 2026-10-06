@@ -108,6 +108,9 @@ type ComplexityRoot struct {
 		Sensitive   func(childComplexity int) int
 		Seq         func(childComplexity int) int
 		Subject     func(childComplexity int) int
+		SubjectID   func(childComplexity int) int
+		SubjectKind func(childComplexity int) int
+		SubjectName func(childComplexity int) int
 		Tier        func(childComplexity int) int
 	}
 
@@ -347,7 +350,7 @@ type ComplexityRoot struct {
 		MintAPIToken             func(childComplexity int, serviceAccountID string, scope string, expiresAt *int) int
 		MoveFolder               func(childComplexity int, id string, newParentID *string) int
 		OpenBreakGlassSession    func(childComplexity int, reason string, code string) int
-		OpenSSHSession           func(childComplexity int, secretID string) int
+		OpenSSHSession           func(childComplexity int, secretID string, connectionID *string) int
 		PrepareSecretReveal      func(childComplexity int, secretID string, fieldKey string, runID *string) int
 		RedeemSecretReveal       func(childComplexity int, id string) int
 		RemoveFolderRule         func(childComplexity int, id string) int
@@ -641,6 +644,7 @@ type ComplexityRoot struct {
 
 	Target struct {
 		ConnectionID func(childComplexity int) int
+		Connections  func(childComplexity int) int
 		Description  func(childComplexity int) int
 		Domain       func(childComplexity int) int
 		Hostname     func(childComplexity int) int
@@ -651,6 +655,11 @@ type ComplexityRoot struct {
 		Realm        func(childComplexity int) int
 		SSHHostKeys  func(childComplexity int) int
 		SecretCount  func(childComplexity int) int
+	}
+
+	TargetConnection struct {
+		ConnectionID func(childComplexity int) int
+		IsDefault    func(childComplexity int) int
 	}
 
 	UseGrant struct {
@@ -772,7 +781,7 @@ type MutationResolver interface {
 	UpdateUser(ctx context.Context, userID string, name string, email string, username string) (*User, error)
 	MarkNotificationRead(ctx context.Context, id string) (bool, error)
 	MarkAllNotificationsRead(ctx context.Context) (bool, error)
-	OpenSSHSession(ctx context.Context, secretID string) (*SSHSessionTicket, error)
+	OpenSSHSession(ctx context.Context, secretID string, connectionID *string) (*SSHSessionTicket, error)
 	CreateServiceAccount(ctx context.Context, name string, description string) (*ServiceAccount, error)
 	DisableServiceAccount(ctx context.Context, id string) (*ServiceAccount, error)
 	MintAPIToken(ctx context.Context, serviceAccountID string, scope string, expiresAt *int) (*MintAPITokenResult, error)
@@ -1177,6 +1186,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AuditRecord.Subject(childComplexity), true
+	case "AuditRecord.subjectId":
+		if e.ComplexityRoot.AuditRecord.SubjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuditRecord.SubjectID(childComplexity), true
+	case "AuditRecord.subjectKind":
+		if e.ComplexityRoot.AuditRecord.SubjectKind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuditRecord.SubjectKind(childComplexity), true
+	case "AuditRecord.subjectName":
+		if e.ComplexityRoot.AuditRecord.SubjectName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuditRecord.SubjectName(childComplexity), true
 	case "AuditRecord.tier":
 		if e.ComplexityRoot.AuditRecord.Tier == nil {
 			break
@@ -2379,7 +2406,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.OpenSSHSession(childComplexity, args["secretId"].(string)), true
+		return e.ComplexityRoot.Mutation.OpenSSHSession(childComplexity, args["secretId"].(string), args["connectionId"].(*string)), true
 	case "Mutation.prepareSecretReveal":
 		if e.ComplexityRoot.Mutation.PrepareSecretReveal == nil {
 			break
@@ -4102,6 +4129,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Target.ConnectionID(childComplexity), true
+	case "Target.connections":
+		if e.ComplexityRoot.Target.Connections == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Target.Connections(childComplexity), true
 	case "Target.description":
 		if e.ComplexityRoot.Target.Description == nil {
 			break
@@ -4162,6 +4195,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Target.SecretCount(childComplexity), true
+
+	case "TargetConnection.connectionId":
+		if e.ComplexityRoot.TargetConnection.ConnectionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetConnection.ConnectionID(childComplexity), true
+	case "TargetConnection.isDefault":
+		if e.ComplexityRoot.TargetConnection.IsDefault == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetConnection.IsDefault(childComplexity), true
 
 	case "UseGrant.allowReveal":
 		if e.ComplexityRoot.UseGrant.AllowReveal == nil {
@@ -4372,6 +4418,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSecretFieldDefInput,
 		ec.unmarshalInputSecretTypeInput,
 		ec.unmarshalInputSecuritySettingsInput,
+		ec.unmarshalInputTargetConnectionInput,
 		ec.unmarshalInputTargetInput,
 		ec.unmarshalInputUpdateSecretInput,
 		ec.unmarshalInputUseGrantInput,
@@ -4816,7 +4863,14 @@ type Target {
   kind: String
   domain: String
   realm: String
+  # Alias for connections' default entry; kept for a caller that hasn't moved
+  # to the list.
   connectionId: String!
+  # The target's connections, in display order, one connector protocol apiece
+  # and exactly one default (the one a session starts on unless the caller
+  # names another). A target saved before this field existed is read back as
+  # a one-item default list built from connectionId.
+  connections: [TargetConnection!]!
   description: String
   # Output-only: number of secrets pointing at this target (server-computed).
   secretCount: Int!
@@ -4828,6 +4882,14 @@ type Target {
   # sessions to it are refused.
   sshHostKeys: [String!]!
 }
+type TargetConnection {
+  connectionId: ID!
+  isDefault: Boolean!
+}
+input TargetConnectionInput {
+  connectionId: ID!
+  isDefault: Boolean!
+}
 input TargetInput {
   id: ID
   name: String!
@@ -4835,7 +4897,12 @@ input TargetInput {
   kind: String
   domain: String
   realm: String
-  connectionId: String!
+  # Legacy alias for the default connection. Required when connections is
+  # omitted or empty; ignored otherwise.
+  connectionId: ID
+  # The target's connections, ordered, with exactly one default. Omit (or
+  # send empty) to save with connectionId alone instead.
+  connections: [TargetConnectionInput!]
   description: String
   # The full pin list (site admin only to change). Omit to keep the target's
   # current pins; [] clears them.
@@ -5031,6 +5098,15 @@ type AuditRecord {
   # Human-readable actor label resolved via identity (falls back to the id).
   actorName: String!
   subject: String!
+  # The subject's record kind ("secret" | "folder" | "target" | "user" |
+  # "service_account" | "unknown"), resolved from the subject string's id
+  # prefix. subjectId is the same id as subject, broken out so the caller
+  # doesn't have to parse it.
+  subjectKind: String!
+  subjectId: String!
+  # Resolved server-side, batched per page, and access-aware: null when the
+  # caller can't read the subject, or it's deleted, unknown, or unresolved.
+  subjectName: String
   groupId: String!
   sensitive: Boolean!
   attributes: [AuditAttr!]!
@@ -5675,8 +5751,10 @@ type Mutation {
 
   # Authorizes an interactive SSH session against an ssh-key secret's bound
   # target: reveals the key (audited, RBAC-gated), hands session parameters to
-  # sshbroker, and returns a single-use WebSocket ticket.
-  openSshSession(secretId: ID!): SshSessionTicket!
+  # sshbroker, and returns a single-use WebSocket ticket. Starts on the
+  # target's default connection unless connectionId names one of the
+  # target's own connections.
+  openSshSession(secretId: ID!, connectionId: ID): SshSessionTicket!
 
   # Service-account + API-token management. Site-admin-only:
   # these are the human /graphql admin operations for the machine-auth surface
@@ -5865,6 +5943,12 @@ func (ec *executionContext) childFields_AuditRecord(ctx context.Context, field g
 		return ec.fieldContext_AuditRecord_actorName(ctx, field)
 	case "subject":
 		return ec.fieldContext_AuditRecord_subject(ctx, field)
+	case "subjectKind":
+		return ec.fieldContext_AuditRecord_subjectKind(ctx, field)
+	case "subjectId":
+		return ec.fieldContext_AuditRecord_subjectId(ctx, field)
+	case "subjectName":
+		return ec.fieldContext_AuditRecord_subjectName(ctx, field)
 	case "groupId":
 		return ec.fieldContext_AuditRecord_groupId(ctx, field)
 	case "sensitive":
@@ -6671,6 +6755,8 @@ func (ec *executionContext) childFields_Target(ctx context.Context, field graphq
 		return ec.fieldContext_Target_realm(ctx, field)
 	case "connectionId":
 		return ec.fieldContext_Target_connectionId(ctx, field)
+	case "connections":
+		return ec.fieldContext_Target_connections(ctx, field)
 	case "description":
 		return ec.fieldContext_Target_description(ctx, field)
 	case "secretCount":
@@ -6681,6 +6767,16 @@ func (ec *executionContext) childFields_Target(ctx context.Context, field graphq
 		return ec.fieldContext_Target_sshHostKeys(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Target", field.Name)
+}
+
+func (ec *executionContext) childFields_TargetConnection(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "connectionId":
+		return ec.fieldContext_TargetConnection_connectionId(ctx, field)
+	case "isDefault":
+		return ec.fieldContext_TargetConnection_isDefault(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type TargetConnection", field.Name)
 }
 
 func (ec *executionContext) childFields_UseGrant(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -7814,6 +7910,14 @@ func (ec *executionContext) field_Mutation_openSshSession_args(ctx context.Conte
 		return nil, err
 	}
 	args["secretId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "connectionId",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOID2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["connectionId"] = arg1
 	return args, nil
 }
 
@@ -10221,6 +10325,75 @@ func (ec *executionContext) _AuditRecord_subject(ctx context.Context, field grap
 	)
 }
 func (ec *executionContext) fieldContext_AuditRecord_subject(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuditRecord", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AuditRecord_subjectKind(ctx context.Context, field graphql.CollectedField, obj *AuditRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuditRecord_subjectKind(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectKind, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuditRecord_subjectKind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuditRecord", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AuditRecord_subjectId(ctx context.Context, field graphql.CollectedField, obj *AuditRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuditRecord_subjectId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuditRecord_subjectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuditRecord", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AuditRecord_subjectName(ctx context.Context, field graphql.CollectedField, obj *AuditRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuditRecord_subjectName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_AuditRecord_subjectName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("AuditRecord", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
@@ -16318,7 +16491,7 @@ func (ec *executionContext) _Mutation_openSshSession(ctx context.Context, field 
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().OpenSSHSession(ctx, fc.Args["secretId"].(string))
+			return ec.Resolvers.Mutation().OpenSSHSession(ctx, fc.Args["secretId"].(string), fc.Args["connectionId"].(*string))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *SSHSessionTicket) graphql.Marshaler {
@@ -22197,6 +22370,38 @@ func (ec *executionContext) fieldContext_Target_connectionId(_ context.Context, 
 	return graphql.NewScalarFieldContext("Target", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _Target_connections(ctx context.Context, field graphql.CollectedField, obj *Target) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Target_connections(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Connections, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*TargetConnection) graphql.Marshaler {
+			return ec.marshalNTargetConnection2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetConnectionᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Target_connections(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Target",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TargetConnection(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Target_description(ctx context.Context, field graphql.CollectedField, obj *Target) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22287,6 +22492,52 @@ func (ec *executionContext) _Target_sshHostKeys(ctx context.Context, field graph
 }
 func (ec *executionContext) fieldContext_Target_sshHostKeys(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Target", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetConnection_connectionId(ctx context.Context, field graphql.CollectedField, obj *TargetConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetConnection_connectionId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ConnectionID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetConnection_connectionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetConnection", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _TargetConnection_isDefault(ctx context.Context, field graphql.CollectedField, obj *TargetConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetConnection_isDefault(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IsDefault, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetConnection_isDefault(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetConnection", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _UseGrant_id(ctx context.Context, field graphql.CollectedField, obj *UseGrant) (ret graphql.Marshaler) {
@@ -24720,6 +24971,43 @@ func (ec *executionContext) unmarshalInputSecuritySettingsInput(ctx context.Cont
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputTargetConnectionInput(ctx context.Context, obj any) (TargetConnectionInput, error) {
+	var it TargetConnectionInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"connectionId", "isDefault"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "connectionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("connectionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ConnectionID = data
+		case "isDefault":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("isDefault"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.IsDefault = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputTargetInput(ctx context.Context, obj any) (TargetInput, error) {
 	var it TargetInput
 	if obj == nil {
@@ -24731,7 +25019,7 @@ func (ec *executionContext) unmarshalInputTargetInput(ctx context.Context, obj a
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id", "name", "hostname", "kind", "domain", "realm", "connectionId", "description", "sshHostKeys"}
+	fieldsInOrder := [...]string{"id", "name", "hostname", "kind", "domain", "realm", "connectionId", "connections", "description", "sshHostKeys"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -24782,11 +25070,18 @@ func (ec *executionContext) unmarshalInputTargetInput(ctx context.Context, obj a
 			it.Realm = data
 		case "connectionId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("connectionId"))
-			data, err := ec.unmarshalNString2string(ctx, v)
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.ConnectionID = data
+		case "connections":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("connections"))
+			data, err := ec.unmarshalOTargetConnectionInput2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetConnectionInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Connections = data
 		case "description":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -25410,6 +25705,18 @@ func (ec *executionContext) _AuditRecord(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "subjectKind":
+			out.Values[i] = ec._AuditRecord_subjectKind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "subjectId":
+			out.Values[i] = ec._AuditRecord_subjectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "subjectName":
+			out.Values[i] = ec._AuditRecord_subjectName(ctx, field, obj)
 		case "groupId":
 			out.Values[i] = ec._AuditRecord_groupId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -29857,6 +30164,11 @@ func (ec *executionContext) _Target(ctx context.Context, sel ast.SelectionSet, o
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "connections":
+			out.Values[i] = ec._Target_connections(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "description":
 			out.Values[i] = ec._Target_description(ctx, field, obj)
 		case "secretCount":
@@ -29868,6 +30180,50 @@ func (ec *executionContext) _Target(ctx context.Context, sel ast.SelectionSet, o
 			out.Values[i] = ec._Target_ownerUserId(ctx, field, obj)
 		case "sshHostKeys":
 			out.Values[i] = ec._Target_sshHostKeys(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var targetConnectionImplementors = []string{"TargetConnection"}
+
+func (ec *executionContext) _TargetConnection(ctx context.Context, sel ast.SelectionSet, obj *TargetConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, targetConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TargetConnection")
+		case "connectionId":
+			out.Values[i] = ec._TargetConnection_connectionId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isDefault":
+			out.Values[i] = ec._TargetConnection_isDefault(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -32001,6 +32357,37 @@ func (ec *executionContext) marshalNTarget2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsn
 	return ec._Target(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNTargetConnection2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetConnectionᚄ(ctx context.Context, sel ast.SelectionSet, v []*TargetConnection) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTargetConnection2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetConnection(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTargetConnection2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetConnection(ctx context.Context, sel ast.SelectionSet, v *TargetConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TargetConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNTargetConnectionInput2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetConnectionInput(ctx context.Context, v any) (*TargetConnectionInput, error) {
+	res, err := ec.unmarshalInputTargetConnectionInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNTargetInput2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetInput(ctx context.Context, v any) (TargetInput, error) {
 	res, err := ec.unmarshalInputTargetInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -32643,6 +33030,24 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalString(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOTargetConnectionInput2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetConnectionInputᚄ(ctx context.Context, v any) ([]*TargetConnectionInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*TargetConnectionInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNTargetConnectionInput2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetConnectionInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) marshalOUser2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐUser(ctx context.Context, sel ast.SelectionSet, v *User) graphql.Marshaler {

@@ -76,6 +76,9 @@ type AuditRecord struct {
 	ActorUserID string       `json:"actorUserId"`
 	ActorName   string       `json:"actorName"`
 	Subject     string       `json:"subject"`
+	SubjectKind string       `json:"subjectKind"`
+	SubjectID   string       `json:"subjectId"`
+	SubjectName *string      `json:"subjectName,omitempty"`
 	GroupID     string       `json:"groupId"`
 	Sensitive   bool         `json:"sensitive"`
 	Attributes  []*AuditAttr `json:"attributes"`
@@ -571,29 +574,41 @@ type Subscription struct {
 }
 
 type Target struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Hostname     string   `json:"hostname"`
-	Kind         *string  `json:"kind,omitempty"`
-	Domain       *string  `json:"domain,omitempty"`
-	Realm        *string  `json:"realm,omitempty"`
-	ConnectionID string   `json:"connectionId"`
-	Description  *string  `json:"description,omitempty"`
-	SecretCount  int      `json:"secretCount"`
-	OwnerUserID  *string  `json:"ownerUserId,omitempty"`
-	SSHHostKeys  []string `json:"sshHostKeys"`
+	ID           string              `json:"id"`
+	Name         string              `json:"name"`
+	Hostname     string              `json:"hostname"`
+	Kind         *string             `json:"kind,omitempty"`
+	Domain       *string             `json:"domain,omitempty"`
+	Realm        *string             `json:"realm,omitempty"`
+	ConnectionID string              `json:"connectionId"`
+	Connections  []*TargetConnection `json:"connections"`
+	Description  *string             `json:"description,omitempty"`
+	SecretCount  int                 `json:"secretCount"`
+	OwnerUserID  *string             `json:"ownerUserId,omitempty"`
+	SSHHostKeys  []string            `json:"sshHostKeys"`
+}
+
+type TargetConnection struct {
+	ConnectionID string `json:"connectionId"`
+	IsDefault    bool   `json:"isDefault"`
+}
+
+type TargetConnectionInput struct {
+	ConnectionID string `json:"connectionId"`
+	IsDefault    bool   `json:"isDefault"`
 }
 
 type TargetInput struct {
-	ID           *string  `json:"id,omitempty"`
-	Name         string   `json:"name"`
-	Hostname     string   `json:"hostname"`
-	Kind         *string  `json:"kind,omitempty"`
-	Domain       *string  `json:"domain,omitempty"`
-	Realm        *string  `json:"realm,omitempty"`
-	ConnectionID string   `json:"connectionId"`
-	Description  *string  `json:"description,omitempty"`
-	SSHHostKeys  []string `json:"sshHostKeys,omitempty"`
+	ID           *string                  `json:"id,omitempty"`
+	Name         string                   `json:"name"`
+	Hostname     string                   `json:"hostname"`
+	Kind         *string                  `json:"kind,omitempty"`
+	Domain       *string                  `json:"domain,omitempty"`
+	Realm        *string                  `json:"realm,omitempty"`
+	ConnectionID *string                  `json:"connectionId,omitempty"`
+	Connections  []*TargetConnectionInput `json:"connections,omitempty"`
+	Description  *string                  `json:"description,omitempty"`
+	SSHHostKeys  []string                 `json:"sshHostKeys,omitempty"`
 }
 
 type UpdateSecretInput struct {

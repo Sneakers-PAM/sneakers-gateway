@@ -5,6 +5,7 @@ package resolvers
 
 import (
 	"sort"
+	"strings"
 
 	auditv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/audit/v1"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
@@ -366,13 +367,20 @@ func gqlConnection(c *vaultv1.Connection) *Connection {
 	}
 }
 func gqlTarget(t *vaultv1.Target) *Target {
+	conns := make([]*TargetConnection, 0, len(t.GetConnections()))
+	for _, c := range t.GetConnections() {
+		conns = append(conns, gqlTargetConnection(c))
+	}
 	return &Target{
 		ID: t.GetId(), Name: t.GetName(), Hostname: t.GetHostname(),
 		Kind: strPtr(t.GetKind()), Domain: strPtr(t.GetDomain()), Realm: strPtr(t.GetRealm()),
-		ConnectionID: t.GetConnectionId(), Description: strPtr(t.GetDescription()),
+		ConnectionID: t.GetConnectionId(), Connections: conns, Description: strPtr(t.GetDescription()),
 		SecretCount: int(t.GetSecretCount()), OwnerUserID: strPtr(t.GetOwnerUserId()),
 		SSHHostKeys: append([]string{}, t.GetSshHostKeys()...),
 	}
+}
+func gqlTargetConnection(c *vaultv1.TargetConnection) *TargetConnection {
+	return &TargetConnection{ConnectionID: c.GetConnectionId(), IsDefault: c.GetIsDefault()}
 }
 func protoConnInput(in ConnectionInput) *vaultv1.Connection {
 	return &vaultv1.Connection{
@@ -381,10 +389,14 @@ func protoConnInput(in ConnectionInput) *vaultv1.Connection {
 	}
 }
 func protoTargetInput(in TargetInput) *vaultv1.Target {
+	conns := make([]*vaultv1.TargetConnection, 0, len(in.Connections))
+	for _, c := range in.Connections {
+		conns = append(conns, &vaultv1.TargetConnection{ConnectionId: c.ConnectionID, IsDefault: c.IsDefault})
+	}
 	return &vaultv1.Target{
 		Id: deref(in.ID), Name: in.Name, Hostname: in.Hostname,
 		Kind: deref(in.Kind), Domain: deref(in.Domain), Realm: deref(in.Realm),
-		ConnectionId: in.ConnectionID, Description: deref(in.Description),
+		ConnectionId: deref(in.ConnectionID), Connections: conns, Description: deref(in.Description),
 		SshHostKeys: in.SSHHostKeys,
 	}
 }
@@ -597,10 +609,49 @@ func auditTierGQL(t auditv1.Tier) string {
 	}
 }
 
+// subjectKindPrefixes maps an audit subject id's prefix (the part before its
+// first "-") to the record kind the web links to. Checked longest-prefix
+// first so a hyphenated prefix (service_account's "sa" is plain, but a future
+// multi-word one wouldn't be) never matches its own first segment by mistake.
+var subjectKindPrefixes = map[string]string{
+	"secret": "secret",
+	"folder": "folder",
+	"target": "target",
+	"user":   "user",
+	"sa":     "service_account",
+}
+
+// subjectBaseID strips a field-level audit subject's "#field" suffix (e.g.
+// "secret-1#password", recorded by a field-reveal action), leaving the
+// record id a lookup or a link can use. A subject with no "#" is returned
+// unchanged.
+func subjectBaseID(subject string) string {
+	id, _, _ := strings.Cut(subject, "#")
+	return id
+}
+
+// subjectKind classifies an audit subject string by its base id's prefix
+// (every vault and identity id is "<prefix>-<rest>"). A prefix this gateway
+// doesn't know about — or a subject with no prefix at all — comes back
+// "unknown", never an error: the log still renders, just without a link.
+func subjectKind(subject string) string {
+	prefix, _, ok := strings.Cut(subjectBaseID(subject), "-")
+	if !ok {
+		return "unknown"
+	}
+	kind, ok := subjectKindPrefixes[prefix]
+	if !ok {
+		return "unknown"
+	}
+	return kind
+}
+
 // gqlAuditRecord converts an audit-service AuditRecord into its GraphQL shape.
 // actorName is the resolved human-readable label (falls back to the actor id
-// upstream); attributes are emitted key-sorted for a stable UI ordering.
-func gqlAuditRecord(rec *auditv1.AuditRecord, actorName string) *AuditRecord {
+// upstream); subjectName is the resolved display name for the subject, or nil
+// when the caller can't read it, it's deleted, or its kind is unresolved.
+// attributes are emitted key-sorted for a stable UI ordering.
+func gqlAuditRecord(rec *auditv1.AuditRecord, actorName string, subjectName *string) *AuditRecord {
 	attrs := make([]*AuditAttr, 0, len(rec.GetAttributes()))
 	for k, v := range rec.GetAttributes() {
 		attrs = append(attrs, &AuditAttr{Key: k, Value: v})
@@ -613,6 +664,9 @@ func gqlAuditRecord(rec *auditv1.AuditRecord, actorName string) *AuditRecord {
 		ActorUserID: rec.GetActorUserId(),
 		ActorName:   actorName,
 		Subject:     rec.GetSubject(),
+		SubjectKind: subjectKind(rec.GetSubject()),
+		SubjectID:   subjectBaseID(rec.GetSubject()),
+		SubjectName: subjectName,
 		GroupID:     rec.GetGroupId(),
 		Sensitive:   rec.GetSensitive(),
 		Attributes:  attrs,

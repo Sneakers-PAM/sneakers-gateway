@@ -6,6 +6,7 @@ package resolvers
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	sshbrokerv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/sshbroker/v1"
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
@@ -13,22 +14,32 @@ import (
 
 // resolveSSHEndpoint turns a targetId into host + port, plus the target's
 // pinned SSH host keys for the broker, via the vault's
-// ListTargets/ListConnections (no single join RPC exists).
-func (r *mutationResolver) resolveSSHEndpoint(ctx context.Context, targetID string) (string, int, []string, error) {
+// ListTargets/ListConnections (no single join RPC exists). wantConnID, when
+// non-empty, must name one of the target's own connections; empty picks the
+// target's default connection.
+func (r *mutationResolver) resolveSSHEndpoint(ctx context.Context, targetID, wantConnID string) (string, int, []string, error) {
 	tl, err := r.Vault.ListTargets(ctx, &vaultv1.ListTargetsRequest{Actor: actorOf(ctx)})
 	if err != nil {
 		return "", 0, nil, err
 	}
-	var host, connID string
+	var host, defaultConnID string
+	var conns []*vaultv1.TargetConnection
 	var hostKeys []string
 	for _, t := range tl.GetTargets() {
 		if t.GetId() == targetID {
-			host, connID, hostKeys = t.GetHostname(), t.GetConnectionId(), t.GetSshHostKeys()
+			host, defaultConnID, conns, hostKeys = t.GetHostname(), t.GetConnectionId(), t.GetConnections(), t.GetSshHostKeys()
 			break
 		}
 	}
 	if host == "" {
 		return "", 0, nil, fmt.Errorf("target not found")
+	}
+	connID := defaultConnID
+	if wantConnID != "" {
+		if !slices.ContainsFunc(conns, func(c *vaultv1.TargetConnection) bool { return c.GetConnectionId() == wantConnID }) {
+			return "", 0, nil, fmt.Errorf("connection does not belong to this target")
+		}
+		connID = wantConnID
 	}
 	cl, err := r.Vault.ListConnections(ctx, &vaultv1.ListConnectionsRequest{})
 	if err != nil {

@@ -892,7 +892,7 @@ func (r *mutationResolver) MarkAllNotificationsRead(ctx context.Context) (bool, 
 }
 
 // OpenSSHSession is the resolver for the openSshSession field.
-func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string) (*SSHSessionTicket, error) {
+func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string, connectionID *string) (*SSHSessionTicket, error) {
 	actor := actorOf(ctx)
 	sec, err := r.Vault.GetSecret(ctx, &vaultv1.GetSecretRequest{Actor: actor, Id: secretID})
 	if err != nil {
@@ -905,7 +905,7 @@ func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string) 
 	if targetID == "" {
 		return nil, fmt.Errorf("secret has no target host")
 	}
-	host, port, hostKeys, err := r.resolveSSHEndpoint(ctx, targetID)
+	host, port, hostKeys, err := r.resolveSSHEndpoint(ctx, targetID, deref(connectionID))
 	if err != nil {
 		return nil, err
 	}
