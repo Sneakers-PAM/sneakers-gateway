@@ -377,27 +377,28 @@ type RaciRuleInput struct {
 }
 
 type Secret struct {
-	ID                   string           `json:"id"`
-	Name                 string           `json:"name"`
-	FolderID             string           `json:"folderId"`
-	TypeID               string           `json:"typeId"`
-	TargetID             *string          `json:"targetId,omitempty"`
-	ExpiresAt            *string          `json:"expiresAt,omitempty"`
-	LastHeartbeatResult  *HeartbeatResult `json:"lastHeartbeatResult,omitempty"`
-	VerifiedAt           *string          `json:"verifiedAt,omitempty"`
-	Masked               *bool            `json:"masked,omitempty"`
-	ViewCount            *int             `json:"viewCount,omitempty"`
-	LastAccessedAt       *string          `json:"lastAccessedAt,omitempty"`
-	Retired              bool             `json:"retired"`
-	RetiredAt            string           `json:"retiredAt"`
-	LastRotationResult   *RotationState   `json:"lastRotationResult,omitempty"`
-	RotatedAt            *string          `json:"rotatedAt,omitempty"`
-	RotationIntervalDays *int             `json:"rotationIntervalDays,omitempty"`
-	NextRotationAt       *string          `json:"nextRotationAt,omitempty"`
-	RotationOptOut       *bool            `json:"rotationOptOut,omitempty"`
-	HeartbeatOptOut      *bool            `json:"heartbeatOptOut,omitempty"`
-	RequireTokenApproval *bool            `json:"requireTokenApproval,omitempty"`
-	CanRead              *bool            `json:"canRead,omitempty"`
+	ID                    string           `json:"id"`
+	Name                  string           `json:"name"`
+	FolderID              string           `json:"folderId"`
+	TypeID                string           `json:"typeId"`
+	TargetID              *string          `json:"targetId,omitempty"`
+	ExpiresAt             *string          `json:"expiresAt,omitempty"`
+	LastHeartbeatResult   *HeartbeatResult `json:"lastHeartbeatResult,omitempty"`
+	VerifiedAt            *string          `json:"verifiedAt,omitempty"`
+	Masked                *bool            `json:"masked,omitempty"`
+	ViewCount             *int             `json:"viewCount,omitempty"`
+	LastAccessedAt        *string          `json:"lastAccessedAt,omitempty"`
+	Retired               bool             `json:"retired"`
+	RetiredAt             string           `json:"retiredAt"`
+	LastRotationResult    *RotationState   `json:"lastRotationResult,omitempty"`
+	RotatedAt             *string          `json:"rotatedAt,omitempty"`
+	RotationIntervalDays  *int             `json:"rotationIntervalDays,omitempty"`
+	NextRotationAt        *string          `json:"nextRotationAt,omitempty"`
+	RotationOptOut        *bool            `json:"rotationOptOut,omitempty"`
+	HeartbeatOptOut       *bool            `json:"heartbeatOptOut,omitempty"`
+	RequireTokenApproval  *bool            `json:"requireTokenApproval,omitempty"`
+	AlwaysRequireApproval *bool            `json:"alwaysRequireApproval,omitempty"`
+	CanRead               *bool            `json:"canRead,omitempty"`
 }
 
 type SecretFieldDef struct {
@@ -476,6 +477,8 @@ type SecretUse struct {
 	RunID         *string  `json:"runId,omitempty"`
 	Purpose       string   `json:"purpose"`
 	Requester     string   `json:"requester"`
+	RequestedBy   string   `json:"requestedBy"`
+	Confirm       bool     `json:"confirm"`
 }
 
 type SecretUseOutcome struct {
@@ -1463,6 +1466,9 @@ const (
 	SecretUseRefusalNotFound       SecretUseRefusal = "NOT_FOUND"
 	SecretUseRefusalNotPermitted   SecretUseRefusal = "NOT_PERMITTED"
 	SecretUseRefusalUnavailable    SecretUseRefusal = "UNAVAILABLE"
+	SecretUseRefusalSelfApproval   SecretUseRefusal = "SELF_APPROVAL"
+	SecretUseRefusalOtherApprover  SecretUseRefusal = "OTHER_APPROVER"
+	SecretUseRefusalNoApprover     SecretUseRefusal = "NO_APPROVER"
 )
 
 var AllSecretUseRefusal = []SecretUseRefusal{
@@ -1471,11 +1477,14 @@ var AllSecretUseRefusal = []SecretUseRefusal{
 	SecretUseRefusalNotFound,
 	SecretUseRefusalNotPermitted,
 	SecretUseRefusalUnavailable,
+	SecretUseRefusalSelfApproval,
+	SecretUseRefusalOtherApprover,
+	SecretUseRefusalNoApprover,
 }
 
 func (e SecretUseRefusal) IsValid() bool {
 	switch e {
-	case SecretUseRefusalExpired, SecretUseRefusalAlreadyDecided, SecretUseRefusalNotFound, SecretUseRefusalNotPermitted, SecretUseRefusalUnavailable:
+	case SecretUseRefusalExpired, SecretUseRefusalAlreadyDecided, SecretUseRefusalNotFound, SecretUseRefusalNotPermitted, SecretUseRefusalUnavailable, SecretUseRefusalSelfApproval, SecretUseRefusalOtherApprover, SecretUseRefusalNoApprover:
 		return true
 	}
 	return false

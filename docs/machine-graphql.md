@@ -23,7 +23,7 @@
 
 ## Secret uses
 
-Personal tokens only. `prepareSecretUse(secretId, fieldKey, argv, clientLabel, reveal, runId, purpose)` asks to use one field for the exact command in `argv` (or, with `reveal: true`, for the value itself); `secretUse(id)` polls it and `redeemSecretUse(id)` collects the value once, after approval.
+Personal tokens only. `prepareSecretUse(secretId, fieldKey, argv, clientLabel, reveal, runId, purpose)` asks to use one field for the exact command in `argv` (or, with `reveal: true`, for the value itself); `secretUse(id)` polls it and `redeemSecretUse(id)` collects the value once, after approval. A use is approved at once unless the secret's approval level needs a decision (see [api.md](api.md#pending-secret-uses-approvals-and-runs)): then it waits for an owner or approver, or, when `confirm` is true, for the token's own person to confirm the task once in the web. There is no second factor on this path: after `/login`, a token needs no MFA.
 
 - `runId` (optional, `[A-Za-z0-9_-]{1,64}`) groups the uses one agent run raises so the owner decides them on one page; pass the same one on every request of one task. It groups for display only and grants nothing.
 - `purpose` (optional, at most 200 characters of plain text, no control characters) is the agent's own words for its task, shown to the owner.

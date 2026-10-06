@@ -148,6 +148,7 @@ type ComplexityRoot struct {
 	SecretUse struct {
 		ApprovalURL   func(childComplexity int) int
 		Argv          func(childComplexity int) int
+		Confirm       func(childComplexity int) int
 		ExpiresAtUnix func(childComplexity int) int
 		FieldKey      func(childComplexity int) int
 		ID            func(childComplexity int) int
@@ -792,6 +793,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretUse.Argv(childComplexity), true
+	case "SecretUse.confirm":
+		if e.ComplexityRoot.SecretUse.Confirm == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUse.Confirm(childComplexity), true
 	case "SecretUse.expiresAtUnix":
 		if e.ComplexityRoot.SecretUse.ExpiresAtUnix == nil {
 			break
@@ -1119,10 +1126,12 @@ type SecretTypeSummary {
   fields: [SecretTypeField!]!
 }
 
-# A request by a personal token to use one secret field for one exact command.
-# The value is released once, to that token, after the owner approves it in the
-# Sneakers UI or a use grant covers it. state: PENDING, APPROVED, DENIED,
-# REDEEMED or EXPIRED. approvalUrl is where the owner reviews pending uses.
+# A request by a personal token to use one secret field for one exact command,
+# or to reveal it. It is approved at once unless the secret's approval level
+# needs a decision: then an owner or approver decides in the Sneakers UI, or,
+# when confirm is true, the token's own person confirms the task once there.
+# state: PENDING, APPROVED, DENIED, REDEEMED or EXPIRED. approvalUrl is the
+# page that shows the pending uses.
 type SecretUse {
   id: ID!
   secretId: ID!
@@ -1135,6 +1144,8 @@ type SecretUse {
   reveal: Boolean!
   # The run this use belongs to, when the caller gave one.
   runId: String
+  # Nobody else can decide: the token's person confirms it once in the browser.
+  confirm: Boolean!
 }
 
 type RedeemedSecretUse {
@@ -1327,8 +1338,8 @@ type Mutation {
   setSecretAutomationForPrincipal(secretId: ID!, disableRotation: Boolean!, disableHeartbeat: Boolean!): SecretSummary!
 
   # Ask to use one secret field for the exact command in argv. Personal tokens only.
-  # reveal: true asks for the value itself (no argv), for a secret that
-  # requires token approval.
+  # reveal: true asks for the value itself (no argv), for a secret whose
+  # approval level needs a decision.
   # runId ([A-Za-z0-9_-]{1,64}) groups the uses one agent run raises, so the
   # owner approves them on one page; purpose (at most 200 characters of plain
   # text) is the agent's own words for its task. Both are optional.
@@ -1523,6 +1534,8 @@ func (ec *executionContext) childFields_SecretUse(ctx context.Context, field gra
 		return ec.fieldContext_SecretUse_reveal(ctx, field)
 	case "runId":
 		return ec.fieldContext_SecretUse_runId(ctx, field)
+	case "confirm":
+		return ec.fieldContext_SecretUse_confirm(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecretUse", field.Name)
 }
@@ -4819,6 +4832,29 @@ func (ec *executionContext) fieldContext_SecretUse_runId(_ context.Context, fiel
 	return graphql.NewScalarFieldContext("SecretUse", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _SecretUse_confirm(ctx context.Context, field graphql.CollectedField, obj *SecretUse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUse_confirm(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Confirm, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUse_confirm(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretUse", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
 func (ec *executionContext) _TypeChangeAutomation_rotation(ctx context.Context, field graphql.CollectedField, obj *TypeChangeAutomation) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7326,6 +7362,11 @@ func (ec *executionContext) _SecretUse(ctx context.Context, sel ast.SelectionSet
 			}
 		case "runId":
 			out.Values[i] = ec._SecretUse_runId(ctx, field, obj)
+		case "confirm":
+			out.Values[i] = ec._SecretUse_confirm(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

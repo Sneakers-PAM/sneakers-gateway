@@ -221,6 +221,7 @@ func (r *mutationResolver) PrepareSecretUse(ctx context.Context, secretID string
 	resp, err := r.Vault.PrepareSecretUse(ctx, &vaultv1.PrepareSecretUseRequest{
 		Actor: resolvers.MachineActorOf(ctx), SecretId: secretID, FieldKey: fieldKey, Argv: argv, ClientLabel: deref(clientLabel),
 		Reveal: reveal != nil && *reveal, RunId: deref(runID), Purpose: deref(purpose),
+		ActiveUsers: r.ActiveUsers.Get(ctx),
 	})
 	if err != nil {
 		return nil, prepareRefusal(err)

@@ -339,7 +339,9 @@ func main() {
 	maintenanceForced := envTrue("MAINTENANCE_READONLY")
 	maintenanceMode := maintenance.New(maintenanceForced, watcher.Maintenance)
 	logger.Info().Bool("maintenance_readonly", maintenanceForced).Bool("appliance_configmap", watcher != nil).Msg("maintenance mode config")
-	gqlResolver := &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, HydraIssuer: hydraIssuer, MFAMaxAge: mfaMaxAge, Log: reqLog, Maintenance: maintenanceMode, Appliance: watcher}
+	// One identity listing serves both schemas' approval checks.
+	activeUsers := &resolvers.ActiveUsers{Identity: identityClient, Log: reqLog}
+	gqlResolver := &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, HydraIssuer: hydraIssuer, MFAMaxAge: mfaMaxAge, ActiveUsers: activeUsers, Log: reqLog, Maintenance: maintenanceMode, Appliance: watcher}
 	gql := handler.New(resolvers.NewExecutableSchema(resolvers.Config{Resolvers: gqlResolver}))
 	gql.AddTransport(transport.Options{})
 	gql.AddTransport(transport.POST{})
@@ -533,7 +535,7 @@ func main() {
 	// hydraVerifier/hydraIssuer are computed once, above, by newHydraVerifier.
 	machineH := &bff.Handler{Identity: identityClient, MachineOidcVerifier: hydraVerifier, MachineOidcIssuer: hydraIssuer, MCPDisabled: !mcpEnabled, MachineAPIDisabled: !machineAPIEnabled}
 	machineGQL := handler.New(machineresolvers.NewExecutableSchema(machineresolvers.Config{
-		Resolvers: &machineresolvers.Resolver{Vault: vaultClient, PublicURL: env("OAUTH_PUBLIC_URL", ""), ApprovalRunLinks: runLinks},
+		Resolvers: &machineresolvers.Resolver{Vault: vaultClient, PublicURL: env("OAUTH_PUBLIC_URL", ""), ApprovalRunLinks: runLinks, ActiveUsers: activeUsers},
 	}))
 	machineGQL.AddTransport(transport.POST{})
 	machineGQL.Use(gqllog.ErrorLog{Log: reqLog, Actor: resolvers.CallerID})

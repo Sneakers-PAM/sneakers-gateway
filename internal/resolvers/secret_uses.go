@@ -81,6 +81,7 @@ func secretUseOf(u *vaultv1.SecretUse) *SecretUse {
 		State:         strings.TrimPrefix(u.GetState().String(), "SECRET_USE_STATE_"),
 		ExpiresAtUnix: safeconv.IntFromInt64(u.GetExpiresAtUnix()),
 		Purpose:       u.GetPurpose(), Requester: u.GetClientLabel(),
+		RequestedBy: u.GetUserId(), Confirm: u.GetConfirm(),
 	}
 	if id := u.GetRunId(); id != "" {
 		out.RunID = &id

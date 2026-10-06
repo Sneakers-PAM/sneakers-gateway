@@ -126,6 +126,7 @@ type SecretUse struct {
 	ApprovalURL   string   `json:"approvalUrl"`
 	Reveal        bool     `json:"reveal"`
 	RunID         *string  `json:"runId,omitempty"`
+	Confirm       bool     `json:"confirm"`
 }
 
 type TypeChangeAutomation struct {
