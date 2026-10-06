@@ -105,11 +105,12 @@ type CertMeta struct {
 }
 
 type ComponentVersion struct {
-	Name         string             `json:"name"`
-	Version      *string            `json:"version,omitempty"`
-	Commit       *string            `json:"commit,omitempty"`
-	Status       ComponentStatus    `json:"status"`
-	Dependencies []*DependencyState `json:"dependencies,omitempty"`
+	Name          string             `json:"name"`
+	Version       *string            `json:"version,omitempty"`
+	Commit        *string            `json:"commit,omitempty"`
+	Status        ComponentStatus    `json:"status"`
+	Dependencies  []*DependencyState `json:"dependencies,omitempty"`
+	LastContactAt *string            `json:"lastContactAt,omitempty"`
 }
 
 type Connection struct {

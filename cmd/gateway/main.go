@@ -319,17 +319,6 @@ func main() {
 	defer func() { _ = sshbrokerConn.Close() }()
 	sshbrokerClient := sshbrokerv1.NewSSHBrokerServiceClient(sshbrokerConn)
 
-	// The connector is optional here: it's a pull-based worker, so the gateway
-	// dials it only to read its build for the diagnostics.
-	var connectorConn grpc.ClientConnInterface
-	if addr := env("CONNECTOR_ADDR", ""); addr != "" {
-		cc, err := grpc.NewClient(addr, backendOpts...)
-		if err != nil {
-			logger.Fatal().Err(err).Str("connector", addr).Msg("dial connector")
-		}
-		defer func() { _ = cc.Close() }()
-		connectorConn = cc
-	}
 	mfaMaxAge, err := bff.ParseMFAMaxAge(os.Getenv)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("MFA_MAX_AGE")
@@ -519,7 +508,7 @@ func main() {
 		mux.Handle("/graphql", cors(withActor(identityClient, gql)))
 	}
 	conns := diagServices{
-		identity: idConn, vault: conn, workflow: wfConn, audit: auditConn, notify: nConn, sshbroker: sshbrokerConn, connector: connectorConn,
+		identity: idConn, vault: conn, workflow: wfConn, audit: auditConn, notify: nConn, sshbroker: sshbrokerConn,
 	}
 	checker, err := newChecker(reqLog, healthDeps(os.Getenv, authMode, conns, valkeyPing))
 	if err != nil {
@@ -531,7 +520,7 @@ func main() {
 	// The appliance's post-upgrade check: real reads through the core
 	// backends, uncached, outside auth like /readyz.
 	mux.Handle("/smoke", smokeHandler(smokeChecks(identityClient, vaultClient, conns, valkeyPing), reqLog))
-	gqlResolver.Diag = newDiagnostics(os.Getenv, authMode, conns, valkeyInfo, reqLog)
+	gqlResolver.Diag = newDiagnostics(os.Getenv, authMode, conns, vaultClient, valkeyInfo, reqLog)
 	gqlResolver.Diag.GatewayDependencies = gatewayDependencies(checker)
 
 	// Machine bearer-auth path (with a pluggable OIDC leg): a SEPARATE GraphQL

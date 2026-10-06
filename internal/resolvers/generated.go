@@ -132,11 +132,12 @@ type ComplexityRoot struct {
 	}
 
 	ComponentVersion struct {
-		Commit       func(childComplexity int) int
-		Dependencies func(childComplexity int) int
-		Name         func(childComplexity int) int
-		Status       func(childComplexity int) int
-		Version      func(childComplexity int) int
+		Commit        func(childComplexity int) int
+		Dependencies  func(childComplexity int) int
+		LastContactAt func(childComplexity int) int
+		Name          func(childComplexity int) int
+		Status        func(childComplexity int) int
+		Version       func(childComplexity int) int
 	}
 
 	Connection struct {
@@ -1234,6 +1235,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ComponentVersion.Dependencies(childComplexity), true
+	case "ComponentVersion.lastContactAt":
+		if e.ComplexityRoot.ComponentVersion.LastContactAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ComponentVersion.LastContactAt(childComplexity), true
 	case "ComponentVersion.name":
 		if e.ComplexityRoot.ComponentVersion.Name == nil {
 			break
@@ -5086,7 +5093,8 @@ type Diagnostics {
   # The appliance's version; null when not running on the appliance.
   appliance: String
   gateway: ComponentVersion!
-  # identity, vault, workflow, audit, notify, sshbroker, connector and mcp.
+  # identity, vault, workflow, audit, notify, sshbroker, mcp, and one
+  # "connector:<worker id>" entry per connector vault has heard from.
   services: [ComponentVersion!]!
   # kratos, hydra, polis, valkey, postgres, rabbitmq and kubernetes.
   thirdParty: [ComponentVersion!]!
@@ -5110,6 +5118,9 @@ type ComponentVersion {
   # null when it doesn't report one (an older build, or a third-party
   # service).
   dependencies: [DependencyState!]
+  # When this component last verifiably called in (RFC 3339, UTC); null when
+  # it doesn't report one. Set on the connector entries only.
+  lastContactAt: String
 }
 
 type DependencyState {
@@ -5571,6 +5582,8 @@ func (ec *executionContext) childFields_ComponentVersion(ctx context.Context, fi
 		return ec.fieldContext_ComponentVersion_status(ctx, field)
 	case "dependencies":
 		return ec.fieldContext_ComponentVersion_dependencies(ctx, field)
+	case "lastContactAt":
+		return ec.fieldContext_ComponentVersion_lastContactAt(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type ComponentVersion", field.Name)
 }
@@ -10239,6 +10252,29 @@ func (ec *executionContext) fieldContext_ComponentVersion_dependencies(_ context
 		},
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _ComponentVersion_lastContactAt(ctx context.Context, field graphql.CollectedField, obj *ComponentVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ComponentVersion_lastContactAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LastContactAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ComponentVersion_lastContactAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ComponentVersion", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _Connection_id(ctx context.Context, field graphql.CollectedField, obj *Connection) (ret graphql.Marshaler) {
@@ -24170,6 +24206,8 @@ func (ec *executionContext) _ComponentVersion(ctx context.Context, sel ast.Selec
 			}
 		case "dependencies":
 			out.Values[i] = ec._ComponentVersion_dependencies(ctx, field, obj)
+		case "lastContactAt":
+			out.Values[i] = ec._ComponentVersion_lastContactAt(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

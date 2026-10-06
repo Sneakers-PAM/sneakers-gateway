@@ -12,6 +12,7 @@ import (
 
 	buildinfo "github.com/Bugs5382/go-buildinfo"
 	log "github.com/Bugs5382/go-log"
+	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/diag"
 	"google.golang.org/grpc"
 )
@@ -19,12 +20,14 @@ import (
 // diagServices are the Sneakers-PAM services the diagnostics read, in report
 // order. A nil conn is reported as not configured.
 type diagServices struct {
-	identity, vault, workflow, audit, notify, sshbroker, connector grpc.ClientConnInterface
+	identity, vault, workflow, audit, notify, sshbroker grpc.ClientConnInterface
 }
 
 // newDiagnostics builds the diagnostics collector from the gateway's
 // configuration. valkeyInfo is nil when the gateway has no Valkey client.
-func newDiagnostics(getenv func(string) string, authMode string, s diagServices, valkeyInfo func(context.Context) (string, error), lg log.Logger) *diag.Collector {
+// The connector itself is never dialled: it's a pull-based worker, so its
+// entries come from vault's ListConnectors through the typed vault client.
+func newDiagnostics(getenv func(string) string, authMode string, s diagServices, vault vaultv1.VaultServiceClient, valkeyInfo func(context.Context) (string, error), lg log.Logger) *diag.Collector {
 	httpc := &http.Client{Timeout: 2 * time.Second}
 	bi := buildinfo.Get()
 
@@ -56,7 +59,6 @@ func newDiagnostics(getenv func(string) string, authMode string, s diagServices,
 			diag.GRPCHealth("audit", s.audit),
 			diag.GRPCHealth("notify", s.notify),
 			diag.GRPCHealth("sshbroker", s.sshbroker),
-			diag.GRPCHealth("connector", s.connector),
 			diag.HTTPVersion("mcp", httpc, getenv("MCP_HEALTH_URL")),
 		},
 		ThirdParty: []diag.Probe{
@@ -66,7 +68,35 @@ func newDiagnostics(getenv func(string) string, authMode string, s diagServices,
 			diag.Valkey(valkeyInfo),
 			diag.InCluster(),
 		},
-		Log: lg,
+		Connectors: vaultConnectors(vault),
+		Log:        lg,
+	}
+}
+
+// vaultConnectors reads the connector workers vault has heard from
+// (ListConnectors), one Component per worker named "connector:<worker id>"
+// with its last reported build and contact time. A nil vault client reads
+// nothing; vault being unreachable is already reported on vault's own
+// GRPCHealth entry, so a read failure here just adds no entries.
+func vaultConnectors(vault vaultv1.VaultServiceClient) diag.MultiProbe {
+	return func(ctx context.Context) []diag.Component {
+		if vault == nil {
+			return nil
+		}
+		resp, err := vault.ListConnectors(ctx, &vaultv1.ListConnectorsRequest{})
+		if err != nil {
+			return nil
+		}
+		conns := resp.GetConnectors()
+		out := make([]diag.Component, 0, len(conns))
+		for _, c := range conns {
+			comp := diag.Component{Name: "connector:" + c.GetWorkerId(), Version: c.GetVersion(), Commit: c.GetCommit(), Status: diag.StatusOK}
+			if t, err := time.Parse(time.RFC3339, c.GetLastContactAt()); err == nil {
+				comp.LastContactAt = t.UTC().Format(time.RFC3339)
+			}
+			out = append(out, comp)
+		}
+		return out
 	}
 }
 

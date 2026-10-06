@@ -882,7 +882,8 @@ type Diagnostics {
   # The appliance's version; null when not running on the appliance.
   appliance: String
   gateway: ComponentVersion!
-  # identity, vault, workflow, audit, notify, sshbroker, connector and mcp.
+  # identity, vault, workflow, audit, notify, sshbroker, mcp, and one
+  # "connector:<worker id>" entry per connector vault has heard from.
   services: [ComponentVersion!]!
   # kratos, hydra, polis, valkey, postgres, rabbitmq and kubernetes.
   thirdParty: [ComponentVersion!]!
@@ -906,6 +907,9 @@ type ComponentVersion {
   # null when it doesn't report one (an older build, or a third-party
   # service).
   dependencies: [DependencyState!]
+  # When this component last verifiably called in (RFC 3339, UTC); null when
+  # it doesn't report one. Set on the connector entries only.
+  lastContactAt: String
 }
 
 type DependencyState {
