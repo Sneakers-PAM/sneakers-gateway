@@ -207,6 +207,10 @@ type Secret {
   # secret, where a user may see a secret they can't read (shown locked, so
   # they can request access); null elsewhere.
   canRead: Boolean
+  # The secret's manual place in its folder, 1-based among the folder's
+  # active secrets; 0 for a retired secret. secretsInFolder returns secrets in
+  # this order.
+  position: Int!
 }
 
 # Parsed metadata off an imported/exported certificate (vault-side parse; never
@@ -364,6 +368,20 @@ type Target {
   # per entry ("ssh-ed25519 AAAA... comment"). Empty = not pinned: SSH
   # sessions to it are refused.
   sshHostKeys: [String!]!
+}
+# The SSH host key a target offers, read by the SSH broker during the
+# handshake without authenticating. Nothing is pinned by reading it.
+type TargetHostKeyScan {
+  targetId: ID!
+  # The key's algorithm, e.g. ssh-ed25519.
+  keyType: String!
+  # The key in authorized_keys form, no comment.
+  publicKey: String!
+  # SHA256:<base64>, as ssh-keygen -l prints it. pinTargetHostKey takes
+  # exactly this value.
+  fingerprint: String!
+  # Whether the target already pins this key.
+  pinned: Boolean!
 }
 type TargetConnection {
   connectionId: ID!
@@ -850,6 +868,11 @@ type Query {
   approvalRequests: [ApprovalRequest!]!
   connections: [Connection!]!
   targets: [Target!]!
+  # Reads the SSH host key the target's SSH connection offers, for a person to
+  # check before pinning it with pinTargetHostKey. Site admins only (the same
+  # people who may change a target's pins); the broker rate-limits scans per
+  # user. Audited by the broker as hostkey.scan.
+  scanTargetHostKey(targetId: ID!): TargetHostKeyScan!
   passwordPolicies: [PasswordPolicy!]!
   securitySettings: SecuritySettings!
   secretTypes: [SecretType!]!
@@ -1050,6 +1073,11 @@ type Mutation {
   deleteConnection(id: ID!): Boolean!
   saveTarget(input: TargetInput!): Target!
   deleteTarget(id: ID!): Boolean!
+  # Pins the host key the target offers now, only when its fingerprint is
+  # exactly the one given (the one the person saw from scanTargetHostKey).
+  # A different key is refused with HOST_KEY_CHANGED and nothing is pinned.
+  # Site admins only. Adds to the target's existing pins.
+  pinTargetHostKey(targetId: ID!, fingerprint: String!): Target!
 
   savePasswordPolicy(input: PasswordPolicyInput!): PasswordPolicy!
   deletePasswordPolicy(id: ID!): Boolean!
@@ -1121,6 +1149,10 @@ type Mutation {
   # reassignToId optional: omit to delete an empty-of-secrets folder (cascades empty children).
   deleteFolder(id: ID!, reassignToId: String): Boolean!
   reorderFolders(parentId: String, orderedIds: [String!]!): Boolean!
+  # Sets the manual order of a folder's active secrets. orderedIds must name
+  # every active secret in the folder exactly once. Needs RACI Author on the
+  # folder or folder ownership. Returns the folder's secrets in the new order.
+  reorderSecrets(folderId: ID!, orderedIds: [ID!]!): [Secret!]!
 
   addFolderRule(folderId: String!, subjectKind: SubjectKind!, subjectId: String!, role: FolderRole!): FolderAccessRule!
   removeFolderRule(id: ID!): Boolean!

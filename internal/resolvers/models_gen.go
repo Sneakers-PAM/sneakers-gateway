@@ -428,6 +428,7 @@ type Secret struct {
 	RequireTokenApproval  *bool            `json:"requireTokenApproval,omitempty"`
 	AlwaysRequireApproval *bool            `json:"alwaysRequireApproval,omitempty"`
 	CanRead               *bool            `json:"canRead,omitempty"`
+	Position              int              `json:"position"`
 }
 
 type SecretFieldDef struct {
@@ -596,6 +597,14 @@ type TargetConnection struct {
 type TargetConnectionInput struct {
 	ConnectionID string `json:"connectionId"`
 	IsDefault    bool   `json:"isDefault"`
+}
+
+type TargetHostKeyScan struct {
+	TargetID    string `json:"targetId"`
+	KeyType     string `json:"keyType"`
+	PublicKey   string `json:"publicKey"`
+	Fingerprint string `json:"fingerprint"`
+	Pinned      bool   `json:"pinned"`
 }
 
 type TargetInput struct {

@@ -73,6 +73,10 @@ comes from domain `sneakers.gateway`:
 | `breakGlassSecret`, `openBreakGlassSession` | `UNAUTHENTICATED` | `BREAK_GLASS_CODE_INVALID` | The TOTP code is wrong, missing or expired. Identity doesn't say which, so neither does the reason. Ask for a fresh code. |
 | The break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_WEB_ONLY` | Not a signed-in web session: a personal token, a service account, or no session. |
 | The break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_NOT_ADMIN` | The caller isn't a site admin or root. |
+| `scanTargetHostKey`, `pinTargetHostKey` | `PERMISSION_DENIED` | `HOST_KEY_PIN_NOT_ADMIN` | The caller isn't a person who is a site admin or root. |
+| `scanTargetHostKey`, `pinTargetHostKey` | `FAILED_PRECONDITION` | `TARGET_NO_SSH_CONNECTION` | The target has no SSH connection to scan. |
+| `pinTargetHostKey` | `FAILED_PRECONDITION` | `HOST_KEY_CHANGED` | The target now offers a key with another fingerprint than the one confirmed. Nothing was pinned; scan again and show the new fingerprint. |
+| `pinTargetHostKey` | `INVALID_ARGUMENT` | `HOST_KEY_FINGERPRINT_REQUIRED` | No fingerprint was sent. |
 
 Other vault reasons a client may see (domain `sneakers.vault`):
 
@@ -104,6 +108,19 @@ subscription. The machine schema is a smaller, principal-scoped surface:
 [machine-graphql.md](machine-graphql.md) and [machine-automation.md](machine-automation.md)
 describe it.
 
+### Secret order
+
+`Secret.position` is the secret's manual place in its folder, 1-based among the folder's active
+secrets, and 0 for a retired one. `secretsInFolder` returns secrets in that order, retired ones
+last. The vault keeps positions dense: a new, moved-in or restored secret goes last, and retire,
+delete and move-out close the gap.
+
+`reorderSecrets(folderId, orderedIds)` sets the whole order through the vault's `ReorderSecrets`
+and returns the folder's secrets in the new order, with `canRead`. `orderedIds` must name every
+active secret in the folder exactly once, and the caller needs RACI Author on the folder or must
+own it; the vault refuses anything else (`INVALID_ARGUMENT` or `PERMISSION_DENIED`) and changes
+nothing.
+
 ### Targets and SSH host keys
 
 `Target.sshHostKeys` (human schema) and `MachineTarget.sshHostKeys` (machine schema) list the SSH
@@ -123,6 +140,27 @@ form (`ssh-ed25519 AAAA... comment`). An empty list means the target isn't pinne
 - `openSshSession` sends the broker the caller's actor context with its principal kind (the same
   values as the vault's). The broker refuses every kind but a person, and passes the actor
   through to the vault when it reveals the key.
+
+Trust on first use (human schema only) lets a site admin pin the key a target offers without
+copying it by hand:
+
+- `scanTargetHostKey(targetId)` asks the broker's `ScanHostKey` for the key the target's SSH
+  connection offers (its default connection when that is SSH, otherwise its first SSH one). The
+  broker reads the key during the handshake and never authenticates. The answer is a
+  `TargetHostKeyScan`: `keyType`, `publicKey` (authorized_keys form), `fingerprint`
+  (`SHA256:<base64>`, as `ssh-keygen -l` prints it) and `pinned` (whether the target already pins
+  it). A scan pins nothing. The broker rate-limits scans per user (`RESOURCE_EXHAUSTED` past the
+  limit) and audits each as `hostkey.scan`.
+- `pinTargetHostKey(targetId, fingerprint)` pins only the key the person confirmed: the gateway
+  scans again and adds the offered key to the target's pins only when its fingerprint is exactly
+  `fingerprint`; a different key is refused with `HOST_KEY_CHANGED` and nothing is pinned. A key
+  the target already pins is left as it is. The target's other pins and fields are kept. The
+  decision is audited as `target.host_key.pin` (outcome `pinned` or `mismatch`, with the
+  fingerprints, never the key), and the vault audits the pin list change as
+  `target.host_keys.change`.
+- Both are for a person who is a site admin or root, the same people the vault lets change a
+  target's pins. The gateway refuses anyone else (`HOST_KEY_PIN_NOT_ADMIN`) before it calls the
+  broker, so the broker can't be used to probe hosts on someone else's behalf.
 
 ### Target connections
 
