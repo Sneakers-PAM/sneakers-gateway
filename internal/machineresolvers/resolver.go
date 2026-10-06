@@ -13,6 +13,7 @@ package machineresolvers
 
 import (
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 )
 
 // This file is not regenerated. It's the dependency-injection root.
@@ -28,4 +29,7 @@ type Resolver struct {
 	// <PublicURL>/approvals/run/<runId>, when it has a run id
 	// (APPROVAL_RUN_LINKS). Off, every link is <PublicURL>/approvals.
 	ApprovalRunLinks bool
+	// ActiveUsers lists the active people for the vault's approval
+	// decisions; nil means unknown (never a single-user install).
+	ActiveUsers *resolvers.ActiveUsers
 }

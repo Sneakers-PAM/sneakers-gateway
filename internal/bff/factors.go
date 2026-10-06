@@ -17,23 +17,34 @@ import (
 const MFAMaxAgeEnv = "MFA_MAX_AGE"
 
 // DefaultMFAMaxAge applies when MFA_MAX_AGE is unset.
-const DefaultMFAMaxAge = 5 * time.Minute
+const DefaultMFAMaxAge = 30 * time.Minute
+
+// MaxMFAMaxAge is the longest window MFA_MAX_AGE accepts.
+const MaxMFAMaxAge = 4 * time.Hour
+
+// MFAEveryTime is the window MFA_MAX_AGE=0 parses to: shorter than the clock
+// skew allowance, so a step-up covers only the action retried right after it.
+const MFAEveryTime = time.Nanosecond
 
 // mfaClockSkew tolerates an MFA time slightly ahead of this clock, as the
 // vault does.
 const mfaClockSkew = 30 * time.Second
 
 // ParseMFAMaxAge parses MFA_MAX_AGE exactly as the vault and the workflow do: a
-// Go duration from 1m to 1h, default 5m. A bad value is an error so the
-// gateway stops at boot.
+// Go duration from 0 to 4h, default 30m, where 0 means every sensitive action
+// needs its own step-up (returned as MFAEveryTime). A bad value is an error so
+// the gateway stops at boot.
 func ParseMFAMaxAge(getenv func(string) string) (time.Duration, error) {
 	v := getenv(MFAMaxAgeEnv)
 	if v == "" {
 		return DefaultMFAMaxAge, nil
 	}
 	d, err := time.ParseDuration(v)
-	if err != nil || d < time.Minute || d > time.Hour {
-		return 0, fmt.Errorf("%s=%q: want a duration from 1m to 1h", MFAMaxAgeEnv, v)
+	if err != nil || d < 0 || d > MaxMFAMaxAge {
+		return 0, fmt.Errorf("%s=%q: want a duration from 0 to 4h", MFAMaxAgeEnv, v)
+	}
+	if d == 0 {
+		return MFAEveryTime, nil
 	}
 	return d, nil
 }
@@ -46,13 +57,13 @@ func (h *Handler) mfaMaxAge() time.Duration {
 }
 
 // mfaFresh reports whether the session proved a second factor within
-// MFA_MAX_AGE.
+// MFA_MAX_AGE (at least the clock skew, so a step-up covers its own retry).
 func (h *Handler) mfaFresh(sess Session) bool {
 	if sess.MFAVerifiedAt.IsZero() {
 		return false
 	}
 	age := time.Since(sess.MFAVerifiedAt)
-	return age >= -mfaClockSkew && age <= h.mfaMaxAge()
+	return age >= -mfaClockSkew && age <= max(h.mfaMaxAge(), mfaClockSkew)
 }
 
 // requireStepUp refuses a factor change with 403 step_up_required when the

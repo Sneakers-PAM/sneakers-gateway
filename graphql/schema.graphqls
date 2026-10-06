@@ -197,9 +197,12 @@ type Secret {
   # rotated / heartbeat-checked, even if its type supports it.
   rotationOptOut: Boolean
   heartbeatOptOut: Boolean
-  # A personal-token reveal needs the owner's per-use browser approval, or a
-  # grant that allows reveal.
+  # Approval-required: a non-owner needs one owner's approval for each reveal
+  # or use, in the web or through a personal token. Owners are exempt.
   requireTokenApproval: Boolean
+  # Always-approve: everyone, owners included, needs another owner's or a
+  # designated approver's approval for each reveal or use.
+  alwaysRequireApproval: Boolean
   # Whether the signed-in user may read the secret. Set by secretsInFolder and
   # secret, where a user may see a secret they can't read (shown locked, so
   # they can request access); null elsewhere.
@@ -604,8 +607,9 @@ type ServiceAccount {
 # Metadata about a minted API token — deliberately NEVER the token value
 # itself. The plaintext token is only ever returned once, at mint time, via
 # MintApiTokenResult. revokedAtUnix/lastUsedAtUnix are 0 when unset.
-# A pending request by one of your personal tokens to use a secret field for
-# one exact command. Approving releases the value once, to that token.
+# A request to use a secret field: by a personal token for one exact command
+# or a reveal to the token, or by a person for a reveal in the web. Approving
+# releases the value once, to whoever prepared it.
 type SecretUse {
   id: ID!
   secretName: String!
@@ -622,6 +626,11 @@ type SecretUse {
   purpose: String!
   # The token's name, or the client label when the name can't be found.
   requester: String!
+  # The person who asked, by display name (their user id when it can't be found).
+  requestedBy: String!
+  # Nobody else can decide this use: the person who asked confirms it once
+  # with a second factor (confirmSecretUses) instead of waiting.
+  confirm: Boolean!
 }
 
 # The caller's own pending, unexpired uses with one run id.
@@ -644,6 +653,12 @@ enum SecretUseRefusal {
   NOT_FOUND
   NOT_PERMITTED
   UNAVAILABLE
+  # You asked for this use yourself; another owner or approver decides it.
+  SELF_APPROVAL
+  # Someone else can decide this use, so it can't be confirmed by its requester.
+  OTHER_APPROVER
+  # Nobody can approve this use.
+  NO_APPROVER
 }
 
 type SecretUseOutcome {
@@ -820,8 +835,12 @@ type Query {
   apiTokens(serviceAccountId: ID!): [ApiToken!]!
   # The caller's own personal tokens.
   myTokens: [UserToken!]!
-  # Uses your personal tokens are waiting for you to approve.
+  # Your own pending uses (your tokens' and your web reveals), waiting for an
+  # owner or approver, or for your confirmation.
   pendingSecretUses: [SecretUse!]!
+  # Other people's pending uses you may decide, as an owner of the secret or
+  # (for an always-approve secret) a designated approver. Never your own.
+  secretUsesToDecide: [SecretUse!]!
   # Your pending uses from one agent run.
   secretUseRun(runId: ID!): SecretUseRun!
   # Your use grants.
@@ -1049,7 +1068,9 @@ type Mutation {
   # heartbeat for this specific secret. Returns the updated secret.
   setSecretAutomation(secretId: String!, disableRotation: Boolean!, disableHeartbeat: Boolean!): Secret!
   # Manage rights on the secret; a signed-in person only.
-  setSecretTokenApproval(secretId: String!, required: Boolean!): Secret!
+  # required alone is approval-required; with always it is always-approve;
+  # required false turns both off.
+  setSecretTokenApproval(secretId: String!, required: Boolean!, always: Boolean): Secret!
 
   # Group membership (identity is the source of truth). Admin-gated server-side
   # (acting user must be a site-admin or root). Idempotent; returns true on success.
@@ -1082,13 +1103,27 @@ type Mutation {
   # Site-admin: disable or re-enable a user. Refused for the caller's own account.
   setUserDisabled(userId: String!, disabled: Boolean!): User!
   revokeMyToken(id: ID!): UserToken!
-  # Approving needs a fresh second factor; denying does not.
+  # Decide someone else's pending use as an owner or approver. Approving needs
+  # a session factor within MFA_MAX_AGE or a factor here; denying does not.
+  # You may deny (withdraw) your own use but never approve it.
   decideSecretUse(id: ID!, approve: Boolean!, factor: FactorInput): SecretUse!
-  # Decide 1 to 20 of your pending uses at once, each through the single-use
-  # path with its own checks and audit. APPROVE needs a session factor within
+  # Decide 1 to 20 pending uses at once, each through the single-use path with
+  # its own checks and audit. APPROVE needs a session factor within
   # MFA_MAX_AGE or a factor here, checked once; DENY needs neither. A refused
   # item doesn't stop the others.
   decideSecretUses(ids: [ID!]!, decision: SecretUseDecision!, factor: FactorInput): DecideSecretUsesResult!
+  # Confirm 1 to 20 of your own pending uses that nobody else can decide
+  # (confirm: true), once for the whole task: a session factor within
+  # MFA_MAX_AGE or a factor here, checked once.
+  confirmSecretUses(ids: [ID!]!, factor: FactorInput): DecideSecretUsesResult!
+  # Ask to reveal a field of a secret whose approval level needs a decision
+  # (revealSecretField answered APPROVAL_REQUIRED). runId groups one task's
+  # reveals on one page. The use waits for an owner or approver, or for your
+  # confirmation when confirm is true.
+  prepareSecretReveal(secretId: ID!, fieldKey: String!, runId: ID): SecretUse!
+  # Release the value of your approved reveal use, once. The step-up window
+  # still applies.
+  redeemSecretReveal(id: ID!): String!
   # Creating a grant needs a fresh second factor and one of your own tokens.
   createUseGrant(input: UseGrantInput!, factor: FactorInput!): UseGrant!
   revokeUseGrant(id: ID!): UseGrant!

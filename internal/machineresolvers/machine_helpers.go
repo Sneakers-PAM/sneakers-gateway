@@ -235,6 +235,7 @@ func (r *Resolver) secretUseOf(u *vaultv1.SecretUse) *SecretUse {
 		ExpiresAtUnix: safeconv.IntFromInt64(u.GetExpiresAtUnix()),
 		ApprovalURL:   strings.TrimRight(r.PublicURL, "/") + "/approvals",
 		Reveal:        u.GetReveal(),
+		Confirm:       u.GetConfirm(),
 	}
 	if id := u.GetRunId(); id != "" {
 		out.RunID = &id

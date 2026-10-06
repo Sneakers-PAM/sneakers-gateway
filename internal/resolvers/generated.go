@@ -288,6 +288,7 @@ type ComplexityRoot struct {
 		CheckoutSecret           func(childComplexity int, secretID string, hours *int) int
 		CloneSecretType          func(childComplexity int, id string) int
 		ConfirmEmailVerification func(childComplexity int, userID *string, email *string, code string) int
+		ConfirmSecretUses        func(childComplexity int, ids []string, factor *FactorInput) int
 		CopySecret               func(childComplexity int, id string) int
 		CreateAccessRequest      func(childComplexity int, secretID string, reason *string) int
 		CreateFolder             func(childComplexity int, parentID *string, name string) int
@@ -319,6 +320,8 @@ type ComplexityRoot struct {
 		MintAPIToken             func(childComplexity int, serviceAccountID string, scope string, expiresAt *int) int
 		MoveFolder               func(childComplexity int, id string, newParentID *string) int
 		OpenSSHSession           func(childComplexity int, secretID string) int
+		PrepareSecretReveal      func(childComplexity int, secretID string, fieldKey string, runID *string) int
+		RedeemSecretReveal       func(childComplexity int, id string) int
 		RemoveFolderRule         func(childComplexity int, id string) int
 		RemoveGroupMember        func(childComplexity int, userID string, groupID string) int
 		RenameFolder             func(childComplexity int, id string, name string) int
@@ -344,7 +347,7 @@ type ComplexityRoot struct {
 		SetFolderRuleset         func(childComplexity int, folderID string, owners []string, rules []*RaciRuleInput) int
 		SetSecretAutomation      func(childComplexity int, secretID string, disableRotation bool, disableHeartbeat bool) int
 		SetSecretRuleset         func(childComplexity int, secretID string, rules []*RaciRuleInput) int
-		SetSecretTokenApproval   func(childComplexity int, secretID string, required bool) int
+		SetSecretTokenApproval   func(childComplexity int, secretID string, required bool, always *bool) int
 		SetUserDisabled          func(childComplexity int, userID string, disabled bool) int
 		SetUserRoles             func(childComplexity int, userID string, roles []string) int
 		UnlinkOidcClient         func(childComplexity int, serviceAccountID string) int
@@ -423,6 +426,7 @@ type ComplexityRoot struct {
 		SecretStats               func(childComplexity int) int
 		SecretTypes               func(childComplexity int) int
 		SecretUseRun              func(childComplexity int, runID string) int
+		SecretUsesToDecide        func(childComplexity int) int
 		SecretVersions            func(childComplexity int, secretID string) int
 		SecretsByStatus           func(childComplexity int, status string) int
 		SecretsInFolder           func(childComplexity int, folderID string, includeRetired *bool) int
@@ -469,27 +473,28 @@ type ComplexityRoot struct {
 	}
 
 	Secret struct {
-		CanRead              func(childComplexity int) int
-		ExpiresAt            func(childComplexity int) int
-		FolderID             func(childComplexity int) int
-		HeartbeatOptOut      func(childComplexity int) int
-		ID                   func(childComplexity int) int
-		LastAccessedAt       func(childComplexity int) int
-		LastHeartbeatResult  func(childComplexity int) int
-		LastRotationResult   func(childComplexity int) int
-		Masked               func(childComplexity int) int
-		Name                 func(childComplexity int) int
-		NextRotationAt       func(childComplexity int) int
-		RequireTokenApproval func(childComplexity int) int
-		Retired              func(childComplexity int) int
-		RetiredAt            func(childComplexity int) int
-		RotatedAt            func(childComplexity int) int
-		RotationIntervalDays func(childComplexity int) int
-		RotationOptOut       func(childComplexity int) int
-		TargetID             func(childComplexity int) int
-		TypeID               func(childComplexity int) int
-		VerifiedAt           func(childComplexity int) int
-		ViewCount            func(childComplexity int) int
+		AlwaysRequireApproval func(childComplexity int) int
+		CanRead               func(childComplexity int) int
+		ExpiresAt             func(childComplexity int) int
+		FolderID              func(childComplexity int) int
+		HeartbeatOptOut       func(childComplexity int) int
+		ID                    func(childComplexity int) int
+		LastAccessedAt        func(childComplexity int) int
+		LastHeartbeatResult   func(childComplexity int) int
+		LastRotationResult    func(childComplexity int) int
+		Masked                func(childComplexity int) int
+		Name                  func(childComplexity int) int
+		NextRotationAt        func(childComplexity int) int
+		RequireTokenApproval  func(childComplexity int) int
+		Retired               func(childComplexity int) int
+		RetiredAt             func(childComplexity int) int
+		RotatedAt             func(childComplexity int) int
+		RotationIntervalDays  func(childComplexity int) int
+		RotationOptOut        func(childComplexity int) int
+		TargetID              func(childComplexity int) int
+		TypeID                func(childComplexity int) int
+		VerifiedAt            func(childComplexity int) int
+		ViewCount             func(childComplexity int) int
 	}
 
 	SecretFieldDef struct {
@@ -535,10 +540,12 @@ type ComplexityRoot struct {
 	SecretUse struct {
 		Argv          func(childComplexity int) int
 		ClientLabel   func(childComplexity int) int
+		Confirm       func(childComplexity int) int
 		ExpiresAtUnix func(childComplexity int) int
 		FieldKey      func(childComplexity int) int
 		ID            func(childComplexity int) int
 		Purpose       func(childComplexity int) int
+		RequestedBy   func(childComplexity int) int
 		Requester     func(childComplexity int) int
 		Reveal        func(childComplexity int) int
 		RunID         func(childComplexity int) int
@@ -709,7 +716,7 @@ type MutationResolver interface {
 	AddApprovalComment(ctx context.Context, requestID string, body string) (*ApprovalRequest, error)
 	RotateSecret(ctx context.Context, secretID string) (bool, error)
 	SetSecretAutomation(ctx context.Context, secretID string, disableRotation bool, disableHeartbeat bool) (*Secret, error)
-	SetSecretTokenApproval(ctx context.Context, secretID string, required bool) (*Secret, error)
+	SetSecretTokenApproval(ctx context.Context, secretID string, required bool, always *bool) (*Secret, error)
 	AddGroupMember(ctx context.Context, userID string, groupID string) (bool, error)
 	RemoveGroupMember(ctx context.Context, userID string, groupID string) (bool, error)
 	CreateGroup(ctx context.Context, name string) (*Group, error)
@@ -721,6 +728,9 @@ type MutationResolver interface {
 	RevokeMyToken(ctx context.Context, id string) (*UserToken, error)
 	DecideSecretUse(ctx context.Context, id string, approve bool, factor *FactorInput) (*SecretUse, error)
 	DecideSecretUses(ctx context.Context, ids []string, decision SecretUseDecision, factor *FactorInput) (*DecideSecretUsesResult, error)
+	ConfirmSecretUses(ctx context.Context, ids []string, factor *FactorInput) (*DecideSecretUsesResult, error)
+	PrepareSecretReveal(ctx context.Context, secretID string, fieldKey string, runID *string) (*SecretUse, error)
+	RedeemSecretReveal(ctx context.Context, id string) (string, error)
 	CreateUseGrant(ctx context.Context, input UseGrantInput, factor FactorInput) (*UseGrant, error)
 	RevokeUseGrant(ctx context.Context, id string) (*UseGrant, error)
 	SendMfaEmailCode(ctx context.Context) (bool, error)
@@ -781,6 +791,7 @@ type QueryResolver interface {
 	APITokens(ctx context.Context, serviceAccountID string) ([]*APIToken, error)
 	MyTokens(ctx context.Context) ([]*UserToken, error)
 	PendingSecretUses(ctx context.Context) ([]*SecretUse, error)
+	SecretUsesToDecide(ctx context.Context) ([]*SecretUse, error)
 	SecretUseRun(ctx context.Context, runID string) (*SecretUseRun, error)
 	UseGrants(ctx context.Context) ([]*UseGrant, error)
 	UserTokens(ctx context.Context, userID string) ([]*UserToken, error)
@@ -1859,6 +1870,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ConfirmEmailVerification(childComplexity, args["userId"].(*string), args["email"].(*string), args["code"].(string)), true
+	case "Mutation.confirmSecretUses":
+		if e.ComplexityRoot.Mutation.ConfirmSecretUses == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_confirmSecretUses_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ConfirmSecretUses(childComplexity, args["ids"].([]string), args["factor"].(*FactorInput)), true
 	case "Mutation.copySecret":
 		if e.ComplexityRoot.Mutation.CopySecret == nil {
 			break
@@ -2195,6 +2217,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.OpenSSHSession(childComplexity, args["secretId"].(string)), true
+	case "Mutation.prepareSecretReveal":
+		if e.ComplexityRoot.Mutation.PrepareSecretReveal == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_prepareSecretReveal_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.PrepareSecretReveal(childComplexity, args["secretId"].(string), args["fieldKey"].(string), args["runId"].(*string)), true
+	case "Mutation.redeemSecretReveal":
+		if e.ComplexityRoot.Mutation.RedeemSecretReveal == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_redeemSecretReveal_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RedeemSecretReveal(childComplexity, args["id"].(string)), true
 	case "Mutation.removeFolderRule":
 		if e.ComplexityRoot.Mutation.RemoveFolderRule == nil {
 			break
@@ -2475,7 +2519,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.SetSecretTokenApproval(childComplexity, args["secretId"].(string), args["required"].(bool)), true
+		return e.ComplexityRoot.Mutation.SetSecretTokenApproval(childComplexity, args["secretId"].(string), args["required"].(bool), args["always"].(*bool)), true
 	case "Mutation.setUserDisabled":
 		if e.ComplexityRoot.Mutation.SetUserDisabled == nil {
 			break
@@ -3002,6 +3046,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SecretUseRun(childComplexity, args["runId"].(string)), true
+	case "Query.secretUsesToDecide":
+		if e.ComplexityRoot.Query.SecretUsesToDecide == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.SecretUsesToDecide(childComplexity), true
 	case "Query.secretVersions":
 		if e.ComplexityRoot.Query.SecretVersions == nil {
 			break
@@ -3260,6 +3310,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.RaciRuleGrant.Value(childComplexity), true
 
+	case "Secret.alwaysRequireApproval":
+		if e.ComplexityRoot.Secret.AlwaysRequireApproval == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Secret.AlwaysRequireApproval(childComplexity), true
 	case "Secret.canRead":
 		if e.ComplexityRoot.Secret.CanRead == nil {
 			break
@@ -3571,6 +3627,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretUse.ClientLabel(childComplexity), true
+	case "SecretUse.confirm":
+		if e.ComplexityRoot.SecretUse.Confirm == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUse.Confirm(childComplexity), true
 	case "SecretUse.expiresAtUnix":
 		if e.ComplexityRoot.SecretUse.ExpiresAtUnix == nil {
 			break
@@ -3595,6 +3657,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretUse.Purpose(childComplexity), true
+	case "SecretUse.requestedBy":
+		if e.ComplexityRoot.SecretUse.RequestedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretUse.RequestedBy(childComplexity), true
 	case "SecretUse.requester":
 		if e.ComplexityRoot.SecretUse.Requester == nil {
 			break
@@ -4408,9 +4476,12 @@ type Secret {
   # rotated / heartbeat-checked, even if its type supports it.
   rotationOptOut: Boolean
   heartbeatOptOut: Boolean
-  # A personal-token reveal needs the owner's per-use browser approval, or a
-  # grant that allows reveal.
+  # Approval-required: a non-owner needs one owner's approval for each reveal
+  # or use, in the web or through a personal token. Owners are exempt.
   requireTokenApproval: Boolean
+  # Always-approve: everyone, owners included, needs another owner's or a
+  # designated approver's approval for each reveal or use.
+  alwaysRequireApproval: Boolean
   # Whether the signed-in user may read the secret. Set by secretsInFolder and
   # secret, where a user may see a secret they can't read (shown locked, so
   # they can request access); null elsewhere.
@@ -4815,8 +4886,9 @@ type ServiceAccount {
 # Metadata about a minted API token — deliberately NEVER the token value
 # itself. The plaintext token is only ever returned once, at mint time, via
 # MintApiTokenResult. revokedAtUnix/lastUsedAtUnix are 0 when unset.
-# A pending request by one of your personal tokens to use a secret field for
-# one exact command. Approving releases the value once, to that token.
+# A request to use a secret field: by a personal token for one exact command
+# or a reveal to the token, or by a person for a reveal in the web. Approving
+# releases the value once, to whoever prepared it.
 type SecretUse {
   id: ID!
   secretName: String!
@@ -4833,6 +4905,11 @@ type SecretUse {
   purpose: String!
   # The token's name, or the client label when the name can't be found.
   requester: String!
+  # The person who asked, by display name (their user id when it can't be found).
+  requestedBy: String!
+  # Nobody else can decide this use: the person who asked confirms it once
+  # with a second factor (confirmSecretUses) instead of waiting.
+  confirm: Boolean!
 }
 
 # The caller's own pending, unexpired uses with one run id.
@@ -4855,6 +4932,12 @@ enum SecretUseRefusal {
   NOT_FOUND
   NOT_PERMITTED
   UNAVAILABLE
+  # You asked for this use yourself; another owner or approver decides it.
+  SELF_APPROVAL
+  # Someone else can decide this use, so it can't be confirmed by its requester.
+  OTHER_APPROVER
+  # Nobody can approve this use.
+  NO_APPROVER
 }
 
 type SecretUseOutcome {
@@ -5031,8 +5114,12 @@ type Query {
   apiTokens(serviceAccountId: ID!): [ApiToken!]!
   # The caller's own personal tokens.
   myTokens: [UserToken!]!
-  # Uses your personal tokens are waiting for you to approve.
+  # Your own pending uses (your tokens' and your web reveals), waiting for an
+  # owner or approver, or for your confirmation.
   pendingSecretUses: [SecretUse!]!
+  # Other people's pending uses you may decide, as an owner of the secret or
+  # (for an always-approve secret) a designated approver. Never your own.
+  secretUsesToDecide: [SecretUse!]!
   # Your pending uses from one agent run.
   secretUseRun(runId: ID!): SecretUseRun!
   # Your use grants.
@@ -5260,7 +5347,9 @@ type Mutation {
   # heartbeat for this specific secret. Returns the updated secret.
   setSecretAutomation(secretId: String!, disableRotation: Boolean!, disableHeartbeat: Boolean!): Secret!
   # Manage rights on the secret; a signed-in person only.
-  setSecretTokenApproval(secretId: String!, required: Boolean!): Secret!
+  # required alone is approval-required; with always it is always-approve;
+  # required false turns both off.
+  setSecretTokenApproval(secretId: String!, required: Boolean!, always: Boolean): Secret!
 
   # Group membership (identity is the source of truth). Admin-gated server-side
   # (acting user must be a site-admin or root). Idempotent; returns true on success.
@@ -5293,13 +5382,27 @@ type Mutation {
   # Site-admin: disable or re-enable a user. Refused for the caller's own account.
   setUserDisabled(userId: String!, disabled: Boolean!): User!
   revokeMyToken(id: ID!): UserToken!
-  # Approving needs a fresh second factor; denying does not.
+  # Decide someone else's pending use as an owner or approver. Approving needs
+  # a session factor within MFA_MAX_AGE or a factor here; denying does not.
+  # You may deny (withdraw) your own use but never approve it.
   decideSecretUse(id: ID!, approve: Boolean!, factor: FactorInput): SecretUse!
-  # Decide 1 to 20 of your pending uses at once, each through the single-use
-  # path with its own checks and audit. APPROVE needs a session factor within
+  # Decide 1 to 20 pending uses at once, each through the single-use path with
+  # its own checks and audit. APPROVE needs a session factor within
   # MFA_MAX_AGE or a factor here, checked once; DENY needs neither. A refused
   # item doesn't stop the others.
   decideSecretUses(ids: [ID!]!, decision: SecretUseDecision!, factor: FactorInput): DecideSecretUsesResult!
+  # Confirm 1 to 20 of your own pending uses that nobody else can decide
+  # (confirm: true), once for the whole task: a session factor within
+  # MFA_MAX_AGE or a factor here, checked once.
+  confirmSecretUses(ids: [ID!]!, factor: FactorInput): DecideSecretUsesResult!
+  # Ask to reveal a field of a secret whose approval level needs a decision
+  # (revealSecretField answered APPROVAL_REQUIRED). runId groups one task's
+  # reveals on one page. The use waits for an owner or approver, or for your
+  # confirmation when confirm is true.
+  prepareSecretReveal(secretId: ID!, fieldKey: String!, runId: ID): SecretUse!
+  # Release the value of your approved reveal use, once. The step-up window
+  # still applies.
+  redeemSecretReveal(id: ID!): String!
   # Creating a grant needs a fresh second factor and one of your own tokens.
   createUseGrant(input: UseGrantInput!, factor: FactorInput!): UseGrant!
   revokeUseGrant(id: ID!): UseGrant!
@@ -6030,6 +6133,8 @@ func (ec *executionContext) childFields_Secret(ctx context.Context, field graphq
 		return ec.fieldContext_Secret_heartbeatOptOut(ctx, field)
 	case "requireTokenApproval":
 		return ec.fieldContext_Secret_requireTokenApproval(ctx, field)
+	case "alwaysRequireApproval":
+		return ec.fieldContext_Secret_alwaysRequireApproval(ctx, field)
 	case "canRead":
 		return ec.fieldContext_Secret_canRead(ctx, field)
 	}
@@ -6140,6 +6245,10 @@ func (ec *executionContext) childFields_SecretUse(ctx context.Context, field gra
 		return ec.fieldContext_SecretUse_purpose(ctx, field)
 	case "requester":
 		return ec.fieldContext_SecretUse_requester(ctx, field)
+	case "requestedBy":
+		return ec.fieldContext_SecretUse_requestedBy(ctx, field)
+	case "confirm":
+		return ec.fieldContext_SecretUse_confirm(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecretUse", field.Name)
 }
@@ -6671,6 +6780,28 @@ func (ec *executionContext) field_Mutation_confirmEmailVerification_args(ctx con
 		return nil, err
 	}
 	args["code"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_confirmSecretUses_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "ids",
+		func(ctx context.Context, v any) ([]string, error) {
+			return ec.unmarshalNID2ᚕstringᚄ(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["ids"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "factor",
+		func(ctx context.Context, v any) (*FactorInput, error) {
+			return ec.unmarshalOFactorInput2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFactorInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["factor"] = arg1
 	return args, nil
 }
 
@@ -7342,6 +7473,50 @@ func (ec *executionContext) field_Mutation_openSshSession_args(ctx context.Conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_prepareSecretReveal_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "secretId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["secretId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fieldKey",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["fieldKey"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "runId",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOID2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["runId"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_redeemSecretReveal_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_removeFolderRule_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7849,6 +8024,14 @@ func (ec *executionContext) field_Mutation_setSecretTokenApproval_args(ctx conte
 		return nil, err
 	}
 	args["required"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "always",
+		func(ctx context.Context, v any) (*bool, error) {
+			return ec.unmarshalOBoolean2ᚖbool(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["always"] = arg2
 	return args, nil
 }
 
@@ -14291,7 +14474,7 @@ func (ec *executionContext) _Mutation_setSecretTokenApproval(ctx context.Context
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().SetSecretTokenApproval(ctx, fc.Args["secretId"].(string), fc.Args["required"].(bool))
+			return ec.Resolvers.Mutation().SetSecretTokenApproval(ctx, fc.Args["secretId"].(string), fc.Args["required"].(bool), fc.Args["always"].(*bool))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *Secret) graphql.Marshaler {
@@ -14803,6 +14986,138 @@ func (ec *executionContext) fieldContext_Mutation_decideSecretUses(ctx context.C
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_decideSecretUses_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_confirmSecretUses(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_confirmSecretUses(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ConfirmSecretUses(ctx, fc.Args["ids"].([]string), fc.Args["factor"].(*FactorInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *DecideSecretUsesResult) graphql.Marshaler {
+			return ec.marshalNDecideSecretUsesResult2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDecideSecretUsesResult(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_confirmSecretUses(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DecideSecretUsesResult(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_confirmSecretUses_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_prepareSecretReveal(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_prepareSecretReveal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().PrepareSecretReveal(ctx, fc.Args["secretId"].(string), fc.Args["fieldKey"].(string), fc.Args["runId"].(*string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *SecretUse) graphql.Marshaler {
+			return ec.marshalNSecretUse2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUse(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_prepareSecretReveal(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretUse(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_prepareSecretReveal_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_redeemSecretReveal(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_redeemSecretReveal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RedeemSecretReveal(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_redeemSecretReveal(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_redeemSecretReveal_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -17660,6 +17975,38 @@ func (ec *executionContext) fieldContext_Query_pendingSecretUses(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_secretUsesToDecide(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_secretUsesToDecide(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().SecretUsesToDecide(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*SecretUse) graphql.Marshaler {
+			return ec.marshalNSecretUse2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretUseᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_secretUsesToDecide(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretUse(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_secretUseRun(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -18858,6 +19205,29 @@ func (ec *executionContext) fieldContext_Secret_requireTokenApproval(_ context.C
 	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _Secret_alwaysRequireApproval(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Secret_alwaysRequireApproval(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AlwaysRequireApproval, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *bool) graphql.Marshaler {
+			return ec.marshalOBoolean2ᚖbool(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Secret_alwaysRequireApproval(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
 func (ec *executionContext) _Secret_canRead(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19803,6 +20173,52 @@ func (ec *executionContext) _SecretUse_requester(ctx context.Context, field grap
 }
 func (ec *executionContext) fieldContext_SecretUse_requester(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SecretUse", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretUse_requestedBy(ctx context.Context, field graphql.CollectedField, obj *SecretUse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUse_requestedBy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RequestedBy, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUse_requestedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretUse", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretUse_confirm(ctx context.Context, field graphql.CollectedField, obj *SecretUse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretUse_confirm(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Confirm, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretUse_confirm(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretUse", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _SecretUseOutcome_id(ctx context.Context, field graphql.CollectedField, obj *SecretUseOutcome) (ret graphql.Marshaler) {
@@ -25650,6 +26066,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "confirmSecretUses":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_confirmSecretUses(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "prepareSecretReveal":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_prepareSecretReveal(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "redeemSecretReveal":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_redeemSecretReveal(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createUseGrant":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createUseGrant(ctx, field)
@@ -26946,6 +27383,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "secretUsesToDecide":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_secretUsesToDecide(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "secretUseRun":
 			field := field
 
@@ -27372,6 +27831,8 @@ func (ec *executionContext) _Secret(ctx context.Context, sel ast.SelectionSet, o
 			out.Values[i] = ec._Secret_heartbeatOptOut(ctx, field, obj)
 		case "requireTokenApproval":
 			out.Values[i] = ec._Secret_requireTokenApproval(ctx, field, obj)
+		case "alwaysRequireApproval":
+			out.Values[i] = ec._Secret_alwaysRequireApproval(ctx, field, obj)
 		case "canRead":
 			out.Values[i] = ec._Secret_canRead(ctx, field, obj)
 		default:
@@ -27691,6 +28152,16 @@ func (ec *executionContext) _SecretUse(ctx context.Context, sel ast.SelectionSet
 			}
 		case "requester":
 			out.Values[i] = ec._SecretUse_requester(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requestedBy":
+			out.Values[i] = ec._SecretUse_requestedBy(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "confirm":
+			out.Values[i] = ec._SecretUse_confirm(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

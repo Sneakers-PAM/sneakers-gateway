@@ -149,7 +149,7 @@ func TestMfaFactors_IdentityDown(t *testing.T) {
 func TestMfaRemove_StaleMFARefused(t *testing.T) {
 	fid := &fakeIdentity{mfaEnrolled: true, factors: []string{factorTotp, factorPasskey}}
 	h := factorsHandler(fid)
-	sid, csrf := factorSession(t, h, 6*time.Minute)
+	sid, csrf := factorSession(t, h, 31*time.Minute)
 
 	rec := authedPost(h.MfaRemove, "/auth/mfa/remove", sid, csrf, map[string]string{})
 	if rec.Code != http.StatusForbidden || errorSlug(t, rec) != "step_up_required" {
@@ -249,7 +249,7 @@ func TestMfaRemove_FactorListDownFailsClosed(t *testing.T) {
 func TestMfaEnroll_StaleWithFactorRefused(t *testing.T) {
 	fid := &fakeIdentity{mfaEnrolled: true}
 	h := factorsHandler(fid)
-	sid, csrf := factorSession(t, h, 10*time.Minute)
+	sid, csrf := factorSession(t, h, 31*time.Minute)
 	rec := authedPost(h.MfaEnroll, "/auth/mfa/enroll", sid, csrf, map[string]string{})
 	if rec.Code != http.StatusForbidden || errorSlug(t, rec) != "step_up_required" {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body)
@@ -294,7 +294,7 @@ func TestMfaEnroll_StatusDownFailsClosed(t *testing.T) {
 
 func TestEnrollWebauthnBegin_StaleWithFactorRefused(t *testing.T) {
 	h := factorsHandler(&fakeIdentity{mfaEnrolled: true})
-	sid, csrf := factorSession(t, h, 10*time.Minute)
+	sid, csrf := factorSession(t, h, 31*time.Minute)
 	rec := authedPost(h.EnrollWebauthnBegin, "/auth/mfa/webauthn/register/begin", sid, csrf, map[string]string{})
 	if rec.Code != http.StatusForbidden || errorSlug(t, rec) != "step_up_required" {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body)
@@ -314,12 +314,14 @@ func TestParseMFAMaxAge(t *testing.T) {
 		want time.Duration
 		ok   bool
 	}{
-		"":    {5 * time.Minute, true},
+		"":    {30 * time.Minute, true},
+		"0":   {MFAEveryTime, true},
+		"30s": {30 * time.Second, true},
 		"10m": {10 * time.Minute, true},
-		"1m":  {time.Minute, true},
 		"1h":  {time.Hour, true},
-		"30s": {0, false},
-		"2h":  {0, false},
+		"4h":  {4 * time.Hour, true},
+		"-1m": {0, false},
+		"5h":  {0, false},
 		"abc": {0, false},
 	}
 	for in, c := range cases {

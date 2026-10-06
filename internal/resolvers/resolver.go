@@ -41,6 +41,9 @@ type Resolver struct {
 	// pending secret uses without a new one (MFA_MAX_AGE). Zero means
 	// bff.DefaultMFAMaxAge.
 	MFAMaxAge time.Duration
+	// ActiveUsers lists the active people for the vault's approval
+	// decisions; nil means unknown (never a single-user install).
+	ActiveUsers *ActiveUsers
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 	// Log receives request-scoped lines; nil writes nothing.

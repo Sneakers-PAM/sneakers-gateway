@@ -21,7 +21,7 @@ const (
 	maxBatchUses = 20
 	// defaultMFAMaxAge and mfaClockSkew match bff.DefaultMFAMaxAge and the
 	// skew bff allows, so the batch window is the session's step-up window.
-	defaultMFAMaxAge = 5 * time.Minute
+	defaultMFAMaxAge = 30 * time.Minute
 	mfaClockSkew     = 30 * time.Second
 )
 
@@ -57,6 +57,9 @@ func (r *Resolver) mfaFreshUntil(ctx context.Context) time.Time {
 	if maxAge <= 0 {
 		maxAge = defaultMFAMaxAge
 	}
+	// A window under the skew allowance (MFA_MAX_AGE=0) still covers the
+	// action retried right after its step-up.
+	maxAge = max(maxAge, mfaClockSkew)
 	age := r.now().Sub(at)
 	if age < -mfaClockSkew || age > maxAge {
 		return time.Time{}
@@ -139,6 +142,14 @@ func (r *Resolver) decideOne(ctx context.Context, l log.Logger, id string, appro
 // FailedPrecondition for any use that isn't pending, so the use's state says
 // whether it expired or was already decided.
 func (r *Resolver) refusalOf(ctx context.Context, l log.Logger, id string, err error) SecretUseRefusal {
+	switch vaultReason(err) {
+	case "SELF_APPROVAL":
+		return SecretUseRefusalSelfApproval
+	case "OTHER_APPROVER":
+		return SecretUseRefusalOtherApprover
+	case "NO_APPROVER":
+		return SecretUseRefusalNoApprover
+	}
 	switch status.Code(err) {
 	case codes.NotFound:
 		return SecretUseRefusalNotFound

@@ -132,22 +132,40 @@ reveal or check-out needs a step-up. Where a reveal needs one is set globally by
 (`inherit`, `require` or `off`, shown as `Folder.revealStepUp`; inherited down the tree; site
 admins only). Machine callers never carry the time.
 
-### Pending secret uses and runs
+### Pending secret uses, approvals and runs
 
-A personal token asks to use a secret field with the machine `prepareSecretUse`; when the secret
-needs approval the use waits, `PENDING`, for its owner. An agent groups the uses it raises in one
-task under a run id (`prepareSecretUse(runId, purpose)`, see
-[machine-graphql.md](machine-graphql.md#secret-uses)), so the owner decides them on one page with
-one factor. Service accounts have no pending uses.
+The vault decides who needs an approval (see the vault's docs/api.md, "Approval levels"): a secret
+is normal, approval-required (owners exempt, a non-owner needs one owner) or always-approve
+(everyone needs another owner or a designated approver, RACI A). The levels apply to a person in
+the web and to a personal token alike, and the requester never approves their own use. When
+nobody else can decide (a single-user install, or an always-approve secret whose only approver
+is the requester), the requester confirms the task once instead. Break-glass is unchanged.
 
-- `pendingSecretUses` lists all the caller's pending uses; `secretUseRun(runId)` lists the ones of
-  one run, with `mfaFreshUntilUnix`, the time the session's second factor stops covering an
-  approval (`0` when it doesn't now; the window is `MFA_MAX_AGE`), so the page can hide the factor
-  input while it's open. The run lists only the signed-in owner's own uses.
+The gateway sends the vault the people identity reports as active (not disabled, with a login
+subject), listed once and kept for 30 seconds, so the vault can tell whether anyone else could
+decide. When identity can't list them the gateway sends nothing, and the vault never treats the
+install as single-user.
+
+A personal token asks with the machine `prepareSecretUse`; a person whose `revealSecretField` or
+`copySecret` answers `APPROVAL_REQUIRED` asks with `prepareSecretReveal(secretId, fieldKey,
+runId)`, and collects the value with `redeemSecretReveal(id)` once it's approved, still under the
+step-up window. A use that needs a decision waits, `PENDING`. One task's uses share a run id
+(`prepareSecretUse(runId, purpose)`, see [machine-graphql.md](machine-graphql.md#secret-uses)), so
+they're decided or confirmed on one page with one factor, and a confirmed run covers its later
+uses. Service accounts have no pending uses.
+
+- `pendingSecretUses` lists all the caller's own pending uses; `secretUseRun(runId)` lists the
+  ones of one run, with `mfaFreshUntilUnix`, the time the session's second factor stops covering
+  an approval (`0` when it doesn't now; the window is `MFA_MAX_AGE`), so the page can hide the
+  factor input while it's open. The run lists only the signed-in person's own uses.
+- `secretUsesToDecide` lists the other people's pending uses the caller may decide, with
+  `requestedBy` set to each requester's display name. It never lists the caller's own.
 - `SecretUse` carries `runId` (null without one), `purpose` (the agent's own words, empty without
-  them; show them as plain text, never as product copy) and `requester` (the token's name from
-  identity, or the use's client label when identity can't say).
-- `decideSecretUse(id, approve, factor)` decides one use. Approving needs `factor`.
+  them; show them as plain text, never as product copy), `requester` (the token's name from
+  identity, or the use's client label when identity can't say), `requestedBy` and `confirm` (true
+  when the requester confirms it instead of an approver).
+- `decideSecretUse(id, approve, factor)` decides one use. Approving needs the session's factor
+  within `MFA_MAX_AGE` or `factor`.
 - `decideSecretUses(ids, decision, factor)` decides 1 to 20 distinct ids (a repeated id is decided
   once) and returns one `SecretUseOutcome` per id, in request order: `decided` with the `use`, or
   a `reason`. `APPROVE` needs the session's second factor within `MFA_MAX_AGE` (prove it with
@@ -155,6 +173,11 @@ one factor. Service accounts have no pending uses.
   checked once for the batch and opening no window. `DENY` needs neither. Every id still goes
   through the vault's single-use `DecideSecretUse`, one at a time in request order, with its own
   checks and audit event; a refused item never stops the others.
+- `confirmSecretUses(ids, factor)` is the requester's one-time confirmation of their own uses
+  marked `confirm`, with the same batch shape, factor rule and outcomes, through the vault's
+  `ConfirmSecretUse`.
+- `setSecretTokenApproval(secretId, required, always)` sets the level: `required` alone is
+  approval-required, with `always` it's always-approve. `Secret.alwaysRequireApproval` shows it.
 
 A refused item's `reason`:
 
@@ -165,6 +188,9 @@ A refused item's `reason`:
 | `NOT_FOUND` | No such use. |
 | `NOT_PERMITTED` | The use isn't the caller's to decide. |
 | `UNAVAILABLE` | The vault couldn't decide it now; try again. |
+| `SELF_APPROVAL` | The caller asked for this use; another owner or approver decides it. |
+| `OTHER_APPROVER` | Someone else can decide this use, so its requester can't confirm it. |
+| `NO_APPROVER` | Nobody can approve this use. |
 
 The whole batch fails, deciding nothing, only for these (domain `sneakers.gateway`), or for a
 caller who isn't signed in:

@@ -619,8 +619,10 @@ func (r *mutationResolver) SetSecretAutomation(ctx context.Context, secretID str
 }
 
 // SetSecretTokenApproval is the resolver for the setSecretTokenApproval field.
-func (r *mutationResolver) SetSecretTokenApproval(ctx context.Context, secretID string, required bool) (*Secret, error) {
-	resp, err := r.Vault.SetSecretTokenApproval(ctx, &vaultv1.SetSecretTokenApprovalRequest{Actor: actorOf(ctx), SecretId: secretID, Required: required})
+func (r *mutationResolver) SetSecretTokenApproval(ctx context.Context, secretID string, required bool, always *bool) (*Secret, error) {
+	resp, err := r.Vault.SetSecretTokenApproval(ctx, &vaultv1.SetSecretTokenApprovalRequest{
+		Actor: actorOf(ctx), SecretId: secretID, Required: required, Always: always != nil && *always,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -759,7 +761,7 @@ func (r *mutationResolver) DecideSecretUse(ctx context.Context, id string, appro
 		return nil, err
 	}
 	if approve {
-		if err := r.requireFactor(ctx, me, factor); err != nil {
+		if err := r.batchFactor(ctx, me, factor); err != nil {
 			return nil, err
 		}
 	}
@@ -773,6 +775,21 @@ func (r *mutationResolver) DecideSecretUse(ctx context.Context, id string, appro
 // DecideSecretUses is the resolver for the decideSecretUses field.
 func (r *mutationResolver) DecideSecretUses(ctx context.Context, ids []string, decision SecretUseDecision, factor *FactorInput) (*DecideSecretUsesResult, error) {
 	return r.decideSecretUses(ctx, ids, decision, factor)
+}
+
+// ConfirmSecretUses is the resolver for the confirmSecretUses field.
+func (r *mutationResolver) ConfirmSecretUses(ctx context.Context, ids []string, factor *FactorInput) (*DecideSecretUsesResult, error) {
+	return r.confirmSecretUses(ctx, ids, factor)
+}
+
+// PrepareSecretReveal is the resolver for the prepareSecretReveal field.
+func (r *mutationResolver) PrepareSecretReveal(ctx context.Context, secretID string, fieldKey string, runID *string) (*SecretUse, error) {
+	return r.prepareSecretReveal(ctx, secretID, fieldKey, runID)
+}
+
+// RedeemSecretReveal is the resolver for the redeemSecretReveal field.
+func (r *mutationResolver) RedeemSecretReveal(ctx context.Context, id string) (string, error) {
+	return r.redeemSecretReveal(ctx, id)
 }
 
 // CreateUseGrant is the resolver for the createUseGrant field.
@@ -1593,6 +1610,11 @@ func (r *queryResolver) PendingSecretUses(ctx context.Context) ([]*SecretUse, er
 		out = append(out, withRequester(secretUseOf(u), u, names))
 	}
 	return out, nil
+}
+
+// SecretUsesToDecide is the resolver for the secretUsesToDecide field.
+func (r *queryResolver) SecretUsesToDecide(ctx context.Context) ([]*SecretUse, error) {
+	return r.secretUsesToDecide(ctx)
 }
 
 // SecretUseRun is the resolver for the secretUseRun field.
