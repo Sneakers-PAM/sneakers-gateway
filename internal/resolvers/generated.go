@@ -358,6 +358,7 @@ type ComplexityRoot struct {
 		RemoveGroupMember        func(childComplexity int, userID string, groupID string) int
 		RenameFolder             func(childComplexity int, id string, name string) int
 		ReorderFolders           func(childComplexity int, parentID *string, orderedIds []string) int
+		ReorderSecrets           func(childComplexity int, folderID string, orderedIds []string) int
 		ReplaceCertificate       func(childComplexity int, secretID string, fileBase64 string, passphrase *string, alias *string) int
 		RequestEmailVerification func(childComplexity int, userID string) int
 		ResolveApproval          func(childComplexity int, id string, approve bool, grantHours *int) int
@@ -521,6 +522,7 @@ type ComplexityRoot struct {
 		Masked                func(childComplexity int) int
 		Name                  func(childComplexity int) int
 		NextRotationAt        func(childComplexity int) int
+		Position              func(childComplexity int) int
 		RequireTokenApproval  func(childComplexity int) int
 		Retired               func(childComplexity int) int
 		RetiredAt             func(childComplexity int) int
@@ -755,6 +757,7 @@ type MutationResolver interface {
 	MoveFolder(ctx context.Context, id string, newParentID *string) (*Folder, error)
 	DeleteFolder(ctx context.Context, id string, reassignToID *string) (bool, error)
 	ReorderFolders(ctx context.Context, parentID *string, orderedIds []string) (bool, error)
+	ReorderSecrets(ctx context.Context, folderID string, orderedIds []string) ([]*Secret, error)
 	AddFolderRule(ctx context.Context, folderID string, subjectKind SubjectKind, subjectID string, role FolderRole) (*FolderAccessRule, error)
 	RemoveFolderRule(ctx context.Context, id string) (bool, error)
 	SetFolderRuleset(ctx context.Context, folderID string, owners []string, rules []*RaciRuleInput) (*FolderRuleset, error)
@@ -2496,6 +2499,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ReorderFolders(childComplexity, args["parentId"].(*string), args["orderedIds"].([]string)), true
+	case "Mutation.reorderSecrets":
+		if e.ComplexityRoot.Mutation.ReorderSecrets == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_reorderSecrets_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ReorderSecrets(childComplexity, args["folderId"].(string), args["orderedIds"].([]string)), true
 	case "Mutation.replaceCertificate":
 		if e.ComplexityRoot.Mutation.ReplaceCertificate == nil {
 			break
@@ -3634,6 +3648,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Secret.NextRotationAt(childComplexity), true
+	case "Secret.position":
+		if e.ComplexityRoot.Secret.Position == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Secret.Position(childComplexity), true
 	case "Secret.requireTokenApproval":
 		if e.ComplexityRoot.Secret.RequireTokenApproval == nil {
 			break
@@ -4789,6 +4809,10 @@ type Secret {
   # secret, where a user may see a secret they can't read (shown locked, so
   # they can request access); null elsewhere.
   canRead: Boolean
+  # The secret's manual place in its folder, 1-based among the folder's
+  # active secrets; 0 for a retired secret. secretsInFolder returns secrets in
+  # this order.
+  position: Int!
 }
 
 # Parsed metadata off an imported/exported certificate (vault-side parse; never
@@ -5727,6 +5751,10 @@ type Mutation {
   # reassignToId optional: omit to delete an empty-of-secrets folder (cascades empty children).
   deleteFolder(id: ID!, reassignToId: String): Boolean!
   reorderFolders(parentId: String, orderedIds: [String!]!): Boolean!
+  # Sets the manual order of a folder's active secrets. orderedIds must name
+  # every active secret in the folder exactly once. Needs RACI Author on the
+  # folder or folder ownership. Returns the folder's secrets in the new order.
+  reorderSecrets(folderId: ID!, orderedIds: [ID!]!): [Secret!]!
 
   addFolderRule(folderId: String!, subjectKind: SubjectKind!, subjectId: String!, role: FolderRole!): FolderAccessRule!
   removeFolderRule(id: ID!): Boolean!
@@ -6610,6 +6638,8 @@ func (ec *executionContext) childFields_Secret(ctx context.Context, field graphq
 		return ec.fieldContext_Secret_alwaysRequireApproval(ctx, field)
 	case "canRead":
 		return ec.fieldContext_Secret_canRead(ctx, field)
+	case "position":
+		return ec.fieldContext_Secret_position(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Secret", field.Name)
 }
@@ -8164,6 +8194,28 @@ func (ec *executionContext) field_Mutation_reorderFolders_args(ctx context.Conte
 	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "orderedIds",
 		func(ctx context.Context, v any) ([]string, error) {
 			return ec.unmarshalNString2ᚕstringᚄ(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["orderedIds"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_reorderSecrets_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "folderId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["folderId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "orderedIds",
+		func(ctx context.Context, v any) ([]string, error) {
+			return ec.unmarshalNID2ᚕstringᚄ(ctx, v)
 		})
 	if err != nil {
 		return nil, err
@@ -15092,6 +15144,50 @@ func (ec *executionContext) fieldContext_Mutation_reorderFolders(ctx context.Con
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_reorderSecrets(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_reorderSecrets(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ReorderSecrets(ctx, fc.Args["folderId"].(string), fc.Args["orderedIds"].([]string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*Secret) graphql.Marshaler {
+			return ec.marshalNSecret2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_reorderSecrets(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Secret(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_reorderSecrets_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_addFolderRule(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -20657,6 +20753,29 @@ func (ec *executionContext) _Secret_canRead(ctx context.Context, field graphql.C
 }
 func (ec *executionContext) fieldContext_Secret_canRead(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Secret_position(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Secret_position(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Position, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Secret_position(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type Int does not have child fields"))
 }
 
 func (ec *executionContext) _SecretFieldDef_key(ctx context.Context, field graphql.CollectedField, obj *SecretFieldDef) (ret graphql.Marshaler) {
@@ -27743,6 +27862,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "reorderSecrets":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_reorderSecrets(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "addFolderRule":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_addFolderRule(ctx, field)
@@ -29779,6 +29905,11 @@ func (ec *executionContext) _Secret(ctx context.Context, sel ast.SelectionSet, o
 			out.Values[i] = ec._Secret_alwaysRequireApproval(ctx, field, obj)
 		case "canRead":
 			out.Values[i] = ec._Secret_canRead(ctx, field, obj)
+		case "position":
+			out.Values[i] = ec._Secret_position(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

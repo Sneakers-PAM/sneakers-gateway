@@ -428,6 +428,7 @@ type Secret struct {
 	RequireTokenApproval  *bool            `json:"requireTokenApproval,omitempty"`
 	AlwaysRequireApproval *bool            `json:"alwaysRequireApproval,omitempty"`
 	CanRead               *bool            `json:"canRead,omitempty"`
+	Position              int              `json:"position"`
 }
 
 type SecretFieldDef struct {

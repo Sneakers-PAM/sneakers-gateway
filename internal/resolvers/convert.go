@@ -334,6 +334,7 @@ func gqlSecret(s *vaultv1.Secret) *Secret {
 		RotationOptOut: boolPtr(s.GetRotationOptOut()), HeartbeatOptOut: boolPtr(s.GetHeartbeatOptOut()),
 		RequireTokenApproval:  boolPtr(s.GetRequireTokenApproval()),
 		AlwaysRequireApproval: boolPtr(s.GetAlwaysRequireApproval()),
+		Position:              int(s.GetPosition()),
 	}
 }
 

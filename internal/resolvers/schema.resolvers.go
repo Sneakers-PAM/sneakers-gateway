@@ -409,6 +409,19 @@ func (r *mutationResolver) ReorderFolders(ctx context.Context, parentID *string,
 	return true, nil
 }
 
+// ReorderSecrets is the resolver for the reorderSecrets field.
+func (r *mutationResolver) ReorderSecrets(ctx context.Context, folderID string, orderedIds []string) ([]*Secret, error) {
+	resp, err := r.Vault.ReorderSecrets(ctx, &vaultv1.ReorderSecretsRequest{Actor: actorOf(ctx), FolderId: folderID, OrderedIds: orderedIds})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Secret, 0, len(resp.GetSecrets()))
+	for _, s := range resp.GetSecrets() {
+		out = append(out, gqlSecretWithAccess(s))
+	}
+	return out, nil
+}
+
 // AddFolderRule is the resolver for the addFolderRule field.
 func (r *mutationResolver) AddFolderRule(ctx context.Context, folderID string, subjectKind SubjectKind, subjectID string, role FolderRole) (*FolderAccessRule, error) {
 	resp, err := r.Vault.AddFolderRule(ctx, &vaultv1.AddFolderRuleRequest{

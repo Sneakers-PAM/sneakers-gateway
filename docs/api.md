@@ -108,6 +108,19 @@ subscription. The machine schema is a smaller, principal-scoped surface:
 [machine-graphql.md](machine-graphql.md) and [machine-automation.md](machine-automation.md)
 describe it.
 
+### Secret order
+
+`Secret.position` is the secret's manual place in its folder, 1-based among the folder's active
+secrets, and 0 for a retired one. `secretsInFolder` returns secrets in that order, retired ones
+last. The vault keeps positions dense: a new, moved-in or restored secret goes last, and retire,
+delete and move-out close the gap.
+
+`reorderSecrets(folderId, orderedIds)` sets the whole order through the vault's `ReorderSecrets`
+and returns the folder's secrets in the new order, with `canRead`. `orderedIds` must name every
+active secret in the folder exactly once, and the caller needs RACI Author on the folder or must
+own it; the vault refuses anything else (`INVALID_ARGUMENT` or `PERMISSION_DENIED`) and changes
+nothing.
+
 ### Targets and SSH host keys
 
 `Target.sshHostKeys` (human schema) and `MachineTarget.sshHostKeys` (machine schema) list the SSH
