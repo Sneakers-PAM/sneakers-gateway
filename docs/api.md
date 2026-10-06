@@ -70,7 +70,9 @@ comes from domain `sneakers.gateway`:
 
 | Mutation | `code` | `reason` | Meaning |
 |---|---|---|---|
-| `breakGlassSecret` | `UNAUTHENTICATED` | `BREAK_GLASS_CODE_INVALID` | The TOTP code is wrong, missing or expired. Identity doesn't say which, so neither does the reason. Ask for a fresh code. |
+| `breakGlassSecret`, `openBreakGlassSession` | `UNAUTHENTICATED` | `BREAK_GLASS_CODE_INVALID` | The TOTP code is wrong, missing or expired. Identity doesn't say which, so neither does the reason. Ask for a fresh code. |
+| The break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_WEB_ONLY` | Not a signed-in web session: a personal token, a service account, or no session. |
+| The break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_NOT_ADMIN` | The caller isn't a site admin or root. |
 
 Other vault reasons a client may see (domain `sneakers.vault`):
 
@@ -201,6 +203,35 @@ caller who isn't signed in:
 | `FAILED_PRECONDITION` | `STEP_UP_REQUIRED` | `APPROVE` without a `factor` and outside the session's window: step up and retry. |
 | `UNAUTHENTICATED` | `FACTOR_NOT_ACCEPTED` | The `factor` given was wrong. |
 
+### Break-glass browse
+
+A site admin or root can open a short-lived break-glass session from the web app to find and
+reveal any secret, other users' personal ones included. It grants no edit or manage rights.
+
+- `openBreakGlassSession(reason, code)` checks the TOTP `code` exactly as `breakGlassSecret` does,
+  then asks the vault to open the session, passing the code's time as the actor's MFA time and an
+  opaque reference to the web session (a hash of the session id, never the id). The vault binds the
+  session to that person and web session, keeps it for 15 minutes, and ends any session the caller
+  still has open (`replaced`). A blank reason or a reason over 500 characters is
+  `INVALID_ARGUMENT`; a stale factor is `STEP_UP_REQUIRED` from the vault.
+- `breakGlassSession` is the caller's open session for this web session, or null. Anyone who
+  can't break glass gets null without a vault call, so the web can check it on every page.
+- `breakGlassBrowse(sessionId, folderId)` lists every folder and every live secret, with the same
+  `Folder` and `Secret` types as `folders` and `secretsInFolder`; `folderId` narrows the secrets.
+  Folders always come back with `canManage` false.
+- `breakGlassSecret(secretId, reason, code, sessionId)` reveals inside the session: the vault
+  records the session id with the reveal, alerts the owner and queues the rotation as for any
+  break-glass reveal. An empty `reason` takes the session's.
+- `closeBreakGlassSession(id)` ends the session (`exit`). It stays open in read-only maintenance.
+- `breakGlassSessions(limit)` lists sessions newest first for the audit log: `openedAt` is the
+  entered event, `endedAt` and `endReason` (`exit`, `expired` or `replaced`) the left one, and
+  `reveals` every secret revealed in the session (who saw what). `actorName` comes from identity.
+  `limit` defaults to 50, at most 200.
+
+A call naming a session that has ended or expired, or that belongs to someone else or another web
+session, is refused by the vault with `FAILED_PRECONDITION` and `BREAK_GLASS_SESSION_CLOSED`. Only
+the human schema has these operations; `/machine/graphql` has none of them.
+
 ### Recovery
 
 A secret's prior values are a separate recovery surface. `secretVersions` lists the versions and
@@ -221,7 +252,8 @@ revoke the role (identity enforces it). Machine callers never get the recovery s
 `/machine/graphql` refuse every mutation, before any backend is called, with code
 `FAILED_PRECONDITION` and reason `MAINTENANCE_READONLY` (domain `sneakers.gateway`). These stay
 open: `revealSecretField`, `revealSecretVersionField`, `exportCertificate`, `sendMfaEmailCode`,
-`beginMfaPasskey`, `markNotificationRead` and `markAllNotificationsRead` on `/graphql`, and
+`beginMfaPasskey`, `markNotificationRead`, `markAllNotificationsRead` and `closeBreakGlassSession`
+on `/graphql`, and
 `revealSecretFieldForPrincipal` on `/machine/graphql`. Queries, sign-in and the factor routes
 under `/auth` keep working. The backends hold their own read-only mode too, so a write that gets
 past the gateway is still refused. The mode comes from `MAINTENANCE_READONLY` or the appliance

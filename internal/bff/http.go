@@ -450,6 +450,7 @@ func (h *Handler) resolveSessionActor(ctx context.Context, sid string) (context.
 	if aerr != nil {
 		return nil, Session{}, errors.New("actor_unresolved")
 	}
+	actorCtx = resolvers.WithSessionRef(actorCtx, sessionRefOf(sid))
 	return resolvers.WithMFAVerifiedAt(actorCtx, sess.MFAVerifiedAt), sess, nil
 }
 

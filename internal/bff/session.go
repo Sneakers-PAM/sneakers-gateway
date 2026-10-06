@@ -5,6 +5,8 @@ package bff
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"sync"
 	"time"
 )
@@ -123,4 +125,12 @@ func (m *memStore) DeleteByUser(_ context.Context, userID string) error {
 		}
 	}
 	return nil
+}
+
+// sessionRefOf is the opaque reference to a web session the vault binds a
+// break-glass browse session to: a hash of the session id, so the id itself
+// (the cookie value) never leaves the gateway.
+func sessionRefOf(sid string) string {
+	sum := sha256.Sum256([]byte("sneakers-session-ref\x00" + sid))
+	return hex.EncodeToString(sum[:16])
 }

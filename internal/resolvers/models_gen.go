@@ -84,6 +84,32 @@ type AuditRecord struct {
 	Hash        string       `json:"hash"`
 }
 
+type BreakGlassBrowse struct {
+	Folders []*Folder `json:"folders"`
+	Secrets []*Secret `json:"secrets"`
+}
+
+type BreakGlassReveal struct {
+	EventID               string `json:"eventId"`
+	SecretID              string `json:"secretId"`
+	SecretName            string `json:"secretName"`
+	RevealedAt            string `json:"revealedAt"`
+	PostRotationScheduled bool   `json:"postRotationScheduled"`
+	OwnerNotified         bool   `json:"ownerNotified"`
+}
+
+type BreakGlassSession struct {
+	ID          string              `json:"id"`
+	ActorUserID string              `json:"actorUserId"`
+	ActorName   string              `json:"actorName"`
+	Reason      string              `json:"reason"`
+	OpenedAt    string              `json:"openedAt"`
+	ExpiresAt   string              `json:"expiresAt"`
+	EndedAt     *string             `json:"endedAt,omitempty"`
+	EndReason   *string             `json:"endReason,omitempty"`
+	Reveals     []*BreakGlassReveal `json:"reveals"`
+}
+
 type CertExport struct {
 	FileBase64  string `json:"fileBase64"`
 	Filename    string `json:"filename"`

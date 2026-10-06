@@ -111,6 +111,32 @@ type ComplexityRoot struct {
 		Tier        func(childComplexity int) int
 	}
 
+	BreakGlassBrowse struct {
+		Folders func(childComplexity int) int
+		Secrets func(childComplexity int) int
+	}
+
+	BreakGlassReveal struct {
+		EventID               func(childComplexity int) int
+		OwnerNotified         func(childComplexity int) int
+		PostRotationScheduled func(childComplexity int) int
+		RevealedAt            func(childComplexity int) int
+		SecretID              func(childComplexity int) int
+		SecretName            func(childComplexity int) int
+	}
+
+	BreakGlassSession struct {
+		ActorName   func(childComplexity int) int
+		ActorUserID func(childComplexity int) int
+		EndReason   func(childComplexity int) int
+		EndedAt     func(childComplexity int) int
+		ExpiresAt   func(childComplexity int) int
+		ID          func(childComplexity int) int
+		OpenedAt    func(childComplexity int) int
+		Reason      func(childComplexity int) int
+		Reveals     func(childComplexity int) int
+	}
+
 	CertExport struct {
 		ContentType func(childComplexity int) int
 		FileBase64  func(childComplexity int) int
@@ -283,10 +309,11 @@ type ComplexityRoot struct {
 		AddFolderRule            func(childComplexity int, folderID string, subjectKind SubjectKind, subjectID string, role FolderRole) int
 		AddGroupMember           func(childComplexity int, userID string, groupID string) int
 		BeginMfaPasskey          func(childComplexity int) int
-		BreakGlassSecret         func(childComplexity int, secretID string, reason string, code string) int
+		BreakGlassSecret         func(childComplexity int, secretID string, reason string, code string, sessionID *string) int
 		CheckinSecret            func(childComplexity int, secretID string) int
 		CheckoutSecret           func(childComplexity int, secretID string, hours *int) int
 		CloneSecretType          func(childComplexity int, id string) int
+		CloseBreakGlassSession   func(childComplexity int, id string) int
 		ConfirmEmailVerification func(childComplexity int, userID *string, email *string, code string) int
 		ConfirmSecretUses        func(childComplexity int, ids []string, factor *FactorInput) int
 		CopySecret               func(childComplexity int, id string) int
@@ -319,6 +346,7 @@ type ComplexityRoot struct {
 		MarkNotificationRead     func(childComplexity int, id string) int
 		MintAPIToken             func(childComplexity int, serviceAccountID string, scope string, expiresAt *int) int
 		MoveFolder               func(childComplexity int, id string, newParentID *string) int
+		OpenBreakGlassSession    func(childComplexity int, reason string, code string) int
 		OpenSSHSession           func(childComplexity int, secretID string) int
 		PrepareSecretReveal      func(childComplexity int, secretID string, fieldKey string, runID *string) int
 		RedeemSecretReveal       func(childComplexity int, id string) int
@@ -401,6 +429,9 @@ type ComplexityRoot struct {
 		AuditChain                func(childComplexity int) int
 		AuditRecords              func(childComplexity int, actorUserID *string, subject *string, excludeActions []string, limit *int) int
 		AvailableExtensions       func(childComplexity int) int
+		BreakGlassBrowse          func(childComplexity int, sessionID string, folderID *string) int
+		BreakGlassSession         func(childComplexity int) int
+		BreakGlassSessions        func(childComplexity int, limit *int) int
 		Connections               func(childComplexity int) int
 		Diagnostics               func(childComplexity int) int
 		FindSecretsByPublicKey    func(childComplexity int, query string) int
@@ -688,7 +719,9 @@ type MutationResolver interface {
 	RevealSecretField(ctx context.Context, id string, fieldKey string) (string, error)
 	RevealSecretVersionField(ctx context.Context, secretID string, versionNo int, fieldKey string) (string, error)
 	RestoreSecretVersion(ctx context.Context, secretID string, versionNo int) (*Secret, error)
-	BreakGlassSecret(ctx context.Context, secretID string, reason string, code string) ([]*KeyValue, error)
+	BreakGlassSecret(ctx context.Context, secretID string, reason string, code string, sessionID *string) ([]*KeyValue, error)
+	OpenBreakGlassSession(ctx context.Context, reason string, code string) (*BreakGlassSession, error)
+	CloseBreakGlassSession(ctx context.Context, id string) (*BreakGlassSession, error)
 	CopySecret(ctx context.Context, id string) (*string, error)
 	RetireSecret(ctx context.Context, id string) (*Secret, error)
 	RestoreSecret(ctx context.Context, id string) (*Secret, error)
@@ -768,6 +801,9 @@ type QueryResolver interface {
 	SecretTypes(ctx context.Context) ([]*SecretType, error)
 	AvailableExtensions(ctx context.Context) ([]*SecretType, error)
 	Folders(ctx context.Context) ([]*Folder, error)
+	BreakGlassSession(ctx context.Context) (*BreakGlassSession, error)
+	BreakGlassBrowse(ctx context.Context, sessionID string, folderID *string) (*BreakGlassBrowse, error)
+	BreakGlassSessions(ctx context.Context, limit *int) ([]*BreakGlassSession, error)
 	SecretsInFolder(ctx context.Context, folderID string, includeRetired *bool) ([]*Secret, error)
 	Secret(ctx context.Context, id string) (*Secret, error)
 	SecretStats(ctx context.Context) (*SecretStats, error)
@@ -1147,6 +1183,111 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AuditRecord.Tier(childComplexity), true
+
+	case "BreakGlassBrowse.folders":
+		if e.ComplexityRoot.BreakGlassBrowse.Folders == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassBrowse.Folders(childComplexity), true
+	case "BreakGlassBrowse.secrets":
+		if e.ComplexityRoot.BreakGlassBrowse.Secrets == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassBrowse.Secrets(childComplexity), true
+
+	case "BreakGlassReveal.eventId":
+		if e.ComplexityRoot.BreakGlassReveal.EventID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassReveal.EventID(childComplexity), true
+	case "BreakGlassReveal.ownerNotified":
+		if e.ComplexityRoot.BreakGlassReveal.OwnerNotified == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassReveal.OwnerNotified(childComplexity), true
+	case "BreakGlassReveal.postRotationScheduled":
+		if e.ComplexityRoot.BreakGlassReveal.PostRotationScheduled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassReveal.PostRotationScheduled(childComplexity), true
+	case "BreakGlassReveal.revealedAt":
+		if e.ComplexityRoot.BreakGlassReveal.RevealedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassReveal.RevealedAt(childComplexity), true
+	case "BreakGlassReveal.secretId":
+		if e.ComplexityRoot.BreakGlassReveal.SecretID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassReveal.SecretID(childComplexity), true
+	case "BreakGlassReveal.secretName":
+		if e.ComplexityRoot.BreakGlassReveal.SecretName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassReveal.SecretName(childComplexity), true
+
+	case "BreakGlassSession.actorName":
+		if e.ComplexityRoot.BreakGlassSession.ActorName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassSession.ActorName(childComplexity), true
+	case "BreakGlassSession.actorUserId":
+		if e.ComplexityRoot.BreakGlassSession.ActorUserID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassSession.ActorUserID(childComplexity), true
+	case "BreakGlassSession.endReason":
+		if e.ComplexityRoot.BreakGlassSession.EndReason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassSession.EndReason(childComplexity), true
+	case "BreakGlassSession.endedAt":
+		if e.ComplexityRoot.BreakGlassSession.EndedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassSession.EndedAt(childComplexity), true
+	case "BreakGlassSession.expiresAt":
+		if e.ComplexityRoot.BreakGlassSession.ExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassSession.ExpiresAt(childComplexity), true
+	case "BreakGlassSession.id":
+		if e.ComplexityRoot.BreakGlassSession.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassSession.ID(childComplexity), true
+	case "BreakGlassSession.openedAt":
+		if e.ComplexityRoot.BreakGlassSession.OpenedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassSession.OpenedAt(childComplexity), true
+	case "BreakGlassSession.reason":
+		if e.ComplexityRoot.BreakGlassSession.Reason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassSession.Reason(childComplexity), true
+	case "BreakGlassSession.reveals":
+		if e.ComplexityRoot.BreakGlassSession.Reveals == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BreakGlassSession.Reveals(childComplexity), true
 
 	case "CertExport.contentType":
 		if e.ComplexityRoot.CertExport.ContentType == nil {
@@ -1825,7 +1966,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.BreakGlassSecret(childComplexity, args["secretId"].(string), args["reason"].(string), args["code"].(string)), true
+		return e.ComplexityRoot.Mutation.BreakGlassSecret(childComplexity, args["secretId"].(string), args["reason"].(string), args["code"].(string), args["sessionId"].(*string)), true
 	case "Mutation.checkinSecret":
 		if e.ComplexityRoot.Mutation.CheckinSecret == nil {
 			break
@@ -1859,6 +2000,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CloneSecretType(childComplexity, args["id"].(string)), true
+	case "Mutation.closeBreakGlassSession":
+		if e.ComplexityRoot.Mutation.CloseBreakGlassSession == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_closeBreakGlassSession_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CloseBreakGlassSession(childComplexity, args["id"].(string)), true
 	case "Mutation.confirmEmailVerification":
 		if e.ComplexityRoot.Mutation.ConfirmEmailVerification == nil {
 			break
@@ -2206,6 +2358,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.MoveFolder(childComplexity, args["id"].(string), args["newParentId"].(*string)), true
+	case "Mutation.openBreakGlassSession":
+		if e.ComplexityRoot.Mutation.OpenBreakGlassSession == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_openBreakGlassSession_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.OpenBreakGlassSession(childComplexity, args["reason"].(string), args["code"].(string)), true
 	case "Mutation.openSshSession":
 		if e.ComplexityRoot.Mutation.OpenSSHSession == nil {
 			break
@@ -2825,6 +2988,34 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.AvailableExtensions(childComplexity), true
+	case "Query.breakGlassBrowse":
+		if e.ComplexityRoot.Query.BreakGlassBrowse == nil {
+			break
+		}
+
+		args, err := ec.field_Query_breakGlassBrowse_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.BreakGlassBrowse(childComplexity, args["sessionId"].(string), args["folderId"].(*string)), true
+	case "Query.breakGlassSession":
+		if e.ComplexityRoot.Query.BreakGlassSession == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.BreakGlassSession(childComplexity), true
+	case "Query.breakGlassSessions":
+		if e.ComplexityRoot.Query.BreakGlassSessions == nil {
+			break
+		}
+
+		args, err := ec.field_Query_breakGlassSessions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.BreakGlassSessions(childComplexity, args["limit"].(*int)), true
 	case "Query.connections":
 		if e.ComplexityRoot.Query.Connections == nil {
 			break
@@ -5035,6 +5226,45 @@ type MintApiTokenResult {
   apiToken: ApiToken!
 }
 
+# A break-glass browse session: a short-lived window a site admin opens with a
+# reason and an MFA code, in which every folder and secret is listed. It grants
+# no edit or manage rights. openedAt is the "entered" event and endedAt with
+# endReason the "left" one; reveals lists every secret revealed in it.
+type BreakGlassSession {
+  id: ID!
+  actorUserId: String!
+  # The actor's display label (the raw id when identity can't resolve it).
+  actorName: String!
+  reason: String!
+  # RFC3339, UTC.
+  openedAt: String!
+  expiresAt: String!
+  # Null while the session is open.
+  endedAt: String
+  # "exit", "expired" or "replaced"; null while open.
+  endReason: String
+  # Filled by breakGlassSessions only; empty elsewhere.
+  reveals: [BreakGlassReveal!]!
+}
+
+# One secret revealed in a break-glass session. Never a value.
+type BreakGlassReveal {
+  eventId: ID!
+  secretId: ID!
+  # The secret's current name; empty once the secret is gone.
+  secretName: String!
+  revealedAt: String!
+  postRotationScheduled: Boolean!
+  ownerNotified: Boolean!
+}
+
+# Everything a break-glass session lists: every folder (personal ones
+# included) and every live secret, as metadata only.
+type BreakGlassBrowse {
+  folders: [Folder!]!
+  secrets: [Secret!]!
+}
+
 type Query {
   users: [User!]!
   # A single user by id (identity directory), for the admin user-detail surface.
@@ -5067,6 +5297,15 @@ type Query {
   # Extension packs available to install (not yet installed).
   availableExtensions: [SecretType!]!
   folders: [Folder!]!
+  # Break-glass (site admin or root, web sessions only). The caller's open
+  # session for this web session, or null; null for anyone else.
+  breakGlassSession: BreakGlassSession
+  # Every folder and live secret while the session is open; folderId narrows
+  # the secrets. Refused with BREAK_GLASS_SESSION_CLOSED once it has ended.
+  breakGlassBrowse(sessionId: ID!, folderId: ID): BreakGlassBrowse!
+  # Break-glass sessions, newest first, each with the secrets revealed in it,
+  # for the audit log. limit defaults to 50, at most 200.
+  breakGlassSessions(limit: Int): [BreakGlassSession!]!
   secretsInFolder(folderId: String!, includeRetired: Boolean): [Secret!]!
   secret(id: ID!): Secret
   secretStats: SecretStats!
@@ -5278,7 +5517,16 @@ type Mutation {
   # Emergency access: bypasses checkout-lock/approval-pending for a
   # read-eligible actor. Requires a fresh TOTP code (MFA step-up); high-severity
   # audit, owner notify, and forced post-use rotation are triggered server-side.
-  breakGlassSecret(secretId: String!, reason: String!, code: String!): [KeyValue!]!
+  # sessionId makes it a reveal inside a break-glass browse session: the
+  # session id is recorded with the reveal, and an empty reason takes the
+  # session's.
+  breakGlassSecret(secretId: String!, reason: String!, code: String!, sessionId: ID): [KeyValue!]!
+  # Opens a break-glass browse session (site admin or root, web sessions only)
+  # with a reason and a fresh TOTP code, under the same step-up rules as
+  # breakGlassSecret. Any session the caller has open ends as replaced.
+  openBreakGlassSession(reason: String!, code: String!): BreakGlassSession!
+  # Ends the caller's break-glass session. Stays open in read-only maintenance.
+  closeBreakGlassSession(id: ID!): BreakGlassSession!
   # Copies the primary sensitive field value (distinct audited "copy" event).
   copySecret(id: ID!): String
   # Soft-delete: hides the secret from default listings, recoverable via restoreSecret.
@@ -5631,6 +5879,58 @@ func (ec *executionContext) childFields_AuditRecord(ctx context.Context, field g
 		return ec.fieldContext_AuditRecord_hash(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type AuditRecord", field.Name)
+}
+
+func (ec *executionContext) childFields_BreakGlassBrowse(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "folders":
+		return ec.fieldContext_BreakGlassBrowse_folders(ctx, field)
+	case "secrets":
+		return ec.fieldContext_BreakGlassBrowse_secrets(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type BreakGlassBrowse", field.Name)
+}
+
+func (ec *executionContext) childFields_BreakGlassReveal(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "eventId":
+		return ec.fieldContext_BreakGlassReveal_eventId(ctx, field)
+	case "secretId":
+		return ec.fieldContext_BreakGlassReveal_secretId(ctx, field)
+	case "secretName":
+		return ec.fieldContext_BreakGlassReveal_secretName(ctx, field)
+	case "revealedAt":
+		return ec.fieldContext_BreakGlassReveal_revealedAt(ctx, field)
+	case "postRotationScheduled":
+		return ec.fieldContext_BreakGlassReveal_postRotationScheduled(ctx, field)
+	case "ownerNotified":
+		return ec.fieldContext_BreakGlassReveal_ownerNotified(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type BreakGlassReveal", field.Name)
+}
+
+func (ec *executionContext) childFields_BreakGlassSession(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_BreakGlassSession_id(ctx, field)
+	case "actorUserId":
+		return ec.fieldContext_BreakGlassSession_actorUserId(ctx, field)
+	case "actorName":
+		return ec.fieldContext_BreakGlassSession_actorName(ctx, field)
+	case "reason":
+		return ec.fieldContext_BreakGlassSession_reason(ctx, field)
+	case "openedAt":
+		return ec.fieldContext_BreakGlassSession_openedAt(ctx, field)
+	case "expiresAt":
+		return ec.fieldContext_BreakGlassSession_expiresAt(ctx, field)
+	case "endedAt":
+		return ec.fieldContext_BreakGlassSession_endedAt(ctx, field)
+	case "endReason":
+		return ec.fieldContext_BreakGlassSession_endReason(ctx, field)
+	case "reveals":
+		return ec.fieldContext_BreakGlassSession_reveals(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type BreakGlassSession", field.Name)
 }
 
 func (ec *executionContext) childFields_CertExport(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -6700,6 +7000,14 @@ func (ec *executionContext) field_Mutation_breakGlassSecret_args(ctx context.Con
 		return nil, err
 	}
 	args["code"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOID2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg3
 	return args, nil
 }
 
@@ -6740,6 +7048,20 @@ func (ec *executionContext) field_Mutation_checkoutSecret_args(ctx context.Conte
 }
 
 func (ec *executionContext) field_Mutation_cloneSecretType_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_closeBreakGlassSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
@@ -7456,6 +7778,28 @@ func (ec *executionContext) field_Mutation_moveFolder_args(ctx context.Context, 
 		return nil, err
 	}
 	args["newParentId"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_openBreakGlassSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "reason",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["reason"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "code",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["code"] = arg1
 	return args, nil
 }
 
@@ -8280,6 +8624,42 @@ func (ec *executionContext) field_Query_auditRecords_args(ctx context.Context, r
 		return nil, err
 	}
 	args["limit"] = arg3
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_breakGlassBrowse_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "folderId",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOID2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["folderId"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_breakGlassSessions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg0
 	return args, nil
 }
 
@@ -9989,6 +10369,424 @@ func (ec *executionContext) _AuditRecord_hash(ctx context.Context, field graphql
 }
 func (ec *executionContext) fieldContext_AuditRecord_hash(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("AuditRecord", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassBrowse_folders(ctx context.Context, field graphql.CollectedField, obj *BreakGlassBrowse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassBrowse_folders(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Folders, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*Folder) graphql.Marshaler {
+			return ec.marshalNFolder2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFolderᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassBrowse_folders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BreakGlassBrowse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Folder(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BreakGlassBrowse_secrets(ctx context.Context, field graphql.CollectedField, obj *BreakGlassBrowse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassBrowse_secrets(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Secrets, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*Secret) graphql.Marshaler {
+			return ec.marshalNSecret2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassBrowse_secrets(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BreakGlassBrowse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Secret(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BreakGlassReveal_eventId(ctx context.Context, field graphql.CollectedField, obj *BreakGlassReveal) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassReveal_eventId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EventID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassReveal_eventId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassReveal", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassReveal_secretId(ctx context.Context, field graphql.CollectedField, obj *BreakGlassReveal) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassReveal_secretId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SecretID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassReveal_secretId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassReveal", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassReveal_secretName(ctx context.Context, field graphql.CollectedField, obj *BreakGlassReveal) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassReveal_secretName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SecretName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassReveal_secretName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassReveal", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassReveal_revealedAt(ctx context.Context, field graphql.CollectedField, obj *BreakGlassReveal) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassReveal_revealedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RevealedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassReveal_revealedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassReveal", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassReveal_postRotationScheduled(ctx context.Context, field graphql.CollectedField, obj *BreakGlassReveal) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassReveal_postRotationScheduled(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PostRotationScheduled, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassReveal_postRotationScheduled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassReveal", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassReveal_ownerNotified(ctx context.Context, field graphql.CollectedField, obj *BreakGlassReveal) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassReveal_ownerNotified(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.OwnerNotified, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassReveal_ownerNotified(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassReveal", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassSession_id(ctx context.Context, field graphql.CollectedField, obj *BreakGlassSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassSession_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassSession_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassSession", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassSession_actorUserId(ctx context.Context, field graphql.CollectedField, obj *BreakGlassSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassSession_actorUserId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ActorUserID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassSession_actorUserId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassSession", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassSession_actorName(ctx context.Context, field graphql.CollectedField, obj *BreakGlassSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassSession_actorName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ActorName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassSession_actorName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassSession", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassSession_reason(ctx context.Context, field graphql.CollectedField, obj *BreakGlassSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassSession_reason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Reason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassSession_reason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassSession", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassSession_openedAt(ctx context.Context, field graphql.CollectedField, obj *BreakGlassSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassSession_openedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.OpenedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassSession_openedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassSession", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassSession_expiresAt(ctx context.Context, field graphql.CollectedField, obj *BreakGlassSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassSession_expiresAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassSession_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassSession", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassSession_endedAt(ctx context.Context, field graphql.CollectedField, obj *BreakGlassSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassSession_endedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EndedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassSession_endedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassSession", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassSession_endReason(ctx context.Context, field graphql.CollectedField, obj *BreakGlassSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassSession_endReason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EndReason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassSession_endReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BreakGlassSession", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _BreakGlassSession_reveals(ctx context.Context, field graphql.CollectedField, obj *BreakGlassSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BreakGlassSession_reveals(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Reveals, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*BreakGlassReveal) graphql.Marshaler {
+			return ec.marshalNBreakGlassReveal2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassRevealᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BreakGlassSession_reveals(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BreakGlassSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_BreakGlassReveal(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _CertExport_fileBase64(ctx context.Context, field graphql.CollectedField, obj *CertExport) (ret graphql.Marshaler) {
@@ -13242,7 +14040,7 @@ func (ec *executionContext) _Mutation_breakGlassSecret(ctx context.Context, fiel
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().BreakGlassSecret(ctx, fc.Args["secretId"].(string), fc.Args["reason"].(string), fc.Args["code"].(string))
+			return ec.Resolvers.Mutation().BreakGlassSecret(ctx, fc.Args["secretId"].(string), fc.Args["reason"].(string), fc.Args["code"].(string), fc.Args["sessionId"].(*string))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*KeyValue) graphql.Marshaler {
@@ -13270,6 +14068,94 @@ func (ec *executionContext) fieldContext_Mutation_breakGlassSecret(ctx context.C
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_breakGlassSecret_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_openBreakGlassSession(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_openBreakGlassSession(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().OpenBreakGlassSession(ctx, fc.Args["reason"].(string), fc.Args["code"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *BreakGlassSession) graphql.Marshaler {
+			return ec.marshalNBreakGlassSession2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassSession(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_openBreakGlassSession(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_BreakGlassSession(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_openBreakGlassSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_closeBreakGlassSession(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_closeBreakGlassSession(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CloseBreakGlassSession(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *BreakGlassSession) graphql.Marshaler {
+			return ec.marshalNBreakGlassSession2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassSession(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_closeBreakGlassSession(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_BreakGlassSession(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_closeBreakGlassSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -17061,6 +17947,126 @@ func (ec *executionContext) fieldContext_Query_folders(_ context.Context, field 
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Folder(ctx, field)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_breakGlassSession(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_breakGlassSession(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().BreakGlassSession(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *BreakGlassSession) graphql.Marshaler {
+			return ec.marshalOBreakGlassSession2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassSession(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Query_breakGlassSession(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_BreakGlassSession(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_breakGlassBrowse(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_breakGlassBrowse(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().BreakGlassBrowse(ctx, fc.Args["sessionId"].(string), fc.Args["folderId"].(*string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *BreakGlassBrowse) graphql.Marshaler {
+			return ec.marshalNBreakGlassBrowse2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassBrowse(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_breakGlassBrowse(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_BreakGlassBrowse(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_breakGlassBrowse_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_breakGlassSessions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_breakGlassSessions(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().BreakGlassSessions(ctx, fc.Args["limit"].(*int))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*BreakGlassSession) graphql.Marshaler {
+			return ec.marshalNBreakGlassSession2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassSessionᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_breakGlassSessions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_BreakGlassSession(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_breakGlassSessions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -24457,6 +25463,187 @@ func (ec *executionContext) _AuditRecord(ctx context.Context, sel ast.SelectionS
 	return out
 }
 
+var breakGlassBrowseImplementors = []string{"BreakGlassBrowse"}
+
+func (ec *executionContext) _BreakGlassBrowse(ctx context.Context, sel ast.SelectionSet, obj *BreakGlassBrowse) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, breakGlassBrowseImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("BreakGlassBrowse")
+		case "folders":
+			out.Values[i] = ec._BreakGlassBrowse_folders(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "secrets":
+			out.Values[i] = ec._BreakGlassBrowse_secrets(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var breakGlassRevealImplementors = []string{"BreakGlassReveal"}
+
+func (ec *executionContext) _BreakGlassReveal(ctx context.Context, sel ast.SelectionSet, obj *BreakGlassReveal) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, breakGlassRevealImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("BreakGlassReveal")
+		case "eventId":
+			out.Values[i] = ec._BreakGlassReveal_eventId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "secretId":
+			out.Values[i] = ec._BreakGlassReveal_secretId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "secretName":
+			out.Values[i] = ec._BreakGlassReveal_secretName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "revealedAt":
+			out.Values[i] = ec._BreakGlassReveal_revealedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "postRotationScheduled":
+			out.Values[i] = ec._BreakGlassReveal_postRotationScheduled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ownerNotified":
+			out.Values[i] = ec._BreakGlassReveal_ownerNotified(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var breakGlassSessionImplementors = []string{"BreakGlassSession"}
+
+func (ec *executionContext) _BreakGlassSession(ctx context.Context, sel ast.SelectionSet, obj *BreakGlassSession) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, breakGlassSessionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("BreakGlassSession")
+		case "id":
+			out.Values[i] = ec._BreakGlassSession_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "actorUserId":
+			out.Values[i] = ec._BreakGlassSession_actorUserId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "actorName":
+			out.Values[i] = ec._BreakGlassSession_actorName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reason":
+			out.Values[i] = ec._BreakGlassSession_reason(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "openedAt":
+			out.Values[i] = ec._BreakGlassSession_openedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "expiresAt":
+			out.Values[i] = ec._BreakGlassSession_expiresAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "endedAt":
+			out.Values[i] = ec._BreakGlassSession_endedAt(ctx, field, obj)
+		case "endReason":
+			out.Values[i] = ec._BreakGlassSession_endReason(ctx, field, obj)
+		case "reveals":
+			out.Values[i] = ec._BreakGlassSession_reveals(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var certExportImplementors = []string{"CertExport"}
 
 func (ec *executionContext) _CertExport(ctx context.Context, sel ast.SelectionSet, obj *CertExport) graphql.Marshaler {
@@ -25796,6 +26983,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "openBreakGlassSession":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_openBreakGlassSession(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "closeBreakGlassSession":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_closeBreakGlassSession(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "copySecret":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_copySecret(ctx, field)
@@ -26868,6 +28069,69 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_folders(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "breakGlassSession":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_breakGlassSession(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "breakGlassBrowse":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_breakGlassBrowse(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "breakGlassSessions":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_breakGlassSessions(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -29479,6 +30743,76 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
+func (ec *executionContext) marshalNBreakGlassBrowse2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassBrowse(ctx context.Context, sel ast.SelectionSet, v BreakGlassBrowse) graphql.Marshaler {
+	return ec._BreakGlassBrowse(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNBreakGlassBrowse2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassBrowse(ctx context.Context, sel ast.SelectionSet, v *BreakGlassBrowse) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._BreakGlassBrowse(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNBreakGlassReveal2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassRevealᚄ(ctx context.Context, sel ast.SelectionSet, v []*BreakGlassReveal) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNBreakGlassReveal2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassReveal(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNBreakGlassReveal2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassReveal(ctx context.Context, sel ast.SelectionSet, v *BreakGlassReveal) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._BreakGlassReveal(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNBreakGlassSession2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassSession(ctx context.Context, sel ast.SelectionSet, v BreakGlassSession) graphql.Marshaler {
+	return ec._BreakGlassSession(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNBreakGlassSession2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassSessionᚄ(ctx context.Context, sel ast.SelectionSet, v []*BreakGlassSession) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNBreakGlassSession2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassSession(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNBreakGlassSession2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassSession(ctx context.Context, sel ast.SelectionSet, v *BreakGlassSession) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._BreakGlassSession(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNCertExport2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐCertExport(ctx context.Context, sel ast.SelectionSet, v CertExport) graphql.Marshaler {
 	return ec._CertExport(ctx, sel, &v)
 }
@@ -31023,6 +32357,13 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	_ = ctx
 	res := graphql.MarshalBoolean(*v)
 	return res
+}
+
+func (ec *executionContext) marshalOBreakGlassSession2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐBreakGlassSession(ctx context.Context, sel ast.SelectionSet, v *BreakGlassSession) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._BreakGlassSession(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOCertMeta2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐCertMeta(ctx context.Context, sel ast.SelectionSet, v *CertMeta) graphql.Marshaler {

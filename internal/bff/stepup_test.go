@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -205,5 +206,31 @@ func TestSession_ReportsMFAVerifiedAt(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if out["mfaVerifiedAt"] != float64(at.Unix()) {
 		t.Fatalf("body = %s", rec.Body)
+	}
+}
+
+// The request gate carries an opaque reference to the web session, never the
+// session id, distinct per session; break-glass browse binds to it.
+func TestSessionActor_CarriesAnOpaqueSessionRef(t *testing.T) {
+	fid := &fakeIdentity{resolveRes: &identityv1.ResolveUserContextResponse{User: &identityv1.User{Id: "usr-42"}}}
+	h := stepUpHandler(fid)
+	refs := map[string]string{}
+	for _, sid := range []string{"sid-1", "sid-2"} {
+		if err := h.Store.Create(context.Background(), sid, Session{AccessToken: "tok", UserID: "usr-42", Subject: "sub-1", CSRFToken: "csrf-1", MFAVerified: true, ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
+			t.Fatal(err)
+		}
+		var got string
+		next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { got = resolvers.SessionRef(r.Context()) })
+		req := httptest.NewRequest(http.MethodPost, "/graphql", nil)
+		req.AddCookie(&http.Cookie{Name: CookieName, Value: sid})
+		req.Header.Set("X-CSRF-Token", "csrf-1")
+		h.SessionActor(next).ServeHTTP(httptest.NewRecorder(), req)
+		if got == "" || strings.Contains(got, sid) {
+			t.Fatalf("session ref for %s = %q", sid, got)
+		}
+		refs[sid] = got
+	}
+	if refs["sid-1"] == refs["sid-2"] {
+		t.Fatal("two web sessions must have different references")
 	}
 }
