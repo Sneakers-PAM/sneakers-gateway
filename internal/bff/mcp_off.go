@@ -27,3 +27,14 @@ func writeMCPDisabled(w http.ResponseWriter) {
 func MCPOff() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { writeMCPDisabled(w) })
 }
+
+// CodeMachineAPIDisabled is the refusal while the machine API is off
+// (MACHINE_API_ENABLED=false): personal tokens other than MCP agent tokens,
+// and service-account API tokens. MCP agent tokens follow the MCP switch.
+const CodeMachineAPIDisabled = "MACHINE_API_DISABLED"
+
+const machineAPIDisabledMessage = "The machine API is turned off on this install (setting MACHINE_API_ENABLED)"
+
+func writeMachineAPIDisabled(w http.ResponseWriter) {
+	writeJSON(w, http.StatusForbidden, map[string]string{"error": CodeMachineAPIDisabled, "message": machineAPIDisabledMessage})
+}

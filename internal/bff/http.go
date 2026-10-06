@@ -172,6 +172,9 @@ type Handler struct {
 	// MCPDisabled refuses MCP agent tokens on the machine API with
 	// MCP_DISABLED (MCP_ENABLED=false).
 	MCPDisabled bool
+	// MachineAPIDisabled refuses every machine-API token that isn't an MCP
+	// agent token with MACHINE_API_DISABLED (MACHINE_API_ENABLED=false).
+	MachineAPIDisabled bool
 }
 
 // mfaFlags reports the client-facing MFA posture for a session: enrollmentRequired

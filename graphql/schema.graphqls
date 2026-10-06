@@ -838,6 +838,30 @@ type Query {
   # it's on, mutations are refused with the reason MAINTENANCE_READONLY;
   # reads, reveals and sign-in still work.
   maintenance: Maintenance!
+  # The appliance's state, from its sneakers-appliance ConfigMap, for the
+  # web banners. present is false on a plain Kubernetes install, and every
+  # other field is then null or false.
+  appliance: Appliance!
+}
+
+type Appliance {
+  present: Boolean!
+  # The appliance version.
+  version: String
+  # starting, ok, degraded, down, maintenance or stopped.
+  productState: String
+  # The MCP: on, off or degraded.
+  mcp: String
+  # The MCP is off but revoking its agent tokens hasn't finished.
+  mcpRevokePending: Boolean!
+  # The machine API: on or off.
+  machineApi: String
+  # How the product certificate was set: self-signed, upload, csr or acme.
+  tlsMode: String
+  # When the product certificate expires (RFC 3339).
+  tlsNotAfter: String
+  maintenance: Boolean!
+  maintenanceReason: String
 }
 
 type Maintenance {

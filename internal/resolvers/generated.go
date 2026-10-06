@@ -46,6 +46,19 @@ type ComplexityRoot struct {
 		ServiceAccountID func(childComplexity int) int
 	}
 
+	Appliance struct {
+		MachineAPI        func(childComplexity int) int
+		Maintenance       func(childComplexity int) int
+		MaintenanceReason func(childComplexity int) int
+		Mcp               func(childComplexity int) int
+		McpRevokePending  func(childComplexity int) int
+		Present           func(childComplexity int) int
+		ProductState      func(childComplexity int) int
+		TLSMode           func(childComplexity int) int
+		TLSNotAfter       func(childComplexity int) int
+		Version           func(childComplexity int) int
+	}
+
 	ApprovalComment struct {
 		AuthorName   func(childComplexity int) int
 		AuthorUserID func(childComplexity int) int
@@ -378,6 +391,7 @@ type ComplexityRoot struct {
 		APITokens                 func(childComplexity int, serviceAccountID string) int
 		ActiveLease               func(childComplexity int, secretID string) int
 		ActiveLeasesForUser       func(childComplexity int, userID string) int
+		Appliance                 func(childComplexity int) int
 		ApprovalRequests          func(childComplexity int) int
 		AuditActions              func(childComplexity int) int
 		AuditChain                func(childComplexity int) int
@@ -771,6 +785,7 @@ type QueryResolver interface {
 	UserTokens(ctx context.Context, userID string) ([]*UserToken, error)
 	Diagnostics(ctx context.Context) (*Diagnostics, error)
 	Maintenance(ctx context.Context) (*Maintenance, error)
+	Appliance(ctx context.Context) (*Appliance, error)
 }
 type SubscriptionResolver interface {
 	SecretStats(ctx context.Context) (<-chan *SecretStats, error)
@@ -832,6 +847,67 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ApiToken.ServiceAccountID(childComplexity), true
+
+	case "Appliance.machineApi":
+		if e.ComplexityRoot.Appliance.MachineAPI == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Appliance.MachineAPI(childComplexity), true
+	case "Appliance.maintenance":
+		if e.ComplexityRoot.Appliance.Maintenance == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Appliance.Maintenance(childComplexity), true
+	case "Appliance.maintenanceReason":
+		if e.ComplexityRoot.Appliance.MaintenanceReason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Appliance.MaintenanceReason(childComplexity), true
+	case "Appliance.mcp":
+		if e.ComplexityRoot.Appliance.Mcp == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Appliance.Mcp(childComplexity), true
+	case "Appliance.mcpRevokePending":
+		if e.ComplexityRoot.Appliance.McpRevokePending == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Appliance.McpRevokePending(childComplexity), true
+	case "Appliance.present":
+		if e.ComplexityRoot.Appliance.Present == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Appliance.Present(childComplexity), true
+	case "Appliance.productState":
+		if e.ComplexityRoot.Appliance.ProductState == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Appliance.ProductState(childComplexity), true
+	case "Appliance.tlsMode":
+		if e.ComplexityRoot.Appliance.TLSMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Appliance.TLSMode(childComplexity), true
+	case "Appliance.tlsNotAfter":
+		if e.ComplexityRoot.Appliance.TLSNotAfter == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Appliance.TLSNotAfter(childComplexity), true
+	case "Appliance.version":
+		if e.ComplexityRoot.Appliance.Version == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Appliance.Version(childComplexity), true
 
 	case "ApprovalComment.authorName":
 		if e.ComplexityRoot.ApprovalComment.AuthorName == nil {
@@ -2657,6 +2733,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.ActiveLeasesForUser(childComplexity, args["userId"].(string)), true
+	case "Query.appliance":
+		if e.ComplexityRoot.Query.Appliance == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.Appliance(childComplexity), true
 	case "Query.approvalRequests":
 		if e.ComplexityRoot.Query.ApprovalRequests == nil {
 			break
@@ -4960,6 +5042,30 @@ type Query {
   # it's on, mutations are refused with the reason MAINTENANCE_READONLY;
   # reads, reveals and sign-in still work.
   maintenance: Maintenance!
+  # The appliance's state, from its sneakers-appliance ConfigMap, for the
+  # web banners. present is false on a plain Kubernetes install, and every
+  # other field is then null or false.
+  appliance: Appliance!
+}
+
+type Appliance {
+  present: Boolean!
+  # The appliance version.
+  version: String
+  # starting, ok, degraded, down, maintenance or stopped.
+  productState: String
+  # The MCP: on, off or degraded.
+  mcp: String
+  # The MCP is off but revoking its agent tokens hasn't finished.
+  mcpRevokePending: Boolean!
+  # The machine API: on or off.
+  machineApi: String
+  # How the product certificate was set: self-signed, upload, csr or acme.
+  tlsMode: String
+  # When the product certificate expires (RFC 3339).
+  tlsNotAfter: String
+  maintenance: Boolean!
+  maintenanceReason: String
 }
 
 type Maintenance {
@@ -5281,6 +5387,32 @@ func (ec *executionContext) childFields_ApiToken(ctx context.Context, field grap
 		return ec.fieldContext_ApiToken_createdBy(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type ApiToken", field.Name)
+}
+
+func (ec *executionContext) childFields_Appliance(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "present":
+		return ec.fieldContext_Appliance_present(ctx, field)
+	case "version":
+		return ec.fieldContext_Appliance_version(ctx, field)
+	case "productState":
+		return ec.fieldContext_Appliance_productState(ctx, field)
+	case "mcp":
+		return ec.fieldContext_Appliance_mcp(ctx, field)
+	case "mcpRevokePending":
+		return ec.fieldContext_Appliance_mcpRevokePending(ctx, field)
+	case "machineApi":
+		return ec.fieldContext_Appliance_machineApi(ctx, field)
+	case "tlsMode":
+		return ec.fieldContext_Appliance_tlsMode(ctx, field)
+	case "tlsNotAfter":
+		return ec.fieldContext_Appliance_tlsNotAfter(ctx, field)
+	case "maintenance":
+		return ec.fieldContext_Appliance_maintenance(ctx, field)
+	case "maintenanceReason":
+		return ec.fieldContext_Appliance_maintenanceReason(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type Appliance", field.Name)
 }
 
 func (ec *executionContext) childFields_ApprovalComment(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -8562,6 +8694,236 @@ func (ec *executionContext) _ApiToken_createdBy(ctx context.Context, field graph
 }
 func (ec *executionContext) fieldContext_ApiToken_createdBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("ApiToken", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Appliance_present(ctx context.Context, field graphql.CollectedField, obj *Appliance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Appliance_present(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Present, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Appliance_present(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Appliance", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Appliance_version(ctx context.Context, field graphql.CollectedField, obj *Appliance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Appliance_version(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Version, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Appliance_version(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Appliance", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Appliance_productState(ctx context.Context, field graphql.CollectedField, obj *Appliance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Appliance_productState(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ProductState, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Appliance_productState(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Appliance", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Appliance_mcp(ctx context.Context, field graphql.CollectedField, obj *Appliance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Appliance_mcp(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Mcp, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Appliance_mcp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Appliance", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Appliance_mcpRevokePending(ctx context.Context, field graphql.CollectedField, obj *Appliance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Appliance_mcpRevokePending(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.McpRevokePending, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Appliance_mcpRevokePending(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Appliance", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Appliance_machineApi(ctx context.Context, field graphql.CollectedField, obj *Appliance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Appliance_machineApi(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MachineAPI, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Appliance_machineApi(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Appliance", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Appliance_tlsMode(ctx context.Context, field graphql.CollectedField, obj *Appliance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Appliance_tlsMode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TLSMode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Appliance_tlsMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Appliance", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Appliance_tlsNotAfter(ctx context.Context, field graphql.CollectedField, obj *Appliance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Appliance_tlsNotAfter(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TLSNotAfter, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Appliance_tlsNotAfter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Appliance", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Appliance_maintenance(ctx context.Context, field graphql.CollectedField, obj *Appliance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Appliance_maintenance(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Maintenance, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Appliance_maintenance(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Appliance", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Appliance_maintenanceReason(ctx context.Context, field graphql.CollectedField, obj *Appliance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Appliance_maintenanceReason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MaintenanceReason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Appliance_maintenanceReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Appliance", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _ApprovalComment_id(ctx context.Context, field graphql.CollectedField, obj *ApprovalComment) (ret graphql.Marshaler) {
@@ -17446,6 +17808,38 @@ func (ec *executionContext) fieldContext_Query_maintenance(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_appliance(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_appliance(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().Appliance(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Appliance) graphql.Marshaler {
+			return ec.marshalNAppliance2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐAppliance(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_appliance(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Appliance(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23205,6 +23599,69 @@ func (ec *executionContext) _ApiToken(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
+var applianceImplementors = []string{"Appliance"}
+
+func (ec *executionContext) _Appliance(ctx context.Context, sel ast.SelectionSet, obj *Appliance) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, applianceImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Appliance")
+		case "present":
+			out.Values[i] = ec._Appliance_present(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "version":
+			out.Values[i] = ec._Appliance_version(ctx, field, obj)
+		case "productState":
+			out.Values[i] = ec._Appliance_productState(ctx, field, obj)
+		case "mcp":
+			out.Values[i] = ec._Appliance_mcp(ctx, field, obj)
+		case "mcpRevokePending":
+			out.Values[i] = ec._Appliance_mcpRevokePending(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "machineApi":
+			out.Values[i] = ec._Appliance_machineApi(ctx, field, obj)
+		case "tlsMode":
+			out.Values[i] = ec._Appliance_tlsMode(ctx, field, obj)
+		case "tlsNotAfter":
+			out.Values[i] = ec._Appliance_tlsNotAfter(ctx, field, obj)
+		case "maintenance":
+			out.Values[i] = ec._Appliance_maintenance(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "maintenanceReason":
+			out.Values[i] = ec._Appliance_maintenanceReason(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var approvalCommentImplementors = []string{"ApprovalComment"}
 
 func (ec *executionContext) _ApprovalComment(ctx context.Context, sel ast.SelectionSet, obj *ApprovalComment) graphql.Marshaler {
@@ -26561,6 +27018,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "appliance":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_appliance(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -28327,6 +28806,20 @@ func (ec *executionContext) marshalNApiToken2ᚖgithubᚗcomᚋSneakersᚑPAMᚋ
 		return graphql.Null
 	}
 	return ec._ApiToken(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAppliance2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐAppliance(ctx context.Context, sel ast.SelectionSet, v Appliance) graphql.Marshaler {
+	return ec._Appliance(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAppliance2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐAppliance(ctx context.Context, sel ast.SelectionSet, v *Appliance) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Appliance(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNApprovalComment2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐApprovalCommentᚄ(ctx context.Context, sel ast.SelectionSet, v []*ApprovalComment) graphql.Marshaler {

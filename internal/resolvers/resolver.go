@@ -47,6 +47,15 @@ type Resolver struct {
 	Log log.Logger
 	// Maintenance is the read-only maintenance state; nil is always off.
 	Maintenance *maintenance.Mode
+	// Appliance is the appliance ConfigMap; nil means not on an appliance.
+	Appliance ApplianceState
+}
+
+// ApplianceState is the appliance ConfigMap as the appliance query reads it
+// (internal/appliance's Watcher).
+type ApplianceState interface {
+	Present() bool
+	Get(key string) string
 }
 
 // workflowActorOf is the acting user for the workflow service (its

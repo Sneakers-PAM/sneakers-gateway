@@ -201,6 +201,16 @@ under `/auth` keep working. The backends hold their own read-only mode too, so a
 past the gateway is still refused. The mode comes from `MAINTENANCE_READONLY` or the appliance
 ConfigMap (see [configuration.md](configuration.md), "Maintenance and the appliance").
 
+### Appliance
+
+`appliance` answers any signed-in user with the appliance's state from its `sneakers-appliance`
+ConfigMap, for the web banners: `present`, `version`, `productState` (`starting`, `ok`,
+`degraded`, `down`, `maintenance` or `stopped`), `mcp` (`on`, `off` or `degraded`),
+`mcpRevokePending`, `machineApi` (`on` or `off`), `tlsMode` (`self-signed`, `upload`, `csr` or
+`acme`), `tlsNotAfter` (RFC 3339), `maintenance` and `maintenanceReason`. On a plain Kubernetes
+install `present` is false and every other field is null or false. See
+[appliance.md](appliance.md) for the keys.
+
 ### Diagnostics
 
 `diagnostics` takes no arguments and answers any signed-in user with the facts a support report
@@ -326,6 +336,11 @@ are the MCP agent tokens.
 `{"error":"MCP_DISABLED","message":"MCP is turned off on this appliance (setting mcp.enabled)"}`,
 before identity or Hydra is called for a JWT, so no new agent token can be minted or used.
 Personal tokens with `client_kind: cli` and service-account API tokens keep working.
+
+**Machine API off** (`MACHINE_API_ENABLED=false`): `/machine/graphql` answers `403` with
+`{"error":"MACHINE_API_DISABLED","message":"The machine API is turned off on this install (setting MACHINE_API_ENABLED)"}`
+for `cli` personal tokens and service-account API tokens (those are refused before identity is
+called). MCP agent tokens are left to the MCP switch.
 
 ## First-run setup
 

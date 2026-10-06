@@ -63,6 +63,10 @@ func (h *Handler) MachineActor(next http.Handler) http.Handler {
 			h.serveUserToken(w, r, next, token)
 			return
 		}
+		if h.MachineAPIDisabled && !looksLikeJWT(token) {
+			writeMachineAPIDisabled(w)
+			return
+		}
 		var mv machineVerifier = saTokenVerifier{identity: h.Identity}
 		if looksLikeJWT(token) {
 			if h.MCPDisabled {
@@ -98,8 +102,13 @@ func (h *Handler) serveUserToken(w http.ResponseWriter, r *http.Request, next ht
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if h.MCPDisabled && resp.GetClientKind() == ClientKindMCP {
+	isMCP := resp.GetClientKind() == ClientKindMCP
+	if h.MCPDisabled && isMCP {
 		writeMCPDisabled(w)
+		return
+	}
+	if h.MachineAPIDisabled && !isMCP {
+		writeMachineAPIDisabled(w)
 		return
 	}
 	ctx := resolvers.WithUserTokenActor(r.Context(), resp.GetUser().GetId(), resp.GetTokenId(), resp.GetGroupNames())
