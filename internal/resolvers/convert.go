@@ -367,13 +367,20 @@ func gqlConnection(c *vaultv1.Connection) *Connection {
 	}
 }
 func gqlTarget(t *vaultv1.Target) *Target {
+	conns := make([]*TargetConnection, 0, len(t.GetConnections()))
+	for _, c := range t.GetConnections() {
+		conns = append(conns, gqlTargetConnection(c))
+	}
 	return &Target{
 		ID: t.GetId(), Name: t.GetName(), Hostname: t.GetHostname(),
 		Kind: strPtr(t.GetKind()), Domain: strPtr(t.GetDomain()), Realm: strPtr(t.GetRealm()),
-		ConnectionID: t.GetConnectionId(), Description: strPtr(t.GetDescription()),
+		ConnectionID: t.GetConnectionId(), Connections: conns, Description: strPtr(t.GetDescription()),
 		SecretCount: int(t.GetSecretCount()), OwnerUserID: strPtr(t.GetOwnerUserId()),
 		SSHHostKeys: append([]string{}, t.GetSshHostKeys()...),
 	}
+}
+func gqlTargetConnection(c *vaultv1.TargetConnection) *TargetConnection {
+	return &TargetConnection{ConnectionID: c.GetConnectionId(), IsDefault: c.GetIsDefault()}
 }
 func protoConnInput(in ConnectionInput) *vaultv1.Connection {
 	return &vaultv1.Connection{
@@ -382,10 +389,14 @@ func protoConnInput(in ConnectionInput) *vaultv1.Connection {
 	}
 }
 func protoTargetInput(in TargetInput) *vaultv1.Target {
+	conns := make([]*vaultv1.TargetConnection, 0, len(in.Connections))
+	for _, c := range in.Connections {
+		conns = append(conns, &vaultv1.TargetConnection{ConnectionId: c.ConnectionID, IsDefault: c.IsDefault})
+	}
 	return &vaultv1.Target{
 		Id: deref(in.ID), Name: in.Name, Hostname: in.Hostname,
 		Kind: deref(in.Kind), Domain: deref(in.Domain), Realm: deref(in.Realm),
-		ConnectionId: in.ConnectionID, Description: deref(in.Description),
+		ConnectionId: deref(in.ConnectionID), Connections: conns, Description: deref(in.Description),
 		SshHostKeys: in.SSHHostKeys,
 	}
 }

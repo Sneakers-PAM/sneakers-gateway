@@ -346,7 +346,14 @@ type Target {
   kind: String
   domain: String
   realm: String
+  # Alias for connections' default entry; kept for a caller that hasn't moved
+  # to the list.
   connectionId: String!
+  # The target's connections, in display order, one connector protocol apiece
+  # and exactly one default (the one a session starts on unless the caller
+  # names another). A target saved before this field existed is read back as
+  # a one-item default list built from connectionId.
+  connections: [TargetConnection!]!
   description: String
   # Output-only: number of secrets pointing at this target (server-computed).
   secretCount: Int!
@@ -358,6 +365,14 @@ type Target {
   # sessions to it are refused.
   sshHostKeys: [String!]!
 }
+type TargetConnection {
+  connectionId: ID!
+  isDefault: Boolean!
+}
+input TargetConnectionInput {
+  connectionId: ID!
+  isDefault: Boolean!
+}
 input TargetInput {
   id: ID
   name: String!
@@ -365,7 +380,12 @@ input TargetInput {
   kind: String
   domain: String
   realm: String
-  connectionId: String!
+  # Legacy alias for the default connection. Required when connections is
+  # omitted or empty; ignored otherwise.
+  connectionId: ID
+  # The target's connections, ordered, with exactly one default. Omit (or
+  # send empty) to save with connectionId alone instead.
+  connections: [TargetConnectionInput!]
   description: String
   # The full pin list (site admin only to change). Omit to keep the target's
   # current pins; [] clears them.
@@ -1214,8 +1234,10 @@ type Mutation {
 
   # Authorizes an interactive SSH session against an ssh-key secret's bound
   # target: reveals the key (audited, RBAC-gated), hands session parameters to
-  # sshbroker, and returns a single-use WebSocket ticket.
-  openSshSession(secretId: ID!): SshSessionTicket!
+  # sshbroker, and returns a single-use WebSocket ticket. Starts on the
+  # target's default connection unless connectionId names one of the
+  # target's own connections.
+  openSshSession(secretId: ID!, connectionId: ID): SshSessionTicket!
 
   # Service-account + API-token management. Site-admin-only:
   # these are the human /graphql admin operations for the machine-auth surface

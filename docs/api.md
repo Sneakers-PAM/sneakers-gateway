@@ -124,6 +124,21 @@ form (`ssh-ed25519 AAAA... comment`). An empty list means the target isn't pinne
   values as the vault's). The broker refuses every kind but a person, and passes the actor
   through to the vault when it reveals the key.
 
+### Target connections
+
+`Target.connections` (`[TargetConnection!]!`, each a `connectionId` plus `isDefault`) lists a
+target's connections in order, one connector protocol apiece, with exactly one default.
+`Target.connectionId` stays as an alias for the default entry, for a caller that hasn't moved to
+the list. `TargetInput.connectionId` is now optional: set `connections` instead to save more than
+one, or leave it as the sole field to keep saving a single connection the old way. The vault
+validates the list (every id must resolve to a connection, no two sharing a protocol, exactly one
+default) and normalizes a legacy single-`connectionId` save, same as it always has — see
+[sneakers-vault docs/api.md](https://github.com/Sneakers-PAM/sneakers-vault/blob/main/docs/api.md).
+
+`openSshSession(secretId, connectionId)` starts on the bound target's default connection unless
+`connectionId` names one of that target's own connections; naming any other id, or one that isn't
+`ssh`, is refused the same way an unresolvable target or connection already is.
+
 ### Audit subject
 
 `AuditRecord.subjectKind`, `subjectId` and `subjectName` resolve the raw `subject` string (which
