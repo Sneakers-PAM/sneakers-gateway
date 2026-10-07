@@ -7,7 +7,7 @@ import (
 	"errors"
 
 	otel "github.com/Bugs5382/go-otel"
-	"github.com/Sneakers-PAM/sneakers-gateway/internal/workloadauth"
+	workloadauth "github.com/Bugs5382/go-workload-identity"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

@@ -540,10 +540,10 @@ backend verifies it and maps the service account `<namespace>/sneakers-gateway` 
 **on behalf** for every vault method except the connector pull-API and for every workflow method:
 it's the caller that passes the signed-in user's actor context.
 
-The client side is `internal/workloadauth`, a byte-for-byte copy of the canonical package in
-sneakers-vault at `SNEAKERS_VAULT_REF`. CI runs `scripts/workloadauth-check.sh` to compare them;
-to take a new version, bump the ref and copy the vault's `internal/workloadauth/` in the same
-change.
+The client side is the owner's helper package
+[`github.com/Bugs5382/go-workload-identity`](https://github.com/Bugs5382/go-workload-identity)
+(v1.0.0), the same release the backends verify with; it replaced the old private copy. A new
+version arrives as a `go.mod` bump.
 
 ## Calling other services
 
