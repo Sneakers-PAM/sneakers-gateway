@@ -41,10 +41,6 @@ jobs:
           scripts/proto-generate.sh
           git diff --exit-code -- gen
           test -z "$(git status --porcelain -- gen)"
-      # internal/workloadauth is copied from sneakers-vault at the pinned
-      # SNEAKERS_VAULT_REF and must stay byte-identical.
-      - name: workloadauth matches the vault copy
-        run: scripts/workloadauth-check.sh
       # gqlgen is a go.mod tool, so this runs the pinned version.
       - name: Generated GraphQL code is current
         run: |

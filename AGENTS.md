@@ -33,8 +33,8 @@ human and machine schemas share no generated code or resolver.
   mutations with `MAINTENANCE_READONLY`; its allow-lists name the mutations that stay open.
 - `internal/appliance/` - reads the appliance's `sneakers-appliance` ConfigMap from the
   Kubernetes API on a timer.
-- `internal/workloadauth/` - service-to-service workload authentication, copied byte for byte
-  from sneakers-vault (`scripts/workloadauth-check.sh` compares it); never edit it here.
+- Service-to-service workload authentication (the token sent to the backends) comes from
+  `github.com/Bugs5382/go-workload-identity`.
 - `docs/` - configuration, API, runbook and the topic pages.
 
 ## Build, test, lint
