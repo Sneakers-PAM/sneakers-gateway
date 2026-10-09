@@ -267,6 +267,17 @@ type SecretVersion {
   changedFieldKeys: [String!]!
 }
 
+# A folder move in a secret's history, read from the audit trail. The folder
+# ids are empty for a move recorded before the vault kept them.
+type SecretMove {
+  movedBy: String!
+  # Human-readable label for movedBy, resolved via identity (falls back to id).
+  movedByName: String!
+  movedAt: String!
+  fromFolderId: String!
+  toFolderId: String!
+}
+
 # Dashboard rollup over the current user's readable secrets.
 type SecretStats {
   total: Int!
@@ -901,6 +912,9 @@ type Query {
   # A secret's value history (newest version first). Metadata + field keys only;
   # gated by the same read access as revealing the secret.
   secretVersions(secretId: ID!): [SecretVersion!]!
+  # A secret's folder moves, newest first. Gated by the same access as
+  # secretVersions.
+  secretMoves(secretId: ID!): [SecretMove!]!
   folderRules(folderId: String!): [FolderAccessRule!]!
   inheritedFolderRules(folderId: String!): [InheritedFolderRule!]!
   # A folder's firewall-RACI ruleset (owners + own rules + inherited rules).

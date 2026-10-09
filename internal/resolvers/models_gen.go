@@ -463,6 +463,14 @@ type SecretFieldDefInput struct {
 	MaxLength         *int               `json:"maxLength,omitempty"`
 }
 
+type SecretMove struct {
+	MovedBy      string `json:"movedBy"`
+	MovedByName  string `json:"movedByName"`
+	MovedAt      string `json:"movedAt"`
+	FromFolderID string `json:"fromFolderId"`
+	ToFolderID   string `json:"toFolderId"`
+}
+
 type SecretRuleset struct {
 	SecretID  string               `json:"secretId"`
 	Rules     []*RaciRule          `json:"rules"`
