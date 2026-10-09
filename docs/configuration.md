@@ -130,7 +130,7 @@ without it, or without the mounted ServiceAccount files, the gateway logs a warn
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | The OTLP collector for traces and metrics. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset (no export) | The OTLP collector for traces and metrics. Unset or empty disables export cleanly; set it to opt in. |
 | `LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn` or `error` (go-log). |
 | `LOG_FORMAT` | `json` | `json`, or `console` for local reading (go-log). |
 

@@ -52,6 +52,13 @@ func env(k, def string) string {
 	return def
 }
 
+// otlpEndpoint reads OTEL_EXPORTER_OTLP_ENDPOINT with no default: unset or
+// empty means no collector, which go-otel's Init treats as export-off
+// (local-only providers, no exporter, no periodic export errors).
+func otlpEndpoint(getenv func(string) string) string {
+	return getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+}
+
 // envTrue reports whether env var k is a true-ish value: "true" or "1" after
 // trimming surrounding whitespace and comparing case-insensitively, so
 // "True", "TRUE", " true" etc are all ON. Unset or any other value
@@ -245,7 +252,7 @@ func main() {
 	notifyAddr := env("NOTIFY_ADDR", "localhost:9195")
 	sshbrokerAddr := env("SSHBROKER_ADDR", "localhost:9096")
 	httpPort := env("HTTP_PORT", "9100")
-	otlp := env("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+	otlp := otlpEndpoint(os.Getenv)
 	// hydraVerifier/hydraIssuer: the machine path's OIDC leg.
 	// hydraIssuer is also used as the human admin surface's default OIDC
 	// issuer (LinkOidcClient). See newHydraVerifier: the OIDC leg is active
