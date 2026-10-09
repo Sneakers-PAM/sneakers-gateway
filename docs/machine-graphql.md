@@ -44,3 +44,23 @@ Personal tokens only. `prepareSecretUse(secretId, fieldKey, argv, clientLabel, r
 | `target` | `ATTACHED`, `NONE` (type takes a target, the secret has none), `NOT_SUPPORTED` (type takes no target, so any target was detached) |
 
 Turn rotation on with `setSecretAutomationForPrincipal(secretId, disableRotation: false, ...)`. A type change is refused while a rotation of the secret is in flight. The vault's rules are in [sneakers-vault docs/type-change.md](https://github.com/Sneakers-PAM/sneakers-vault/blob/main/docs/type-change.md).
+
+## Personal-by-default placement
+
+`createSecretForPrincipal` and `generateSecretForPrincipal` from a personal token store a secret that names the token's owner in the owner's Personal folder, not the folder asked for. A token can't move a secret into a personal folder afterwards (that needs a site admin), so the gateway decides before the create.
+
+- **Match:** the secret's name, or the value of a field that names an account (its key contains `user`, `login`, `mail` or `account`, and not `pass`, `secret`, `token`, `key` or `pin`), contains the owner's email or username as a whole word, ignoring case. Only the fields the caller sends are checked, never a generated password. Letters, digits and `_` are word characters, and so is a dot between two of them: `ada` matches `admin ada`, `CORP\ada` and `for ada.`, but not `adam` or `ada.smith@example.org`.
+- **Who:** personal tokens only. The username and email come from identity's `VerifyUserToken` answer and are never sent to vault. A service account's secrets are never redirected.
+- **Where:** the owner's Personal folder, found in the principal folder listing (vault audits it as `folder.list.principal`). The gateway lists folders only when the secret matches.
+- **Opt out:** `keepFolder: true` keeps `folderId`.
+- **Result:** `SecretSummary.placement` (`secret.placement` on `generateSecretForPrincipal`; null on every other result) carries `folderId`, `requestedFolderId`, `rule` and `reason`. `reason` names the matching part (`name`, or the field key) and the kind of identity matched, never a value.
+
+| `rule` | When | Folder used |
+|---|---|---|
+| `REQUESTED` | nothing names the caller, or the caller is a service account | `folderId` |
+| `PERSONAL_DEFAULT` | a match | the owner's Personal folder |
+| `KEPT_BY_CALLER` | a match, with `keepFolder: true` | `folderId` |
+| `ALREADY_PERSONAL` | a match, and `folderId` is already in the owner's personal tree | `folderId` |
+| `NO_PERSONAL_FOLDER` | a match, but the owner has no Personal folder yet | `folderId` |
+
+Moves are unchanged: a token's move into a personal folder still needs a site admin's approval.

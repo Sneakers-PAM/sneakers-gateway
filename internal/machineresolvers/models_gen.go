@@ -91,14 +91,22 @@ type SecretFieldInput struct {
 	Value string `json:"value"`
 }
 
+type SecretPlacement struct {
+	FolderID          string `json:"folderId"`
+	RequestedFolderID string `json:"requestedFolderId"`
+	Rule              string `json:"rule"`
+	Reason            string `json:"reason"`
+}
+
 type SecretSummary struct {
-	ID              string  `json:"id"`
-	Name            string  `json:"name"`
-	FolderID        string  `json:"folderId"`
-	TypeID          string  `json:"typeId"`
-	TargetID        *string `json:"targetId,omitempty"`
-	RotationOptOut  bool    `json:"rotationOptOut"`
-	HeartbeatOptOut bool    `json:"heartbeatOptOut"`
+	ID              string           `json:"id"`
+	Name            string           `json:"name"`
+	FolderID        string           `json:"folderId"`
+	TypeID          string           `json:"typeId"`
+	TargetID        *string          `json:"targetId,omitempty"`
+	RotationOptOut  bool             `json:"rotationOptOut"`
+	HeartbeatOptOut bool             `json:"heartbeatOptOut"`
+	Placement       *SecretPlacement `json:"placement,omitempty"`
 }
 
 type SecretTypeField struct {

@@ -34,21 +34,30 @@ func (r *mutationResolver) RevealSecretFieldForPrincipal(ctx context.Context, id
 // CreateSecretForPrincipal is the resolver for the createSecretForPrincipal
 // field. Thin bridge to vault: builds the machine ActorContext, flattens the
 // GraphQL field-input list into the map vault expects, and maps the created
-// Secret back to a metadata-only summary. RACI-Author gating, storage, and
-// audit all happen in vault.
-func (r *mutationResolver) CreateSecretForPrincipal(ctx context.Context, folderID string, typeID string, name string, fields []*SecretFieldInput, targetID *string, disableRotation *bool, disableHeartbeat *bool) (*SecretSummary, error) {
+// Secret back to a metadata-only summary. placeSecret may swap the folder for
+// the caller's Personal folder first. RACI-Author gating, storage, and audit
+// all happen in vault.
+func (r *mutationResolver) CreateSecretForPrincipal(ctx context.Context, folderID string, typeID string, name string, fields []*SecretFieldInput, targetID *string, disableRotation *bool, disableHeartbeat *bool, keepFolder *bool) (*SecretSummary, error) {
 	fm, err := fieldMap(fields)
 	if err != nil {
 		return nil, err
 	}
+	placement, err := r.placeSecret(ctx, folderID, name, fm, derefBool(keepFolder))
+	if err != nil {
+		return nil, err
+	}
 	resp, err := r.Vault.CreateSecretForPrincipal(ctx, &vaultv1.CreateSecretForPrincipalRequest{
-		Actor: resolvers.MachineActorOf(ctx), FolderId: folderID, TypeId: typeID, Name: name, Fields: fm, TargetId: deref(targetID),
+		Actor: resolvers.MachineActorOf(ctx), FolderId: placement.FolderID, TypeId: typeID, Name: name, Fields: fm, TargetId: deref(targetID),
 		DisableRotation: derefBool(disableRotation), DisableHeartbeat: derefBool(disableHeartbeat),
 	})
 	if err != nil {
 		return nil, err
 	}
-	return summaryOf(resp.GetSecret()), nil
+	out := summaryOf(resp.GetSecret())
+	if out != nil {
+		out.Placement = placement
+	}
+	return out, nil
 }
 
 // GenerateSecretForPrincipal is the resolver for the
@@ -56,19 +65,27 @@ func (r *mutationResolver) CreateSecretForPrincipal(ctx context.Context, folderI
 // password value is only present on the response (and thus only mapped
 // through non-nil by emptyToNil) when the caller passed returnValue: true —
 // vault enforces and separately audits that.
-func (r *mutationResolver) GenerateSecretForPrincipal(ctx context.Context, folderID string, typeID string, name string, fields []*SecretFieldInput, policyID *string, targetID *string, returnValue *bool, disableRotation *bool, disableHeartbeat *bool) (*GeneratedSecret, error) {
+func (r *mutationResolver) GenerateSecretForPrincipal(ctx context.Context, folderID string, typeID string, name string, fields []*SecretFieldInput, policyID *string, targetID *string, returnValue *bool, disableRotation *bool, disableHeartbeat *bool, keepFolder *bool) (*GeneratedSecret, error) {
 	fm, err := fieldMap(fields)
 	if err != nil {
 		return nil, err
 	}
+	placement, err := r.placeSecret(ctx, folderID, name, fm, derefBool(keepFolder))
+	if err != nil {
+		return nil, err
+	}
 	resp, err := r.Vault.GenerateSecretForPrincipal(ctx, &vaultv1.GenerateSecretForPrincipalRequest{
-		Actor: resolvers.MachineActorOf(ctx), FolderId: folderID, TypeId: typeID, Name: name, Fields: fm, PolicyId: deref(policyID), TargetId: deref(targetID), ReturnValue: derefBool(returnValue),
+		Actor: resolvers.MachineActorOf(ctx), FolderId: placement.FolderID, TypeId: typeID, Name: name, Fields: fm, PolicyId: deref(policyID), TargetId: deref(targetID), ReturnValue: derefBool(returnValue),
 		DisableRotation: derefBool(disableRotation), DisableHeartbeat: derefBool(disableHeartbeat),
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &GeneratedSecret{Secret: summaryOf(resp.GetSecret()), GeneratedValue: emptyToNil(resp.GetGeneratedValue())}, nil
+	secret := summaryOf(resp.GetSecret())
+	if secret != nil {
+		secret.Placement = placement
+	}
+	return &GeneratedSecret{Secret: secret, GeneratedValue: emptyToNil(resp.GetGeneratedValue())}, nil
 }
 
 // MoveSecretForPrincipal is the resolver for the moveSecretForPrincipal field.
