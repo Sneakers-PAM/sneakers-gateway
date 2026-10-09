@@ -98,11 +98,12 @@ type ComplexityRoot struct {
 
 	Query struct {
 		ConnectionsForPrincipal func(childComplexity int) int
-		FindSecretsForPrincipal func(childComplexity int, query *string, folderID *string, typeID *string) int
+		FindSecretsForPrincipal func(childComplexity int, query *string, folderID *string, typeID *string, changedSince *string) int
 		FoldersForPrincipal     func(childComplexity int, query *string, parentID *string) int
 		MachineHealth           func(childComplexity int) int
 		MachineWhoami           func(childComplexity int) int
 		SecretCheckStatus       func(childComplexity int, secretID string) int
+		SecretForPrincipal      func(childComplexity int, id string) int
 		SecretTypes             func(childComplexity int) int
 		SecretUse               func(childComplexity int, id string) int
 		SecretUseRun            func(childComplexity int, runID string) int
@@ -129,14 +130,23 @@ type ComplexityRoot struct {
 	}
 
 	SecretSummary struct {
-		FolderID        func(childComplexity int) int
-		HeartbeatOptOut func(childComplexity int) int
-		ID              func(childComplexity int) int
-		Name            func(childComplexity int) int
-		Placement       func(childComplexity int) int
-		RotationOptOut  func(childComplexity int) int
-		TargetID        func(childComplexity int) int
-		TypeID          func(childComplexity int) int
+		FolderID            func(childComplexity int) int
+		HeartbeatEnabled    func(childComplexity int) int
+		HeartbeatOptOut     func(childComplexity int) int
+		ID                  func(childComplexity int) int
+		LastHeartbeatResult func(childComplexity int) int
+		LastRotationResult  func(childComplexity int) int
+		Name                func(childComplexity int) int
+		NextRotationAt      func(childComplexity int) int
+		Placement           func(childComplexity int) int
+		RotatedAt           func(childComplexity int) int
+		RotatesOnCheckin    func(childComplexity int) int
+		RotationEnabled     func(childComplexity int) int
+		RotationOptOut      func(childComplexity int) int
+		TargetID            func(childComplexity int) int
+		TypeID              func(childComplexity int) int
+		ValueChangedAt      func(childComplexity int) int
+		ValueVersion        func(childComplexity int) int
 	}
 
 	SecretTypeField struct {
@@ -209,7 +219,8 @@ type QueryResolver interface {
 	ConnectionsForPrincipal(ctx context.Context) ([]*MachineConnection, error)
 	TargetsForPrincipal(ctx context.Context, query *string, connectionID *string) ([]*MachineTarget, error)
 	SecretCheckStatus(ctx context.Context, secretID string) (*SecretCheckStatus, error)
-	FindSecretsForPrincipal(ctx context.Context, query *string, folderID *string, typeID *string) ([]*SecretSummary, error)
+	FindSecretsForPrincipal(ctx context.Context, query *string, folderID *string, typeID *string, changedSince *string) ([]*SecretSummary, error)
+	SecretForPrincipal(ctx context.Context, id string) (*SecretSummary, error)
 	FoldersForPrincipal(ctx context.Context, query *string, parentID *string) ([]*PrincipalFolder, error)
 	SecretTypes(ctx context.Context) ([]*SecretTypeSummary, error)
 	SecretUse(ctx context.Context, id string) (*SecretUse, error)
@@ -582,7 +593,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.FindSecretsForPrincipal(childComplexity, args["query"].(*string), args["folderId"].(*string), args["typeId"].(*string)), true
+		return e.ComplexityRoot.Query.FindSecretsForPrincipal(childComplexity, args["query"].(*string), args["folderId"].(*string), args["typeId"].(*string), args["changedSince"].(*string)), true
 	case "Query.foldersForPrincipal":
 		if e.ComplexityRoot.Query.FoldersForPrincipal == nil {
 			break
@@ -618,6 +629,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SecretCheckStatus(childComplexity, args["secretId"].(string)), true
+	case "Query.secretForPrincipal":
+		if e.ComplexityRoot.Query.SecretForPrincipal == nil {
+			break
+		}
+
+		args, err := ec.field_Query_secretForPrincipal_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SecretForPrincipal(childComplexity, args["id"].(string)), true
 	case "Query.secretTypes":
 		if e.ComplexityRoot.Query.SecretTypes == nil {
 			break
@@ -727,6 +749,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretSummary.FolderID(childComplexity), true
+	case "SecretSummary.heartbeatEnabled":
+		if e.ComplexityRoot.SecretSummary.HeartbeatEnabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.HeartbeatEnabled(childComplexity), true
 	case "SecretSummary.heartbeatOptOut":
 		if e.ComplexityRoot.SecretSummary.HeartbeatOptOut == nil {
 			break
@@ -739,18 +767,54 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretSummary.ID(childComplexity), true
+	case "SecretSummary.lastHeartbeatResult":
+		if e.ComplexityRoot.SecretSummary.LastHeartbeatResult == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.LastHeartbeatResult(childComplexity), true
+	case "SecretSummary.lastRotationResult":
+		if e.ComplexityRoot.SecretSummary.LastRotationResult == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.LastRotationResult(childComplexity), true
 	case "SecretSummary.name":
 		if e.ComplexityRoot.SecretSummary.Name == nil {
 			break
 		}
 
 		return e.ComplexityRoot.SecretSummary.Name(childComplexity), true
+	case "SecretSummary.nextRotationAt":
+		if e.ComplexityRoot.SecretSummary.NextRotationAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.NextRotationAt(childComplexity), true
 	case "SecretSummary.placement":
 		if e.ComplexityRoot.SecretSummary.Placement == nil {
 			break
 		}
 
 		return e.ComplexityRoot.SecretSummary.Placement(childComplexity), true
+	case "SecretSummary.rotatedAt":
+		if e.ComplexityRoot.SecretSummary.RotatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.RotatedAt(childComplexity), true
+	case "SecretSummary.rotatesOnCheckin":
+		if e.ComplexityRoot.SecretSummary.RotatesOnCheckin == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.RotatesOnCheckin(childComplexity), true
+	case "SecretSummary.rotationEnabled":
+		if e.ComplexityRoot.SecretSummary.RotationEnabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.RotationEnabled(childComplexity), true
 	case "SecretSummary.rotationOptOut":
 		if e.ComplexityRoot.SecretSummary.RotationOptOut == nil {
 			break
@@ -769,6 +833,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretSummary.TypeID(childComplexity), true
+	case "SecretSummary.valueChangedAt":
+		if e.ComplexityRoot.SecretSummary.ValueChangedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.ValueChangedAt(childComplexity), true
+	case "SecretSummary.valueVersion":
+		if e.ComplexityRoot.SecretSummary.ValueVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.ValueVersion(childComplexity), true
 
 	case "SecretTypeField.key":
 		if e.ComplexityRoot.SecretTypeField.Key == nil {
@@ -1051,6 +1127,28 @@ type SecretSummary {
   # The secret is opted out of scheduled rotation / heartbeat checks.
   rotationOptOut: Boolean!
   heartbeatOptOut: Boolean!
+  # Goes up each time the stored field values change (create, edit, type
+  # change, restore, committed rotation); never goes down. A caller holding a
+  # value re-fetches it when this differs from the version it read. 0 = no
+  # change recorded yet. Never carries a value.
+  valueVersion: Int!
+  # RFC3339 of the change that set valueVersion; null when none is recorded.
+  valueChangedAt: String
+  # The vault will rotate this secret: a rotation type, not opted out, with a
+  # target that has a connection.
+  rotationEnabled: Boolean!
+  # Checking the secret in after a check-out rotates its value, so a value read
+  # during the check-out stops working.
+  rotatesOnCheckin: Boolean!
+  # Heartbeat checks run against the target.
+  heartbeatEnabled: Boolean!
+  # Last rotation outcome (OK, FAILED, DEGRADED, ROTATING); null = never rotated.
+  lastRotationResult: String
+  # RFC3339 of the last successful rotation and of the next scheduled one.
+  rotatedAt: String
+  nextRotationAt: String
+  # Last heartbeat outcome (OK, FAILED, UNREACHABLE, UNKNOWN); null = never checked.
+  lastHeartbeatResult: String
   # Where createSecretForPrincipal / generateSecretForPrincipal stored the
   # secret and why; null on every other result.
   placement: SecretPlacement
@@ -1298,7 +1396,13 @@ type Query {
   # List the metadata of secrets the calling service-account principal may
   # READ (RACI C), optionally filtered by name/folder/type. Never returns
   # field values.
-  findSecretsForPrincipal(query: String, folderId: ID, typeId: ID): [SecretSummary!]!
+  # changedSince (RFC3339) keeps only secrets whose value changed at or after
+  # that time; the vault refuses a time that isn't RFC3339.
+  findSecretsForPrincipal(query: String, folderId: ID, typeId: ID, changedSince: String): [SecretSummary!]!
+
+  # One secret's metadata, for a principal with RACI read on it. Never field
+  # values. The vault audits the call (secret.get.principal).
+  secretForPrincipal(id: ID!): SecretSummary!
 
   # List the folders the calling principal may READ (RACI C), optionally
   # filtered by a case-insensitive name substring and/or direct parent. Master
@@ -1558,6 +1662,24 @@ func (ec *executionContext) childFields_SecretSummary(ctx context.Context, field
 		return ec.fieldContext_SecretSummary_rotationOptOut(ctx, field)
 	case "heartbeatOptOut":
 		return ec.fieldContext_SecretSummary_heartbeatOptOut(ctx, field)
+	case "valueVersion":
+		return ec.fieldContext_SecretSummary_valueVersion(ctx, field)
+	case "valueChangedAt":
+		return ec.fieldContext_SecretSummary_valueChangedAt(ctx, field)
+	case "rotationEnabled":
+		return ec.fieldContext_SecretSummary_rotationEnabled(ctx, field)
+	case "rotatesOnCheckin":
+		return ec.fieldContext_SecretSummary_rotatesOnCheckin(ctx, field)
+	case "heartbeatEnabled":
+		return ec.fieldContext_SecretSummary_heartbeatEnabled(ctx, field)
+	case "lastRotationResult":
+		return ec.fieldContext_SecretSummary_lastRotationResult(ctx, field)
+	case "rotatedAt":
+		return ec.fieldContext_SecretSummary_rotatedAt(ctx, field)
+	case "nextRotationAt":
+		return ec.fieldContext_SecretSummary_nextRotationAt(ctx, field)
+	case "lastHeartbeatResult":
+		return ec.fieldContext_SecretSummary_lastHeartbeatResult(ctx, field)
 	case "placement":
 		return ec.fieldContext_SecretSummary_placement(ctx, field)
 	}
@@ -2295,6 +2417,14 @@ func (ec *executionContext) field_Query_findSecretsForPrincipal_args(ctx context
 		return nil, err
 	}
 	args["typeId"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "changedSince",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["changedSince"] = arg3
 	return args, nil
 }
 
@@ -2331,6 +2461,20 @@ func (ec *executionContext) field_Query_secretCheckStatus_args(ctx context.Conte
 		return nil, err
 	}
 	args["secretId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_secretForPrincipal_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -3923,7 +4067,7 @@ func (ec *executionContext) _Query_findSecretsForPrincipal(ctx context.Context, 
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().FindSecretsForPrincipal(ctx, fc.Args["query"].(*string), fc.Args["folderId"].(*string), fc.Args["typeId"].(*string))
+			return ec.Resolvers.Query().FindSecretsForPrincipal(ctx, fc.Args["query"].(*string), fc.Args["folderId"].(*string), fc.Args["typeId"].(*string), fc.Args["changedSince"].(*string))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*SecretSummary) graphql.Marshaler {
@@ -3951,6 +4095,50 @@ func (ec *executionContext) fieldContext_Query_findSecretsForPrincipal(ctx conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_findSecretsForPrincipal_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_secretForPrincipal(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_secretForPrincipal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SecretForPrincipal(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *SecretSummary) graphql.Marshaler {
+			return ec.marshalNSecretSummary2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋmachineresolversᚐSecretSummary(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_secretForPrincipal(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretSummary(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_secretForPrincipal_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -4595,6 +4783,213 @@ func (ec *executionContext) _SecretSummary_heartbeatOptOut(ctx context.Context, 
 }
 func (ec *executionContext) fieldContext_SecretSummary_heartbeatOptOut(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _SecretSummary_valueVersion(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_valueVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ValueVersion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_valueVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _SecretSummary_valueChangedAt(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_valueChangedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ValueChangedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_valueChangedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretSummary_rotationEnabled(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_rotationEnabled(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RotationEnabled, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_rotationEnabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _SecretSummary_rotatesOnCheckin(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_rotatesOnCheckin(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RotatesOnCheckin, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_rotatesOnCheckin(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _SecretSummary_heartbeatEnabled(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_heartbeatEnabled(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HeartbeatEnabled, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_heartbeatEnabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _SecretSummary_lastRotationResult(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_lastRotationResult(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LastRotationResult, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_lastRotationResult(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretSummary_rotatedAt(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_rotatedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RotatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_rotatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretSummary_nextRotationAt(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_nextRotationAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NextRotationAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_nextRotationAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretSummary_lastHeartbeatResult(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_lastHeartbeatResult(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LastHeartbeatResult, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_lastHeartbeatResult(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _SecretSummary_placement(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
@@ -7133,6 +7528,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "secretForPrincipal":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_secretForPrincipal(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "foldersForPrincipal":
 			field := field
 
@@ -7447,6 +7864,36 @@ func (ec *executionContext) _SecretSummary(ctx context.Context, sel ast.Selectio
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "valueVersion":
+			out.Values[i] = ec._SecretSummary_valueVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "valueChangedAt":
+			out.Values[i] = ec._SecretSummary_valueChangedAt(ctx, field, obj)
+		case "rotationEnabled":
+			out.Values[i] = ec._SecretSummary_rotationEnabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "rotatesOnCheckin":
+			out.Values[i] = ec._SecretSummary_rotatesOnCheckin(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "heartbeatEnabled":
+			out.Values[i] = ec._SecretSummary_heartbeatEnabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastRotationResult":
+			out.Values[i] = ec._SecretSummary_lastRotationResult(ctx, field, obj)
+		case "rotatedAt":
+			out.Values[i] = ec._SecretSummary_rotatedAt(ctx, field, obj)
+		case "nextRotationAt":
+			out.Values[i] = ec._SecretSummary_nextRotationAt(ctx, field, obj)
+		case "lastHeartbeatResult":
+			out.Values[i] = ec._SecretSummary_lastHeartbeatResult(ctx, field, obj)
 		case "placement":
 			out.Values[i] = ec._SecretSummary_placement(ctx, field, obj)
 		default:

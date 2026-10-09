@@ -19,6 +19,28 @@ type SecretSummary {
   # The secret is opted out of scheduled rotation / heartbeat checks.
   rotationOptOut: Boolean!
   heartbeatOptOut: Boolean!
+  # Goes up each time the stored field values change (create, edit, type
+  # change, restore, committed rotation); never goes down. A caller holding a
+  # value re-fetches it when this differs from the version it read. 0 = no
+  # change recorded yet. Never carries a value.
+  valueVersion: Int!
+  # RFC3339 of the change that set valueVersion; null when none is recorded.
+  valueChangedAt: String
+  # The vault will rotate this secret: a rotation type, not opted out, with a
+  # target that has a connection.
+  rotationEnabled: Boolean!
+  # Checking the secret in after a check-out rotates its value, so a value read
+  # during the check-out stops working.
+  rotatesOnCheckin: Boolean!
+  # Heartbeat checks run against the target.
+  heartbeatEnabled: Boolean!
+  # Last rotation outcome (OK, FAILED, DEGRADED, ROTATING); null = never rotated.
+  lastRotationResult: String
+  # RFC3339 of the last successful rotation and of the next scheduled one.
+  rotatedAt: String
+  nextRotationAt: String
+  # Last heartbeat outcome (OK, FAILED, UNREACHABLE, UNKNOWN); null = never checked.
+  lastHeartbeatResult: String
   # Where createSecretForPrincipal / generateSecretForPrincipal stored the
   # secret and why; null on every other result.
   placement: SecretPlacement
@@ -266,7 +288,13 @@ type Query {
   # List the metadata of secrets the calling service-account principal may
   # READ (RACI C), optionally filtered by name/folder/type. Never returns
   # field values.
-  findSecretsForPrincipal(query: String, folderId: ID, typeId: ID): [SecretSummary!]!
+  # changedSince (RFC3339) keeps only secrets whose value changed at or after
+  # that time; the vault refuses a time that isn't RFC3339.
+  findSecretsForPrincipal(query: String, folderId: ID, typeId: ID, changedSince: String): [SecretSummary!]!
+
+  # One secret's metadata, for a principal with RACI read on it. Never field
+  # values. The vault audits the call (secret.get.principal).
+  secretForPrincipal(id: ID!): SecretSummary!
 
   # List the folders the calling principal may READ (RACI C), optionally
   # filtered by a case-insensitive name substring and/or direct parent. Master
