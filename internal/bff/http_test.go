@@ -454,6 +454,37 @@ func TestSessionActor_FailsClosedOnIdentityError(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized || ran {
 		t.Fatalf("expected 401 fail-closed with next NOT run, got %d ran=%v", rec.Code, ran)
 	}
+
+	// #30: the body is a stable key, never the backend error's own text.
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["error"] != "actor_unresolved" {
+		t.Fatalf("session 401 body = %q, want the stable key actor_unresolved (not the backend's own error text)", body["error"])
+	}
+}
+
+// TestSessionErrorKey covers #30 directly: every resolveSessionActor error
+// this package knows about maps to its own stable key, and anything else —
+// including a Kratos backend failure's coded error — falls back to
+// invalid_session rather than echoing err.Error() to the browser.
+func TestSessionErrorKey(t *testing.T) {
+	cases := []struct {
+		err  error
+		want string
+	}{
+		{errNoSession, "no_session"},
+		{errSessionExpired, "session_expired"},
+		{errActorUnresolved, "actor_unresolved"},
+		{errAccountDisabled, "account_disabled"},
+		{errors.New("rpc error: code = Unavailable desc = kratos: dial tcp 192.0.2.9:4433: connect: connection refused"), "invalid_session"},
+	}
+	for _, c := range cases {
+		if got := sessionErrorKey(c.err); got != c.want {
+			t.Errorf("sessionErrorKey(%v) = %q, want %q", c.err, got, c.want)
+		}
+	}
 }
 
 // TestFakeIdentity_SatisfiesIdentityClient is a compile-time proof: this line

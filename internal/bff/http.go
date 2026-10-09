@@ -356,7 +356,10 @@ func (h *Handler) SessionActor(next http.Handler) http.Handler {
 		}
 		ctx, sess, err := h.resolveSessionActor(r.Context(), c.Value)
 		if err != nil {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+			if h.Log != nil {
+				h.Log.Ctx(r.Context()).Error(err, "session rejected")
+			}
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": sessionErrorKey(err)})
 			return
 		}
 		// CSRF double-submit: the browser must echo the login-issued token in a
@@ -392,7 +395,7 @@ func (h *Handler) SessionActor(next http.Handler) http.Handler {
 func (h *Handler) AuthenticateWS(ctx context.Context, r *http.Request) (context.Context, error) {
 	c, err := r.Cookie(CookieName)
 	if err != nil {
-		return nil, errors.New("no_session")
+		return nil, errNoSession
 	}
 	actorCtx, sess, err := h.resolveSessionActor(ctx, c.Value)
 	if err != nil {
@@ -420,7 +423,7 @@ func (h *Handler) AuthenticateWS(ctx context.Context, r *http.Request) (context.
 func (h *Handler) resolveSessionActor(ctx context.Context, sid string) (context.Context, Session, error) {
 	sess, ok, err := h.Store.Get(ctx, sid)
 	if err != nil || !ok {
-		return nil, Session{}, errors.New("no_session")
+		return nil, Session{}, errNoSession
 	}
 	if time.Until(sess.ExpiresAt) < 30*time.Second {
 		if sess.AccessToken == "" {
@@ -434,7 +437,7 @@ func (h *Handler) resolveSessionActor(ctx context.Context, sid string) (context.
 			updated, rerr := h.refreshSession(ctx, sid, sess)
 			if rerr != nil {
 				_ = h.Store.Delete(ctx, sid)
-				return nil, Session{}, errors.New("session_expired")
+				return nil, Session{}, errSessionExpired
 			}
 			sess = updated
 		}
@@ -448,7 +451,7 @@ func (h *Handler) resolveSessionActor(ctx context.Context, sid string) (context.
 		return nil, Session{}, errAccountDisabled
 	}
 	if aerr != nil {
-		return nil, Session{}, errors.New("actor_unresolved")
+		return nil, Session{}, errActorUnresolved
 	}
 	actorCtx = resolvers.WithSessionRef(actorCtx, sessionRefOf(sid))
 	return resolvers.WithMFAVerifiedAt(actorCtx, sess.MFAVerifiedAt), sess, nil
@@ -526,7 +529,32 @@ func actorAttrsFrom(resp *identityv1.ResolveUserContextResponse) (actorAttrs, er
 	return a, nil
 }
 
-var errAccountDisabled = errors.New("account_disabled")
+var (
+	errAccountDisabled = errors.New("account_disabled")
+	errNoSession       = errors.New("no_session")
+	errSessionExpired  = errors.New("session_expired")
+	errActorUnresolved = errors.New("actor_unresolved")
+)
+
+// sessionErrorKey maps a resolveSessionActor error to the stable key the
+// browser gets in the session 401 body. Anything this package doesn't name —
+// including a Kratos backend failure's coded error, whose full text must
+// never reach the browser — falls back to invalid_session; only the caller's
+// log line gets the real error.
+func sessionErrorKey(err error) string {
+	switch {
+	case errors.Is(err, errNoSession):
+		return "no_session"
+	case errors.Is(err, errSessionExpired):
+		return "session_expired"
+	case errors.Is(err, errActorUnresolved):
+		return "actor_unresolved"
+	case errors.Is(err, errAccountDisabled):
+		return "account_disabled"
+	default:
+		return "invalid_session"
+	}
+}
 
 // loginIdentifier maps a username to the user's email, since Kratos
 // identifies users by email, so people keep signing in with their username.
