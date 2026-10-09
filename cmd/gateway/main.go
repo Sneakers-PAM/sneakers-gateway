@@ -6,6 +6,8 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	stdlog "log"
 	"net/http"
 	"net/url"
 	"os"
@@ -50,6 +52,25 @@ func env(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// otlpEndpoint reads OTEL_EXPORTER_OTLP_ENDPOINT with no default: unset or
+// empty means no collector, which go-otel's Init treats as export-off
+// (local-only providers, no exporter, no periodic export errors).
+func otlpEndpoint(getenv func(string) string) string {
+	return getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+}
+
+// wsUpgradeError logs a refused WebSocket upgrade (for example a cross-origin
+// one) as one go-log warn line and writes nothing to w. gqlgen's transport
+// always sends its own 400 after an Upgrade error regardless of what the
+// upgrader's Error handler did, so writing a response here too produces a
+// second WriteHeader and net/http's plain-text "superfluous
+// response.WriteHeader" warning.
+func wsUpgradeError(logger zerolog.Logger) func(w http.ResponseWriter, r *http.Request, status int, reason error) {
+	return func(_ http.ResponseWriter, r *http.Request, status int, reason error) {
+		logger.Warn().Int("status", status).Err(reason).Str("path", r.URL.Path).Msg("websocket upgrade refused")
+	}
 }
 
 // envTrue reports whether env var k is a true-ish value: "true" or "1" after
@@ -235,6 +256,13 @@ func main() {
 	defer stop()
 
 	logger := log.New(serviceName)
+	// Dependencies that log through the standard library's "log" package
+	// (gqlgen's WebSocket transport, on an upgrade it can't finish) write
+	// bare text to stderr outside go-log's JSON. Our own call sites already
+	// go through go-log, so there is nothing left for this to carry; wherever
+	// an upgrade is refused wsUpgradeError already logs one structured warn
+	// line, and this discards the dependency's duplicate plain-text one.
+	stdlog.SetOutput(io.Discard)
 	// reqLog is the neutral logger for request-scoped lines: its Ctx method
 	// adds the active span's trace and span ids.
 	reqLog := log.NewLogger(serviceName)
@@ -245,7 +273,7 @@ func main() {
 	notifyAddr := env("NOTIFY_ADDR", "localhost:9195")
 	sshbrokerAddr := env("SSHBROKER_ADDR", "localhost:9096")
 	httpPort := env("HTTP_PORT", "9100")
-	otlp := env("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+	otlp := otlpEndpoint(os.Getenv)
 	// hydraVerifier/hydraIssuer: the machine path's OIDC leg.
 	// hydraIssuer is also used as the human admin surface's default OIDC
 	// issuer (LinkOidcClient). See newHydraVerifier: the OIDC leg is active
@@ -354,7 +382,7 @@ func main() {
 	// can't carry the CSRF double-submit header, so cross-origin sockets are
 	// blocked here by the Origin check; the per-socket authentication then happens
 	// in the transport InitFunc (below).
-	wsUpgrader := websocket.Upgrader{CheckOrigin: sameOriginWS}
+	wsUpgrader := websocket.Upgrader{CheckOrigin: sameOriginWS, Error: wsUpgradeError(logger)}
 
 	// AUTH_MODE selects how the acting user is established:
 	//   noauth (DEFAULT): the X-Dev-User header (dev personas).

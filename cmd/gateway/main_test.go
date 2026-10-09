@@ -6,10 +6,13 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 )
 
@@ -132,5 +135,37 @@ func TestMCPEnabledByDefault(t *testing.T) {
 		if got := switchOn(v); got != want {
 			t.Errorf("MCP_ENABLED=%q: enabled=%v, want %v", v, got, want)
 		}
+	}
+}
+
+// TestOTLPEndpointUnsetStaysEmpty covers #53: an unset or empty
+// OTEL_EXPORTER_OTLP_ENDPOINT must reach go-otel's Init as "", which it
+// treats as export-off, not as a localhost:4317 default nothing is
+// listening on.
+func TestOTLPEndpointUnsetStaysEmpty(t *testing.T) {
+	if got := otlpEndpoint(envOf(map[string]string{})); got != "" {
+		t.Errorf("otlpEndpoint with nothing set: got %q, want empty", got)
+	}
+	if got := otlpEndpoint(envOf(map[string]string{"OTHER_VAR": "x"})); got != "" {
+		t.Errorf("otlpEndpoint with an unrelated var set: got %q, want empty", got)
+	}
+	if got := otlpEndpoint(envOf(map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "collector:4317"})); got != "collector:4317" {
+		t.Errorf("otlpEndpoint passthrough: got %q, want %q", got, "collector:4317")
+	}
+}
+
+// TestWSUpgradeErrorWritesNothing covers #32: the upgrader's Error handler
+// must only log, never write to the ResponseWriter. gqlgen's transport always
+// sends its own 400 after an Upgrade error, so a second write here would
+// double up (net/http's "superfluous response.WriteHeader" warning).
+func TestWSUpgradeErrorWritesNothing(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/graphql", nil)
+	wsUpgradeError(zerolog.Nop())(rec, req, http.StatusForbidden, errors.New("cross-origin"))
+	if rec.Code != http.StatusOK {
+		t.Errorf("wsUpgradeError wrote status %d, want untouched (%d)", rec.Code, http.StatusOK)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("wsUpgradeError wrote %q to the body, want none", rec.Body.String())
 	}
 }
