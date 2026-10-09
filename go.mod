@@ -1,6 +1,6 @@
 module github.com/Sneakers-PAM/sneakers-gateway
 
-go 1.26.6
+go 1.26.9
 
 tool github.com/99designs/gqlgen
 
@@ -52,7 +52,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
