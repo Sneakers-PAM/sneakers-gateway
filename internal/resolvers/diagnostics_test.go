@@ -195,3 +195,35 @@ func TestDiagnostics_ActorUsernameFallsBackToIDWhenUsernameAndNameAreEmpty(t *te
 		t.Fatalf("username = %q, want the account id", got)
 	}
 }
+
+func TestDiagnostics_CarriesTheProductAndTheBox(t *testing.T) {
+	c := &diag.Collector{
+		Gateway:        diag.Component{Name: "gateway", Status: diag.StatusOK},
+		ProductVersion: "0.1.0",
+		Appliance:      "0.1.0-m",
+		Box:            &diag.Box{BaseOS: "0.1.0-m", BaseWeb: "0.1.0-m", FQDN: "box1.example.org"},
+	}
+	type box struct{ BaseOS, BaseWeb, Fqdn string }
+	var resp struct {
+		Diagnostics struct {
+			ProductVersion *string
+			Appliance      *string
+			Box            *box
+		}
+	}
+	const q = `{ diagnostics { productVersion appliance box { baseOS baseWeb fqdn } } }`
+	newDiagClient(&diagIdentity{}, c, "u-morgan").MustPost(q, &resp)
+	d := resp.Diagnostics
+	if d.ProductVersion == nil || *d.ProductVersion != "0.1.0" || d.Appliance == nil || *d.Appliance != "0.1.0-m" {
+		t.Fatalf("product/appliance = %v/%v", d.ProductVersion, d.Appliance)
+	}
+	if d.Box == nil || *d.Box != (box{BaseOS: "0.1.0-m", BaseWeb: "0.1.0-m", Fqdn: "box1.example.org"}) {
+		t.Fatalf("box = %+v", d.Box)
+	}
+
+	resp.Diagnostics.ProductVersion, resp.Diagnostics.Box = nil, nil
+	newDiagClient(&diagIdentity{}, &diag.Collector{Gateway: diag.Component{Name: "gateway", Status: diag.StatusOK}}, "u-morgan").MustPost(q, &resp)
+	if resp.Diagnostics.ProductVersion != nil || resp.Diagnostics.Box != nil {
+		t.Fatalf("product/box off the appliance = %v/%+v, want null", resp.Diagnostics.ProductVersion, resp.Diagnostics.Box)
+	}
+}

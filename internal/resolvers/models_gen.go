@@ -183,20 +183,28 @@ type DependencyState struct {
 }
 
 type Diagnostics struct {
-	GeneratedAt string              `json:"generatedAt"`
-	TraceID     string              `json:"traceId"`
-	Actor       *DiagnosticsActor   `json:"actor"`
-	PublicURL   string              `json:"publicUrl"`
-	Appliance   *string             `json:"appliance,omitempty"`
-	Gateway     *ComponentVersion   `json:"gateway"`
-	Services    []*ComponentVersion `json:"services"`
-	ThirdParty  []*ComponentVersion `json:"thirdParty"`
+	GeneratedAt    string              `json:"generatedAt"`
+	TraceID        string              `json:"traceId"`
+	Actor          *DiagnosticsActor   `json:"actor"`
+	PublicURL      string              `json:"publicUrl"`
+	ProductVersion *string             `json:"productVersion,omitempty"`
+	Appliance      *string             `json:"appliance,omitempty"`
+	Box            *DiagnosticsBox     `json:"box,omitempty"`
+	Gateway        *ComponentVersion   `json:"gateway"`
+	Services       []*ComponentVersion `json:"services"`
+	ThirdParty     []*ComponentVersion `json:"thirdParty"`
 }
 
 type DiagnosticsActor struct {
 	ID       string   `json:"id"`
 	Username string   `json:"username"`
 	Roles    []string `json:"roles"`
+}
+
+type DiagnosticsBox struct {
+	BaseOs  string `json:"baseOS"`
+	BaseWeb string `json:"baseWeb"`
+	Fqdn    string `json:"fqdn"`
 }
 
 type FactorInput struct {

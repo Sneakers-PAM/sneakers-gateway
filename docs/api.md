@@ -345,8 +345,12 @@ install `present` is false and every other field is null or false. See
 
 `diagnostics` takes no arguments and answers any signed-in user with the facts a support report
 needs: `generatedAt`, this read's `traceId`, the caller (`actor`: id, username and roles, read
-from identity), the origin of `OAUTH_PUBLIC_URL` (`publicUrl`), the appliance version
-(`appliance`, from `SNEAKERS_APPLIANCE_VERSION`, null off the appliance), and a `ComponentVersion`
+from identity), the origin of `OAUTH_PUBLIC_URL` (`publicUrl`), the product release the install
+runs (`productVersion`, from `SNEAKERS_PRODUCT_VERSION`, null when unset), the appliance's Base OS
+version (`appliance`, from `SNEAKERS_APPLIANCE_VERSION`, null off the appliance), the box itself
+(`box`: `baseOS`, `baseWeb` and `fqdn`, from `SNEAKERS_APPLIANCE_VERSION`,
+`SNEAKERS_APPLIANCE_WEB_VERSION` and `SNEAKERS_APPLIANCE_FQDN`; null off the appliance, and a value
+the box didn't give, still the bundle's `.invalid` placeholder, is `unknown`), and a `ComponentVersion`
 (name, version, commit, status and, for a connector, `lastContactAt`) for the gateway, each service
 and each third-party service:
 
@@ -355,14 +359,15 @@ and each third-party service:
   `sneakers-commit`); mcp from `MCP_HEALTH_URL`, its `GET /livez` (the `Sneakers-Version` and
   `Sneakers-Commit` response headers, or `version` and `commit` in the body where an older build
   has them). A service that answers without the headers (an older build) shows version `unknown`.
-  One `connector:<worker id>` entry per connector worker vault has heard from, read through vault's
+  One `connector` entry per connector worker vault has heard from, read through vault's
   `ListConnectors` (the gateway never dials a connector: it's a pull-based worker). Its
   `lastContactAt` is the last verified pull-API call; `version`/`commit` are `unknown` for a worker
-  that has never sent one. No connectors at all means no `connector:*` entries, not a single
+  that has never sent one. No connectors at all means no `connector` entries, not a single
   `NOT_CONFIGURED` placeholder.
 - **Third party** (`thirdParty`): kratos (`/admin/version`), hydra (`/version`), polis
   (`/api/health`), valkey (`INFO server` on the session store), kubernetes (the API server's
-  `GET /version`, with the pod's ServiceAccount token), and postgres and rabbitmq as the services
+  `GET /version`, with the pod's ServiceAccount token; the version keeps the distribution's build
+  metadata, such as `v1.36.4+k0s`), and postgres and rabbitmq as the services
   report them in `sneakers-dep-postgres` and `sneakers-dep-rabbitmq` (one entry per distinct
   version, so services that disagree all show; a service reporting `unknown` counts as not
   reporting).

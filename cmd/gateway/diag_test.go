@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	log "github.com/Bugs5382/go-log"
@@ -35,7 +36,7 @@ func TestNewDiagnostics_NoauthHasNoLoginBackends(t *testing.T) {
 			t.Errorf("%s = %s, want NOT_CONFIGURED", name, st)
 		}
 	}
-	if st, _ := statusOf(r, "connector:worker-a"); st != "" {
+	if st, _ := statusOf(r, "connector"); st != "" {
 		t.Errorf("connector with a nil vault client = %s, want no entry at all", st)
 	}
 	if r.Appliance != "v0.1.0" || r.PublicURL != "https://pam.example.org" || r.Gateway.Name != "gateway" {
@@ -44,25 +45,55 @@ func TestNewDiagnostics_NoauthHasNoLoginBackends(t *testing.T) {
 }
 
 // TestNewDiagnostics_ConnectorEntriesComeFromVault: each connector vault has
-// heard from is its own Services entry, with vault's reported build and last
-// contact; CONNECTOR_ADDR no longer exists, and the gateway never dials one.
+// heard from is its own Services entry named "connector" (the worker id is
+// the pod's registration, not a name to show), with vault's reported build
+// and last contact; the gateway never dials one.
 func TestNewDiagnostics_ConnectorEntriesComeFromVault(t *testing.T) {
 	vault := &fakeVault{connectors: &vaultv1.ListConnectorsResponse{Connectors: []*vaultv1.ConnectorContact{
-		{WorkerId: "worker-a", Version: "v0.1.0", Commit: "abc123", LastContactAt: "2026-10-05T12:00:00Z"},
+		{WorkerId: "sneakers/sneakers-connector", Version: "v0.1.0", Commit: "abc123", LastContactAt: "2026-10-05T12:00:00Z"},
 		{WorkerId: "worker-b"},
 	}}}
 	r := newDiagnostics(func(string) string { return "" }, "noauth", diagServices{}, vault, nil, log.Nop()).Report(context.Background())
-	st, v := statusOf(r, "connector:worker-a")
-	if st != diag.StatusOK || v != "v0.1.0" {
-		t.Fatalf("connector:worker-a = %s %q, want OK v0.1.0", st, v)
+	var conns []diag.Component
+	for _, c := range r.Services {
+		if strings.Contains(c.Name, "sneakers/") || strings.HasPrefix(c.Name, "connector:") {
+			t.Fatalf("a connector entry is named after its worker id: %q", c.Name)
+		}
+		if c.Name == "connector" {
+			conns = append(conns, c)
+		}
 	}
-	a := find(r, "connector:worker-a")
-	if a.Commit != "abc123" || a.LastContactAt != "2026-10-05T12:00:00Z" {
-		t.Fatalf("connector:worker-a = %+v, want commit abc123 and the contact time", a)
+	if len(conns) != 2 {
+		t.Fatalf("connector entries = %+v, want one per worker", conns)
 	}
-	b := find(r, "connector:worker-b")
+	a, b := conns[0], conns[1]
+	if a.Status != diag.StatusOK || a.Version != "v0.1.0" || a.Commit != "abc123" || a.LastContactAt != "2026-10-05T12:00:00Z" {
+		t.Fatalf("first connector = %+v, want OK v0.1.0 abc123 and the contact time", a)
+	}
 	if b.Status != diag.StatusOK || b.Version != diag.Unknown || b.LastContactAt != "" {
-		t.Fatalf("connector:worker-b (never sent a build) = %+v, want OK unknown with no contact time", b)
+		t.Fatalf("second connector (never sent a build) = %+v, want OK unknown with no contact time", b)
+	}
+}
+
+// TestNewDiagnostics_ProductAndBox: the product's version and, on the
+// appliance, the box's values come from the environment the bundle sets.
+func TestNewDiagnostics_ProductAndBox(t *testing.T) {
+	vars := map[string]string{
+		"SNEAKERS_PRODUCT_VERSION":       "0.1.0",
+		"SNEAKERS_APPLIANCE_VERSION":     "0.1.0-m",
+		"SNEAKERS_APPLIANCE_WEB_VERSION": "0.1.0-m",
+		"SNEAKERS_APPLIANCE_FQDN":        "box1.example.org",
+	}
+	r := newDiagnostics(func(k string) string { return vars[k] }, "noauth", diagServices{}, nil, nil, log.Nop()).Report(context.Background())
+	if r.ProductVersion != "0.1.0" {
+		t.Fatalf("product = %q", r.ProductVersion)
+	}
+	if r.Box == nil || *r.Box != (diag.Box{BaseOS: "0.1.0-m", BaseWeb: "0.1.0-m", FQDN: "box1.example.org"}) {
+		t.Fatalf("box = %+v", r.Box)
+	}
+	r = newDiagnostics(func(k string) string { return map[string]string{"SNEAKERS_PRODUCT_VERSION": "0.1.0"}[k] }, "noauth", diagServices{}, nil, nil, log.Nop()).Report(context.Background())
+	if r.Box != nil {
+		t.Fatalf("box off the appliance = %+v, want nil", r.Box)
 	}
 }
 
@@ -73,19 +104,10 @@ func TestNewDiagnostics_VaultUnreachableAddsNoConnectorEntries(t *testing.T) {
 		t.Fatal("expected the other services to still report")
 	}
 	for _, c := range r.Services {
-		if c.Name == "connector:worker-a" {
+		if c.Name == "connector" {
 			t.Fatalf("expected no connector entries when vault can't answer, got %+v", c)
 		}
 	}
-}
-
-func find(r diag.Report, name string) diag.Component {
-	for _, c := range append(append([]diag.Component{}, r.Services...), r.ThirdParty...) {
-		if c.Name == name {
-			return c
-		}
-	}
-	return diag.Component{}
 }
 
 func TestNewDiagnostics_RealModeReadsKratosHydraPolisAndMCP(t *testing.T) {

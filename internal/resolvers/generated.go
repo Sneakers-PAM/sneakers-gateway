@@ -192,20 +192,28 @@ type ComplexityRoot struct {
 	}
 
 	Diagnostics struct {
-		Actor       func(childComplexity int) int
-		Appliance   func(childComplexity int) int
-		Gateway     func(childComplexity int) int
-		GeneratedAt func(childComplexity int) int
-		PublicURL   func(childComplexity int) int
-		Services    func(childComplexity int) int
-		ThirdParty  func(childComplexity int) int
-		TraceID     func(childComplexity int) int
+		Actor          func(childComplexity int) int
+		Appliance      func(childComplexity int) int
+		Box            func(childComplexity int) int
+		Gateway        func(childComplexity int) int
+		GeneratedAt    func(childComplexity int) int
+		ProductVersion func(childComplexity int) int
+		PublicURL      func(childComplexity int) int
+		Services       func(childComplexity int) int
+		ThirdParty     func(childComplexity int) int
+		TraceID        func(childComplexity int) int
 	}
 
 	DiagnosticsActor struct {
 		ID       func(childComplexity int) int
 		Roles    func(childComplexity int) int
 		Username func(childComplexity int) int
+	}
+
+	DiagnosticsBox struct {
+		BaseOs  func(childComplexity int) int
+		BaseWeb func(childComplexity int) int
+		Fqdn    func(childComplexity int) int
 	}
 
 	Folder struct {
@@ -1557,6 +1565,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Diagnostics.Appliance(childComplexity), true
+	case "Diagnostics.box":
+		if e.ComplexityRoot.Diagnostics.Box == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Diagnostics.Box(childComplexity), true
 	case "Diagnostics.gateway":
 		if e.ComplexityRoot.Diagnostics.Gateway == nil {
 			break
@@ -1569,6 +1583,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Diagnostics.GeneratedAt(childComplexity), true
+	case "Diagnostics.productVersion":
+		if e.ComplexityRoot.Diagnostics.ProductVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Diagnostics.ProductVersion(childComplexity), true
 	case "Diagnostics.publicUrl":
 		if e.ComplexityRoot.Diagnostics.PublicURL == nil {
 			break
@@ -1612,6 +1632,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.DiagnosticsActor.Username(childComplexity), true
+
+	case "DiagnosticsBox.baseOS":
+		if e.ComplexityRoot.DiagnosticsBox.BaseOs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DiagnosticsBox.BaseOs(childComplexity), true
+	case "DiagnosticsBox.baseWeb":
+		if e.ComplexityRoot.DiagnosticsBox.BaseWeb == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DiagnosticsBox.BaseWeb(childComplexity), true
+	case "DiagnosticsBox.fqdn":
+		if e.ComplexityRoot.DiagnosticsBox.Fqdn == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DiagnosticsBox.Fqdn(childComplexity), true
 
 	case "Folder.canManage":
 		if e.ComplexityRoot.Folder.CanManage == nil {
@@ -5666,14 +5705,31 @@ type Diagnostics {
   actor: DiagnosticsActor!
   # The origin of the configured public URL (scheme and host only).
   publicUrl: String!
-  # The appliance's version; null when not running on the appliance.
+  # The product release this install runs; null when the install doesn't
+  # say (SNEAKERS_PRODUCT_VERSION).
+  productVersion: String
+  # The appliance's Base OS version; null when not running on the
+  # appliance. box carries it with the rest of the box's values.
   appliance: String
+  # The appliance the product runs on; null when not running on one.
+  box: DiagnosticsBox
   gateway: ComponentVersion!
   # identity, vault, workflow, audit, notify, sshbroker, mcp, and one
-  # "connector:<worker id>" entry per connector vault has heard from.
+  # "connector" entry per connector worker vault has heard from.
   services: [ComponentVersion!]!
   # kratos, hydra, polis, valkey, postgres, rabbitmq and kubernetes.
   thirdParty: [ComponentVersion!]!
+}
+
+# The appliance as the box gives it to the product. Each value is
+# "unknown" when the box didn't give it.
+type DiagnosticsBox {
+  # The Base OS version.
+  baseOS: String!
+  # The Base Web version: the box's own admin pages.
+  baseWeb: String!
+  # The box's fully qualified host name (or its address).
+  fqdn: String!
 }
 
 # The caller, as identity knows them.
@@ -6312,8 +6368,12 @@ func (ec *executionContext) childFields_Diagnostics(ctx context.Context, field g
 		return ec.fieldContext_Diagnostics_actor(ctx, field)
 	case "publicUrl":
 		return ec.fieldContext_Diagnostics_publicUrl(ctx, field)
+	case "productVersion":
+		return ec.fieldContext_Diagnostics_productVersion(ctx, field)
 	case "appliance":
 		return ec.fieldContext_Diagnostics_appliance(ctx, field)
+	case "box":
+		return ec.fieldContext_Diagnostics_box(ctx, field)
 	case "gateway":
 		return ec.fieldContext_Diagnostics_gateway(ctx, field)
 	case "services":
@@ -6334,6 +6394,18 @@ func (ec *executionContext) childFields_DiagnosticsActor(ctx context.Context, fi
 		return ec.fieldContext_DiagnosticsActor_roles(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type DiagnosticsActor", field.Name)
+}
+
+func (ec *executionContext) childFields_DiagnosticsBox(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "baseOS":
+		return ec.fieldContext_DiagnosticsBox_baseOS(ctx, field)
+	case "baseWeb":
+		return ec.fieldContext_DiagnosticsBox_baseWeb(ctx, field)
+	case "fqdn":
+		return ec.fieldContext_DiagnosticsBox_fqdn(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type DiagnosticsBox", field.Name)
 }
 
 func (ec *executionContext) childFields_Folder(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -12129,6 +12201,29 @@ func (ec *executionContext) fieldContext_Diagnostics_publicUrl(_ context.Context
 	return graphql.NewScalarFieldContext("Diagnostics", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _Diagnostics_productVersion(ctx context.Context, field graphql.CollectedField, obj *Diagnostics) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Diagnostics_productVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ProductVersion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Diagnostics_productVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Diagnostics", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _Diagnostics_appliance(ctx context.Context, field graphql.CollectedField, obj *Diagnostics) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12150,6 +12245,38 @@ func (ec *executionContext) _Diagnostics_appliance(ctx context.Context, field gr
 }
 func (ec *executionContext) fieldContext_Diagnostics_appliance(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Diagnostics", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Diagnostics_box(ctx context.Context, field graphql.CollectedField, obj *Diagnostics) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Diagnostics_box(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Box, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *DiagnosticsBox) graphql.Marshaler {
+			return ec.marshalODiagnosticsBox2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDiagnosticsBox(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Diagnostics_box(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Diagnostics",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DiagnosticsBox(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _Diagnostics_gateway(ctx context.Context, field graphql.CollectedField, obj *Diagnostics) (ret graphql.Marshaler) {
@@ -12315,6 +12442,75 @@ func (ec *executionContext) _DiagnosticsActor_roles(ctx context.Context, field g
 }
 func (ec *executionContext) fieldContext_DiagnosticsActor_roles(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("DiagnosticsActor", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _DiagnosticsBox_baseOS(ctx context.Context, field graphql.CollectedField, obj *DiagnosticsBox) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DiagnosticsBox_baseOS(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BaseOs, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DiagnosticsBox_baseOS(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DiagnosticsBox", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _DiagnosticsBox_baseWeb(ctx context.Context, field graphql.CollectedField, obj *DiagnosticsBox) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DiagnosticsBox_baseWeb(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BaseWeb, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DiagnosticsBox_baseWeb(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DiagnosticsBox", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _DiagnosticsBox_fqdn(ctx context.Context, field graphql.CollectedField, obj *DiagnosticsBox) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DiagnosticsBox_fqdn(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Fqdn, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DiagnosticsBox_fqdn(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DiagnosticsBox", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _Folder_id(ctx context.Context, field graphql.CollectedField, obj *Folder) (ret graphql.Marshaler) {
@@ -27042,8 +27238,12 @@ func (ec *executionContext) _Diagnostics(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "productVersion":
+			out.Values[i] = ec._Diagnostics_productVersion(ctx, field, obj)
 		case "appliance":
 			out.Values[i] = ec._Diagnostics_appliance(ctx, field, obj)
+		case "box":
+			out.Values[i] = ec._Diagnostics_box(ctx, field, obj)
 		case "gateway":
 			out.Values[i] = ec._Diagnostics_gateway(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -27105,6 +27305,55 @@ func (ec *executionContext) _DiagnosticsActor(ctx context.Context, sel ast.Selec
 			}
 		case "roles":
 			out.Values[i] = ec._DiagnosticsActor_roles(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var diagnosticsBoxImplementors = []string{"DiagnosticsBox"}
+
+func (ec *executionContext) _DiagnosticsBox(ctx context.Context, sel ast.SelectionSet, obj *DiagnosticsBox) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, diagnosticsBoxImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DiagnosticsBox")
+		case "baseOS":
+			out.Values[i] = ec._DiagnosticsBox_baseOS(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "baseWeb":
+			out.Values[i] = ec._DiagnosticsBox_baseWeb(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fqdn":
+			out.Values[i] = ec._DiagnosticsBox_fqdn(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -33716,6 +33965,13 @@ func (ec *executionContext) marshalODependencyState2ᚕᚖgithubᚗcomᚋSneaker
 	}
 
 	return ret
+}
+
+func (ec *executionContext) marshalODiagnosticsBox2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐDiagnosticsBox(ctx context.Context, sel ast.SelectionSet, v *DiagnosticsBox) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._DiagnosticsBox(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOFactorInput2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFactorInput(ctx context.Context, v any) (*FactorInput, error) {
