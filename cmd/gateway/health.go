@@ -201,3 +201,18 @@ func gatewayDependencies(c *health.Checker) func(context.Context) []diag.Depende
 		return out
 	}
 }
+
+// startChecker is the gateway's checker, refreshed in the background until
+// ctx is done: /readyz only reads the last results, so a dependency that
+// hangs never holds the probes that read it (the kubelet's, the MCP
+// server's, the box's), each of which gives up after about a second. Until
+// the first pass, each dependency reads pending, so the gateway starts not
+// ready.
+func startChecker(ctx context.Context, lg log.Logger, deps []health.Dependency, opts ...health.Option) (*health.Checker, error) {
+	c, err := newChecker(lg, deps, append([]health.Option{health.WithBackgroundRefresh()}, opts...)...)
+	if err != nil {
+		return nil, err
+	}
+	go c.Run(ctx)
+	return c, nil
+}

@@ -514,8 +514,11 @@ Two unauthenticated endpoints served by go-buildinfo, plus the smoke route below
   with `error` (one of the classes above) on a failing one. Required: Valkey and Kratos in
   `AUTH_MODE=real`, and identity in every mode. Vault, workflow, audit, notify, the SSH broker,
   Hydra (when enabled) and Polis (when configured) are optional: one failing makes the status
-  `degraded`, still `200`. Each dependency is checked with a 1-second timeout and the results are
-  cached for 5 seconds, so probes don't load the dependencies.
+  `degraded`, still `200`. The gateway checks every dependency in the background, every 5 seconds
+  with a 1-second timeout, and `/readyz` only reads the last results: it answers at once however
+  slow a dependency is, so a hanging one shows as `timeout` instead of failing the probe that asked.
+  Until the first pass finishes, each dependency reads `pending` (a required one makes the gateway
+  not ready).
 Both carry the build in the `Sneakers-Version` and `Sneakers-Commit` headers, and `/readyz` adds
 `Sneakers-Depstate-<name>` (`ok`, `degraded` or `down`) for each dependency. There is no plain
 `/health` route.

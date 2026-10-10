@@ -409,7 +409,12 @@ func main() {
 	// MCP_DISABLED, and the machine API refuses the agent tokens (below).
 	mcpEnabled := switchOn(os.Getenv("MCP_ENABLED"))
 	machineAPIEnabled := switchOn(os.Getenv("MACHINE_API_ENABLED"))
-	logger.Info().Bool("mcp_enabled", mcpEnabled).Bool("machine_api_enabled", machineAPIEnabled).Msg("mcp and machine-API switches")
+	// The switches come from the environment (the appliance's MCP switch
+	// ConfigMap), so they change only with a restart: this line is the
+	// gateway's view of them for its whole life.
+	logger.Info().Bool("mcp_enabled", mcpEnabled).Bool("machine_api_enabled", machineAPIEnabled).
+		Bool("hydra_enabled", envTrue("HYDRA_ENABLED")).Str("oauth_public_url", os.Getenv("OAUTH_PUBLIC_URL")).
+		Msg("mcp and machine-API switches")
 	if !mcpEnabled {
 		mux.Handle("/oauth2/", bff.MCPOff())
 		mux.Handle("/.well-known/oauth-authorization-server", bff.MCPOff())
@@ -459,6 +464,9 @@ func main() {
 			o := (&bff.OAuth{Handler: bffH, Store: bffH.OAuthStore, PublicURL: pub}).Routes()
 			mux.Handle("/oauth2/", o)
 			mux.Handle("/.well-known/oauth-authorization-server", o)
+			logger.Info().Str("issuer", pub).Msg("mcp: the OAuth authorization server is mounted")
+		} else if mcpEnabled {
+			logger.Warn().Msg("mcp: on, but OAUTH_PUBLIC_URL is unset, so no OAuth authorization server is mounted")
 		}
 		mux.Handle("/auth/login", cors(http.HandlerFunc(bffH.Login)))
 		mux.Handle("/auth/logout", cors(http.HandlerFunc(bffH.Logout)))
@@ -540,7 +548,7 @@ func main() {
 	conns := diagServices{
 		identity: idConn, vault: conn, workflow: wfConn, audit: auditConn, notify: nConn, sshbroker: sshbrokerConn,
 	}
-	checker, err := newChecker(reqLog, healthDeps(os.Getenv, authMode, conns, valkeyPing))
+	checker, err := startChecker(ctx, reqLog, healthDeps(os.Getenv, authMode, conns, valkeyPing))
 	if err != nil {
 		logger.Fatal().Err(err).Msg("health checker")
 	}
