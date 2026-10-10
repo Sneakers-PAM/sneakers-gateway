@@ -49,6 +49,12 @@ func (r *Resolver) diagnostics(ctx context.Context) (*Diagnostics, error) {
 	if rep.Appliance != "" {
 		out.Appliance = &rep.Appliance
 	}
+	if rep.ProductVersion != "" {
+		out.ProductVersion = &rep.ProductVersion
+	}
+	if rep.Box != nil {
+		out.Box = &DiagnosticsBox{BaseOs: rep.Box.BaseOS, BaseWeb: rep.Box.BaseWeb, Fqdn: rep.Box.FQDN}
+	}
 	return out, nil
 }
 

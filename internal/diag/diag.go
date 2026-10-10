@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -107,14 +108,28 @@ type Probe func(ctx context.Context) Component
 // that couldn't read anything returns nil, which contributes no entries.
 type MultiProbe func(ctx context.Context) []Component
 
+// Box is the appliance the product runs on, as the box gave it to the
+// product (its box values): the Base OS version, the Base Web version and
+// the box's FQDN. A value the box didn't give is Unknown.
+type Box struct {
+	BaseOS  string `json:"baseOS"`
+	BaseWeb string `json:"baseWeb"`
+	FQDN    string `json:"fqdn"`
+}
+
 // Report is what the diagnostics query returns.
 type Report struct {
-	GeneratedAt time.Time   `json:"generatedAt"`
-	PublicURL   string      `json:"publicUrl"`
-	Appliance   string      `json:"appliance"`
-	Gateway     Component   `json:"gateway"`
-	Services    []Component `json:"services"`
-	ThirdParty  []Component `json:"thirdParty"`
+	GeneratedAt time.Time `json:"generatedAt"`
+	PublicURL   string    `json:"publicUrl"`
+	// ProductVersion is the product release the install runs; empty when
+	// the install doesn't say.
+	ProductVersion string `json:"productVersion"`
+	Appliance      string `json:"appliance"`
+	// Box is nil off the appliance.
+	Box        *Box        `json:"box,omitempty"`
+	Gateway    Component   `json:"gateway"`
+	Services   []Component `json:"services"`
+	ThirdParty []Component `json:"thirdParty"`
 }
 
 // sharedDeps are the dependencies the services report on the gateway's
@@ -131,9 +146,12 @@ var sharedDeps = []struct {
 
 // Collector assembles reports and caches them for CacheTTL.
 type Collector struct {
-	Gateway    Component
-	PublicURL  string
-	Appliance  string
+	Gateway        Component
+	PublicURL      string
+	ProductVersion string
+	Appliance      string
+	// Box is the appliance's values; nil off the appliance.
+	Box        *Box
 	Services   []Probe
 	ThirdParty []Probe
 	// Connectors reads the pull-based connector workers, one Component per
@@ -203,14 +221,46 @@ func (c *Collector) collect(ctx context.Context, now time.Time) Report {
 	if c.GatewayDependencies != nil {
 		gw.Dependencies = c.GatewayDependencies(ctx)
 	}
-	return Report{
-		GeneratedAt: now.UTC(),
-		PublicURL:   origin(c.PublicURL),
-		Appliance:   cleanOptional(c.Appliance),
-		Gateway:     gw,
-		Services:    services,
-		ThirdParty:  third,
+	var box *Box
+	if c.Box != nil {
+		box = &Box{BaseOS: clean(boxValue(c.Box.BaseOS)), BaseWeb: clean(boxValue(c.Box.BaseWeb)), FQDN: cleanFQDN(c.Box.FQDN)}
 	}
+	return Report{
+		GeneratedAt:    now.UTC(),
+		PublicURL:      origin(c.PublicURL),
+		ProductVersion: cleanOptional(c.ProductVersion),
+		Appliance:      cleanOptional(boxValue(c.Appliance)),
+		Box:            box,
+		Gateway:        gw,
+		Services:       services,
+		ThirdParty:     third,
+	}
+}
+
+// placeholderSuffix ends the placeholders an appliance bundle carries where
+// the box puts its own values; one still in place was never given a value.
+const placeholderSuffix = ".invalid"
+
+// boxValue is v, or "" when it is still the bundle's placeholder.
+func boxValue(v string) string {
+	if strings.HasSuffix(strings.ToLower(strings.TrimSpace(v)), placeholderSuffix) {
+		return ""
+	}
+	return v
+}
+
+// fqdnPattern is a lower-case host name or IPv4 address, or an IPv6
+// address in brackets.
+var fqdnPattern = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)*|\[[0-9a-f:.]{2,45}\])$`)
+
+// cleanFQDN returns the box's FQDN, lower case without a trailing dot, or
+// Unknown when it isn't a host name or address.
+func cleanFQDN(raw string) string {
+	h := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(boxValue(raw))), ".")
+	if len(h) > 253 || !fqdnPattern.MatchString(h) {
+		return Unknown
+	}
+	return h
 }
 
 // connectors runs c.Connectors, cleaning each entry's version and commit the

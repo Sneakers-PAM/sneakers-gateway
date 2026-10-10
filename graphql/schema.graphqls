@@ -1012,14 +1012,31 @@ type Diagnostics {
   actor: DiagnosticsActor!
   # The origin of the configured public URL (scheme and host only).
   publicUrl: String!
-  # The appliance's version; null when not running on the appliance.
+  # The product release this install runs; null when the install doesn't
+  # say (SNEAKERS_PRODUCT_VERSION).
+  productVersion: String
+  # The appliance's Base OS version; null when not running on the
+  # appliance. box carries it with the rest of the box's values.
   appliance: String
+  # The appliance the product runs on; null when not running on one.
+  box: DiagnosticsBox
   gateway: ComponentVersion!
   # identity, vault, workflow, audit, notify, sshbroker, mcp, and one
-  # "connector:<worker id>" entry per connector vault has heard from.
+  # "connector" entry per connector worker vault has heard from.
   services: [ComponentVersion!]!
   # kratos, hydra, polis, valkey, postgres, rabbitmq and kubernetes.
   thirdParty: [ComponentVersion!]!
+}
+
+# The appliance as the box gives it to the product. Each value is
+# "unknown" when the box didn't give it.
+type DiagnosticsBox {
+  # The Base OS version.
+  baseOS: String!
+  # The Base Web version: the box's own admin pages.
+  baseWeb: String!
+  # The box's fully qualified host name (or its address).
+  fqdn: String!
 }
 
 # The caller, as identity knows them.

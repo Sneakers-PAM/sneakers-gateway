@@ -388,3 +388,66 @@ func TestParseDependencies_KeepsGoBuildinfoClasses(t *testing.T) {
 		}
 	}
 }
+
+// TestCollector_ProductAndBox: the product's version is reported once, and
+// on the appliance the box's Base OS, Base Web and FQDN; a value the box
+// never put in place of its placeholder (a name under .invalid) is unknown.
+func TestCollector_ProductAndBox(t *testing.T) {
+	c := &Collector{
+		ProductVersion: "0.1.0",
+		Appliance:      "0.1.0-m",
+		Box:            &Box{BaseOS: "0.1.0-m", BaseWeb: "0.1.0-m+web.4", FQDN: "Box1.Example.org."},
+	}
+	r := c.Report(context.Background())
+	if r.ProductVersion != "0.1.0" || r.Appliance != "0.1.0-m" {
+		t.Fatalf("product/appliance = %q/%q", r.ProductVersion, r.Appliance)
+	}
+	if r.Box == nil || *r.Box != (Box{BaseOS: "0.1.0-m", BaseWeb: "0.1.0-m+web.4", FQDN: "box1.example.org"}) {
+		t.Fatalf("box = %+v", r.Box)
+	}
+
+	c = &Collector{
+		ProductVersion: "v0.1.0; <b>",
+		Appliance:      "baseos-version.invalid",                                                          // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		Box:            &Box{BaseOS: "baseos-version.invalid", BaseWeb: "", FQDN: "sneakers.box.invalid"}, // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+	}
+	r = c.Report(context.Background())
+	if r.ProductVersion != "" || r.Appliance != "" {
+		t.Fatalf("product/appliance = %q/%q, want both dropped", r.ProductVersion, r.Appliance)
+	}
+	if r.Box == nil || *r.Box != (Box{BaseOS: Unknown, BaseWeb: Unknown, FQDN: Unknown}) {
+		t.Fatalf("box = %+v, want every value unknown", r.Box)
+	}
+	if r := (&Collector{}).Report(context.Background()); r.Box != nil {
+		t.Fatalf("box off the appliance = %+v, want nil", r.Box)
+	}
+}
+
+// TestBoxFQDN keeps a host name or a bracketed IPv6 address and nothing else.
+func TestBoxFQDN(t *testing.T) {
+	for in, want := range map[string]string{
+		"box1.example.org":     "box1.example.org",
+		"192.0.2.10":           "192.0.2.10",
+		"[2001:db8::10]":       "[2001:db8::10]",
+		"https://example.org":  Unknown,
+		"a b":                  Unknown,
+		"sneakers.box.invalid": Unknown, // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+	} {
+		if got := cleanFQDN(in); got != want {
+			t.Errorf("cleanFQDN(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestKubernetes_ReadsK0sGitVersion: k0s answers /version with its
+// distribution in the build metadata, which the entry keeps.
+func TestKubernetes_ReadsK0sGitVersion(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"major":"1","minor":"36","gitVersion":"v1.36.4+k0s"}`))
+	}))
+	defer srv.Close()
+	got := kubernetes(srv.Client(), srv.URL, func() string { return "tok" })(context.Background())
+	if got.Name != "kubernetes" || got.Version != "v1.36.4+k0s" || got.Status != StatusOK {
+		t.Fatalf("got %+v", got)
+	}
+}

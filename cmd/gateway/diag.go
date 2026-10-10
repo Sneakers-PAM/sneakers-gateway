@@ -48,10 +48,19 @@ func newDiagnostics(getenv func(string) string, authMode string, s diagServices,
 		polis = endpoint(envOr(getenv, "POLIS_ISSUER_URL", "http://sneakers-polis:5225"), "/api/health")
 	}
 
+	// The appliance bundle sets all three from the box's own values
+	// (docs/configuration.md); off the appliance none is set.
+	var box *diag.Box
+	if v := getenv("SNEAKERS_APPLIANCE_VERSION"); v != "" {
+		box = &diag.Box{BaseOS: v, BaseWeb: getenv("SNEAKERS_APPLIANCE_WEB_VERSION"), FQDN: getenv("SNEAKERS_APPLIANCE_FQDN")}
+	}
+
 	return &diag.Collector{
-		Gateway:   diag.Component{Name: "gateway", Version: bi.Version, Commit: bi.Commit, Status: diag.StatusOK},
-		PublicURL: getenv("OAUTH_PUBLIC_URL"),
-		Appliance: getenv("SNEAKERS_APPLIANCE_VERSION"),
+		Gateway:        diag.Component{Name: "gateway", Version: bi.Version, Commit: bi.Commit, Status: diag.StatusOK},
+		PublicURL:      getenv("OAUTH_PUBLIC_URL"),
+		ProductVersion: getenv("SNEAKERS_PRODUCT_VERSION"),
+		Appliance:      getenv("SNEAKERS_APPLIANCE_VERSION"),
+		Box:            box,
 		Services: []diag.Probe{
 			diag.GRPCHealth("identity", s.identity),
 			diag.GRPCHealth("vault", s.vault),
@@ -74,8 +83,9 @@ func newDiagnostics(getenv func(string) string, authMode string, s diagServices,
 }
 
 // vaultConnectors reads the connector workers vault has heard from
-// (ListConnectors), one Component per worker named "connector:<worker id>"
-// with its last reported build and contact time. A nil vault client reads
+// (ListConnectors), one Component per worker named "connector" with its
+// last reported build and contact time. The worker id is how the worker
+// registered (its pod's namespace and name), not a name to show. A nil vault client reads
 // nothing; vault being unreachable is already reported on vault's own
 // GRPCHealth entry, so a read failure here just adds no entries.
 func vaultConnectors(vault vaultv1.VaultServiceClient) diag.MultiProbe {
@@ -90,7 +100,7 @@ func vaultConnectors(vault vaultv1.VaultServiceClient) diag.MultiProbe {
 		conns := resp.GetConnectors()
 		out := make([]diag.Component, 0, len(conns))
 		for _, c := range conns {
-			comp := diag.Component{Name: "connector:" + c.GetWorkerId(), Version: c.GetVersion(), Commit: c.GetCommit(), Status: diag.StatusOK}
+			comp := diag.Component{Name: "connector", Version: c.GetVersion(), Commit: c.GetCommit(), Status: diag.StatusOK}
 			if t, err := time.Parse(time.RFC3339, c.GetLastContactAt()); err == nil {
 				comp.LastContactAt = t.UTC().Format(time.RFC3339)
 			}
