@@ -7,10 +7,10 @@ tool github.com/99designs/gqlgen
 require (
 	github.com/99designs/gqlgen v0.17.90
 	github.com/Bugs5382/go-apperr v1.1.0
-	github.com/Bugs5382/go-buildinfo v1.0.0
+	github.com/Bugs5382/go-buildinfo v1.1.0
 	github.com/Bugs5382/go-log v1.3.0
 	github.com/Bugs5382/go-otel v1.3.2
-	github.com/Bugs5382/go-redis v1.2.0
+	github.com/Bugs5382/go-redis v1.3.0
 	github.com/Bugs5382/go-workload-identity v1.0.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/gorilla/websocket v1.5.3
