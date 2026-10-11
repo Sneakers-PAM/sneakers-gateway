@@ -71,7 +71,7 @@ comes from domain `sneakers.gateway`:
 | Mutation | `code` | `reason` | Meaning |
 |---|---|---|---|
 | `breakGlassSecret`, `openBreakGlassSession` | `UNAUTHENTICATED` | `BREAK_GLASS_CODE_INVALID` | The TOTP code is wrong, missing or expired. Identity doesn't say which, so neither does the reason. Ask for a fresh code. |
-| The break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_WEB_ONLY` | Not a signed-in web session: a personal token, a service account, or no session. |
+| `breakGlassSecret` and the break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_WEB_ONLY` | Not a person's own signed-in web session: a personal (MCP or agent) token, a service account, an OAuth client, or no session. Checked before the code, and audited as `break_glass.denied`. |
 | The break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_NOT_ADMIN` | The caller isn't a site admin or root. |
 | `scanTargetHostKey`, `pinTargetHostKey` | `PERMISSION_DENIED` | `HOST_KEY_PIN_NOT_ADMIN` | The caller isn't a person who is a site admin or root. |
 | `scanTargetHostKey`, `pinTargetHostKey` | `FAILED_PRECONDITION` | `TARGET_NO_SSH_CONNECTION` | The target has no SSH connection to scan. |
@@ -269,6 +269,21 @@ caller who isn't signed in:
 | `FAILED_PRECONDITION` | `STEP_UP_REQUIRED` | `APPROVE` without a `factor` and outside the session's window: step up and retry. |
 | `UNAUTHENTICATED` | `FACTOR_NOT_ACCEPTED` | The `factor` given was wrong. |
 
+### What break-glass is for
+
+Break-glass is the emergency backup for an admin who needs a password outside the planned access
+paths, when no grant, check-out or approval covers it. Every use is audited, needs a fresh TOTP
+code and a reason, alerts the owner and queues a rotation. It is for people only: the MCP, AI
+agents and any API token (personal, service account or OAuth) can't use it, by design. This is
+enforced on the server, twice: the gateway refuses every break-glass call that doesn't come from
+a person's own signed-in web session (`BREAK_GLASS_WEB_ONLY`, audited as `break_glass.denied`),
+and the vault refuses it again on its own (`PERSON_SESSION_REQUIRED`). `/machine/graphql`, the
+only endpoint tokens reach, has no break-glass field at all.
+
+The gateway sends the web session reference (`ActorContext.session_ref`, a hash of the session id,
+never the id) on every vault call it makes for a person, and passes it to the SSH broker for the
+key reveal. The vault refuses a person's reveal that doesn't carry one.
+
 ### Break-glass browse
 
 A site admin or root can open a short-lived break-glass session from the web app to find and
@@ -289,6 +304,7 @@ reveal any secret, other users' personal ones included. It grants no edit or man
   records the session id with the reveal, alerts the owner and queues the rotation as for any
   break-glass reveal. An empty `reason` takes the session's.
 - `closeBreakGlassSession(id)` ends the session (`exit`). It stays open in read-only maintenance.
+  Signing out (`/auth/logout`) closes the web session's open break-glass session the same way.
 - `breakGlassSessions(limit)` lists sessions newest first for the audit log: `openedAt` is the
   entered event, `endedAt` and `endReason` (`exit`, `expired` or `replaced`) the left one, and
   `reveals` every secret revealed in the session (who saw what). `actorName` comes from identity.

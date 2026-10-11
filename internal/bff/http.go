@@ -20,6 +20,7 @@ import (
 
 	log "github.com/Bugs5382/go-log"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
+	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 	"google.golang.org/grpc"
 )
@@ -112,9 +113,19 @@ type IdentityClient interface {
 	UnlinkOidcClient(ctx context.Context, in *identityv1.UnlinkOidcClientRequest, opts ...grpc.CallOption) (*identityv1.UnlinkOidcClientResponse, error)
 }
 
+// BreakGlassSessions is the slice of the vault client signing out uses to end
+// the web session's open break-glass session.
+type BreakGlassSessions interface {
+	GetBreakGlassSession(ctx context.Context, in *vaultv1.GetBreakGlassSessionRequest, opts ...grpc.CallOption) (*vaultv1.GetBreakGlassSessionResponse, error)
+	CloseBreakGlassSession(ctx context.Context, in *vaultv1.CloseBreakGlassSessionRequest, opts ...grpc.CallOption) (*vaultv1.CloseBreakGlassSessionResponse, error)
+}
+
 type Handler struct {
 	Store    SessionStore
 	Identity IdentityClient
+	// BreakGlass ends a signed-out session's open break-glass session; nil
+	// leaves it to expire.
+	BreakGlass BreakGlassSessions
 	// Audit records the sign-ins identity never sees (a rejected password).
 	// nil records nothing.
 	Audit AuditRecorder
@@ -310,12 +321,62 @@ func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, sess Sess
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(CookieName); err == nil {
 		if sess, ok, err := h.Store.Get(r.Context(), c.Value); err == nil && ok {
+			h.endBreakGlass(r.Context(), c.Value, sess)
 			_ = h.Auth.Logout(r.Context(), sess.AccessToken)
 		}
 		_ = h.Store.Delete(r.Context(), c.Value)
 	}
 	h.setCookie(w, "", -1)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
+}
+
+// endBreakGlass closes the break-glass session opened in this web session, if
+// any: it belongs to this session alone and ends with it. Best effort; a
+// session left open still can't be used once its web session is gone, and
+// it expires on its own.
+func (h *Handler) endBreakGlass(ctx context.Context, sid string, sess Session) {
+	if h.BreakGlass == nil || sess.Subject == "" {
+		return
+	}
+	resp, err := h.Identity.ResolveUserContext(ctx, &identityv1.ResolveUserContextRequest{Subject: sess.Subject})
+	if err != nil {
+		h.logBreakGlassEnd(ctx, err)
+		return
+	}
+	a, err := actorAttrsFrom(resp)
+	if err != nil {
+		h.logBreakGlassEnd(ctx, err)
+		return
+	}
+	if !a.siteAdmin && !a.root {
+		return
+	}
+	actor := &vaultv1.ActorContext{
+		UserId: a.userID, IsSiteAdmin: a.siteAdmin, IsRoot: a.root, GroupNames: a.groups, GroupIds: a.groupIDs,
+		IsRecovery: a.recovery, SessionRef: sessionRefOf(sid),
+	}
+	cur, err := h.BreakGlass.GetBreakGlassSession(ctx, &vaultv1.GetBreakGlassSessionRequest{Actor: actor})
+	if err != nil {
+		h.logBreakGlassEnd(ctx, err)
+		return
+	}
+	id := cur.GetSession().GetId()
+	if id == "" {
+		return
+	}
+	if _, err := h.BreakGlass.CloseBreakGlassSession(ctx, &vaultv1.CloseBreakGlassSessionRequest{Actor: actor, SessionId: id}); err != nil {
+		h.logBreakGlassEnd(ctx, err)
+		return
+	}
+	if h.Log != nil {
+		h.Log.Ctx(ctx).Info("break-glass: session ended at sign-out", log.F("user_id", a.userID), log.F("session_id", id))
+	}
+}
+
+func (h *Handler) logBreakGlassEnd(ctx context.Context, err error) {
+	if h.Log != nil {
+		h.Log.Ctx(ctx).Warn("break-glass: end at sign-out failed", log.F("error", err.Error()))
+	}
 }
 
 func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {

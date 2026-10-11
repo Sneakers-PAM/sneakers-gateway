@@ -458,6 +458,7 @@ func main() {
 		valkeyPing = func(ctx context.Context) error { return valkey.Redis().Ping(ctx).Err() }
 		bffH.Log = reqLog
 		bffH.Audit = auditClient
+		bffH.BreakGlass = vaultClient
 		// MCP /login: the OAuth native-app authorization server that issues
 		// personal tokens. Mounted only when the env's public UI URL is set.
 		if pub := env("OAUTH_PUBLIC_URL", ""); pub != "" && mcpEnabled {
@@ -538,7 +539,7 @@ func main() {
 			Upgrader:              wsUpgrader,
 			InitFunc: func(connCtx context.Context, initPayload transport.InitPayload) (context.Context, *transport.InitPayload, error) {
 				user := initPayload.GetString("x-dev-user")
-				actorCtx := resolvers.WithActor(connCtx, user)
+				actorCtx := devSessionRef(resolvers.WithActor(connCtx, user), user)
 				actorCtx = enrichActor(actorCtx, identityClient, user)
 				return actorCtx, nil, nil
 			},
@@ -709,10 +710,21 @@ func graphqlWithWS(gql http.Handler, httpGate http.Handler) http.Handler {
 // site-admin/root/groups from the identity service (for firewall-RACI).
 func withActor(identity identityv1.IdentityServiceClient, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := resolvers.WithActor(r.Context(), r.Header.Get("X-Dev-User"))
-		ctx = enrichActor(ctx, identity, r.Header.Get("X-Dev-User"))
+		user := r.Header.Get("X-Dev-User")
+		ctx := devSessionRef(resolvers.WithActor(r.Context(), user), user)
+		ctx = enrichActor(ctx, identity, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// devSessionRef stands in for the web session reference in no-auth dev,
+// where the X-Dev-User persona is the whole session, so the vault's
+// person-session checks behave as they do behind a real login.
+func devSessionRef(ctx context.Context, user string) context.Context {
+	if user == "" {
+		return ctx
+	}
+	return resolvers.WithSessionRef(ctx, "dev:"+user)
 }
 
 // enrichActor resolves the acting user's authz attributes from identity. Best

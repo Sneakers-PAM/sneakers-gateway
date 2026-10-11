@@ -86,5 +86,6 @@ func brokerActor(actor *vaultv1.ActorContext) *sshbrokerv1.ActorContext {
 		IsRoot:        actor.GetIsRoot(),
 		GroupNames:    actor.GetGroupNames(),
 		PrincipalKind: sshbrokerv1.PrincipalKind(actor.GetPrincipalKind()),
+		SessionRef:    actor.GetSessionRef(),
 	}
 }

@@ -174,6 +174,7 @@ func actorOf(ctx context.Context) *vaultv1.ActorContext {
 		GroupIds:          ActorGroupIDs(ctx),
 		MfaVerifiedAtUnix: mfaUnix(ctx),
 		IsRecovery:        actorRecovery(ctx),
+		SessionRef:        SessionRef(ctx),
 	}
 }
 

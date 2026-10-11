@@ -9,6 +9,7 @@ import (
 	"time"
 
 	log "github.com/Bugs5382/go-log"
+	auditv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/audit/v1"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/safeconv"
@@ -26,10 +27,11 @@ func errBreakGlassCodeInvalid() error {
 	return st.Err()
 }
 
-// errBreakGlassWebOnly refuses break-glass browse to anything but a signed-in
-// web session: personal tokens, service accounts and callers with no session.
+// errBreakGlassWebOnly refuses break-glass to anything but a person's own
+// signed-in web session: personal (MCP) tokens, service accounts, OAuth
+// clients and callers with no session.
 func errBreakGlassWebOnly() error {
-	return gatewayError(codes.PermissionDenied, "break-glass is available from the web app only", "BREAK_GLASS_WEB_ONLY")
+	return gatewayError(codes.PermissionDenied, "break-glass needs a person's own signed-in session; agents and tokens can't use it", "BREAK_GLASS_WEB_ONLY")
 }
 
 func errBreakGlassNotAdmin() error {
@@ -51,19 +53,66 @@ func SessionRef(ctx context.Context) string {
 	return ref
 }
 
-// breakGlassActor is the vault actor for a break-glass browse call: a site
-// admin or root in a web session, with the session reference. Anyone else is
-// refused before identity or the vault is asked.
-func breakGlassActor(ctx context.Context) (*vaultv1.ActorContext, error) {
+// breakGlassPerson is the vault actor for any break-glass call: a person in
+// their own signed-in web session, with the session reference. Tokens,
+// service accounts and callers with no web session are refused before
+// identity or the vault is asked.
+func breakGlassPerson(ctx context.Context) (*vaultv1.ActorContext, error) {
 	if _, machine := machineActorFrom(ctx); machine || SessionRef(ctx) == "" || actorFrom(ctx) == "" {
 		return nil, errBreakGlassWebOnly()
 	}
 	a := actorOf(ctx)
+	a.SessionRef = SessionRef(ctx)
+	return a, nil
+}
+
+// breakGlassActor is the vault actor for a break-glass browse call: a site
+// admin or root in their own web session.
+func breakGlassActor(ctx context.Context) (*vaultv1.ActorContext, error) {
+	a, err := breakGlassPerson(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if !a.GetIsSiteAdmin() && !a.GetIsRoot() {
 		return nil, errBreakGlassNotAdmin()
 	}
-	a.SessionRef = SessionRef(ctx)
 	return a, nil
+}
+
+// refuseBreakGlass audits a break-glass attempt refused at the gateway as
+// break_glass.denied, naming the caller kind, then returns the refusal. Best
+// effort: a failed audit write is logged and the refusal still stands.
+func (r *Resolver) refuseBreakGlass(ctx context.Context, method, subject string, refusal error) error {
+	caller, actor := "person", actorFrom(ctx)
+	if m, machine := machineActorFrom(ctx); machine {
+		caller, actor = "service_account", m.principalID
+		if m.userID != "" {
+			caller, actor = "user_token", m.userID
+		}
+	} else if SessionRef(ctx) == "" {
+		caller = "no_web_session"
+	}
+	reason := ""
+	if st, ok := status.FromError(refusal); ok {
+		for _, d := range st.Details() {
+			if info, ok := d.(*errdetails.ErrorInfo); ok {
+				reason = info.GetReason()
+			}
+		}
+	}
+	r.logger(ctx).Warn("break-glass: refused", log.F("method", method), log.F("caller", caller),
+		log.F("user_id", actor), log.F("reason", reason))
+	if r.Audit == nil {
+		return refusal
+	}
+	if _, err := r.Audit.RecordEvent(ctx, &auditv1.RecordEventRequest{
+		Tier: auditv1.Tier_TIER_AUDIT, Action: "break_glass.denied", ActorUserId: actor, Subject: subject,
+		Attributes: map[string]string{"method": method, "reason": reason, "caller": caller},
+		OccurredAt: r.now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		r.logger(ctx).Error(err, "break-glass: refusal audit failed", log.F("method", method))
+	}
+	return refusal
 }
 
 // verifyBreakGlassCode checks the TOTP code in front of every break-glass
@@ -85,13 +134,13 @@ func (r *Resolver) verifyBreakGlassCode(ctx context.Context, userID, code string
 // breakGlassReveal is breakGlassSecret: the TOTP step-up, then the vault's
 // emergency reveal, inside a browse session when sessionID is set.
 func (r *Resolver) breakGlassReveal(ctx context.Context, secretID, reason, code string, sessionID *string) ([]*KeyValue, error) {
-	actor := actorOf(ctx)
-	if sid := deref(sessionID); sid != "" {
-		a, err := breakGlassActor(ctx)
-		if err != nil {
-			return nil, err
-		}
-		actor = a
+	gate := breakGlassPerson
+	if deref(sessionID) != "" {
+		gate = breakGlassActor
+	}
+	actor, err := gate(ctx)
+	if err != nil {
+		return nil, r.refuseBreakGlass(ctx, "breakGlassSecret", secretID, err)
 	}
 	if err := r.verifyBreakGlassCode(ctx, actor.GetUserId(), code); err != nil {
 		return nil, err
@@ -115,7 +164,7 @@ func (r *Resolver) breakGlassReveal(ctx context.Context, secretID, reason, code 
 func (r *Resolver) openBreakGlassSession(ctx context.Context, reason, code string) (*BreakGlassSession, error) {
 	actor, err := breakGlassActor(ctx)
 	if err != nil {
-		return nil, err
+		return nil, r.refuseBreakGlass(ctx, "openBreakGlassSession", "vault", err)
 	}
 	l := r.logger(ctx).With(log.F("user_id", actor.GetUserId()))
 	if err := r.verifyBreakGlassCode(ctx, actor.GetUserId(), code); err != nil {
