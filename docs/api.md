@@ -71,7 +71,7 @@ comes from domain `sneakers.gateway`:
 | Mutation | `code` | `reason` | Meaning |
 |---|---|---|---|
 | `breakGlassSecret`, `openBreakGlassSession` | `UNAUTHENTICATED` | `BREAK_GLASS_CODE_INVALID` | The TOTP code is wrong, missing or expired. Identity doesn't say which, so neither does the reason. Ask for a fresh code. |
-| The break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_WEB_ONLY` | Not a signed-in web session: a personal token, a service account, or no session. |
+| `breakGlassSecret` and the break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_WEB_ONLY` | Not a person's own signed-in web session: a personal (MCP or agent) token, a service account, an OAuth client, or no session. Checked before the code, and audited as `break_glass.denied`. |
 | The break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_NOT_ADMIN` | The caller isn't a site admin or root. |
 | `scanTargetHostKey`, `pinTargetHostKey` | `PERMISSION_DENIED` | `HOST_KEY_PIN_NOT_ADMIN` | The caller isn't a person who is a site admin or root. |
 | `scanTargetHostKey`, `pinTargetHostKey` | `FAILED_PRECONDITION` | `TARGET_NO_SSH_CONNECTION` | The target has no SSH connection to scan. |
@@ -268,6 +268,17 @@ caller who isn't signed in:
 | `INVALID_ARGUMENT` | `BATCH_SIZE_INVALID` | No ids, or more than 20 distinct ones. Checked before the factor. |
 | `FAILED_PRECONDITION` | `STEP_UP_REQUIRED` | `APPROVE` without a `factor` and outside the session's window: step up and retry. |
 | `UNAUTHENTICATED` | `FACTOR_NOT_ACCEPTED` | The `factor` given was wrong. |
+
+### Break-glass is people only
+
+Break-glass is the emergency backup for an admin who needs a password outside the planned access
+paths, when no grant, check-out or approval covers it. It is for people only: the MCP, AI agents
+and any API token (personal, service account or OAuth) can't use it, by design. The gateway
+refuses every break-glass call, including a plain `breakGlassSecret` with no browse session, that
+doesn't come from a person's own signed-in web session (`BREAK_GLASS_WEB_ONLY`), before the TOTP
+code is even checked, and audits the refusal as `break_glass.denied` naming the caller kind
+(`user_token`, `service_account` or `no_web_session`). `/machine/graphql`, the only endpoint
+tokens reach, has no break-glass field at all.
 
 ### Break-glass browse
 
