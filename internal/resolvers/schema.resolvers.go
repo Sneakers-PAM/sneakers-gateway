@@ -915,27 +915,32 @@ func (r *mutationResolver) MarkAllNotificationsRead(ctx context.Context) (bool, 
 
 // OpenSSHSession is the resolver for the openSshSession field.
 func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string, connectionID *string) (*SSHSessionTicket, error) {
+	ctx, cancel := context.WithTimeout(ctx, openSSHSessionTimeout)
+	defer cancel()
 	actor := actorOf(ctx)
+	op := r.sshOpen(ctx, actor.GetUserId(), secretID, deref(connectionID))
 	sec, err := r.Vault.GetSecret(ctx, &vaultv1.GetSecretRequest{Actor: actor, Id: secretID})
 	if err != nil {
-		return nil, err
+		return nil, op.failed(ctx, "secret", "the vault", err)
 	}
 	if sec.GetSecret().GetTypeId() != "type-ssh-key" {
-		return nil, fmt.Errorf("secret is not an SSH key")
+		return nil, op.failed(ctx, "secret", "", fmt.Errorf("secret is not an SSH key"))
 	}
 	targetID := sec.GetSecret().GetTargetId()
 	if targetID == "" {
-		return nil, fmt.Errorf("secret has no target host")
+		return nil, op.failed(ctx, "secret", "", fmt.Errorf("secret has no target host"))
 	}
+	op.target(targetID)
 	host, port, hostKeys, err := r.resolveSSHEndpoint(ctx, targetID, deref(connectionID))
 	if err != nil {
-		return nil, err
+		return nil, op.failed(ctx, "target", "the vault", err)
 	}
 	// Non-sensitive username (no audited reveal).
 	fields, err := r.Vault.GetSecretFields(ctx, &vaultv1.GetSecretFieldsRequest{Actor: actor, Id: secretID})
 	if err != nil {
-		return nil, err
+		return nil, op.failed(ctx, "username", "the vault", err)
 	}
+	op.endpoint(host, port, len(hostKeys))
 	// Hand the broker a REFERENCE (secret id + actor), not the key. The broker
 	// can run >1 replica: it stores only the reference in a shared ticket store
 	// and, on the pod that terminates the SSH session, reveals the private key
@@ -955,8 +960,9 @@ func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string, 
 		Actor:       brokerActor(actor),
 	})
 	if err != nil {
-		return nil, err
+		return nil, op.failed(ctx, "broker", "the SSH broker", err)
 	}
+	op.issued(resp.GetSessionId())
 	return &SSHSessionTicket{
 		WsURL:            resp.GetWsUrl(),
 		Ticket:           resp.GetTicket(),

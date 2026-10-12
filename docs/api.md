@@ -140,6 +140,11 @@ form (`ssh-ed25519 AAAA... comment`). An empty list means the target isn't pinne
 - `openSshSession` sends the broker the caller's actor context with its principal kind (the same
   values as the vault's). The broker refuses every kind but a person, and passes the actor
   through to the vault when it reveals the key.
+- `openSshSession` is bounded at 15 seconds in all: the vault reads and the broker's
+  `CreateSession`. When that runs out it fails with `DEADLINE_EXCEEDED` and names the service
+  that didn't answer (`the vault didn't answer within 15s while opening the session`, or the same
+  for `the SSH broker`). The broker bounds each step of the connect itself and closes the
+  WebSocket with the step and the reason when one fails (see the broker's docs/api.md).
 
 Trust on first use (human schema only) lets a site admin pin the key a target offers without
 copying it by hand:

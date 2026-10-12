@@ -5,12 +5,60 @@ package resolvers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
+	"time"
+
+	log "github.com/Bugs5382/go-log"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	sshbrokerv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/sshbroker/v1"
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 )
+
+// openSSHSessionTimeout bounds the whole ticket request: the vault reads and
+// the broker's CreateSession. Each call is quick when its service is up, so a
+// stall means a service isn't answering, and the terminal gets that as an
+// error instead of waiting for good.
+var openSSHSessionTimeout = 15 * time.Second
+
+// sshOpenLog logs one openSshSession: who asked and for what on the way in,
+// the target once it's known, and the outcome with its duration. It logs
+// ids, the address and durations only, never the ticket or a secret value.
+type sshOpenLog struct {
+	l       log.Logger
+	started time.Time
+}
+
+func (r *mutationResolver) sshOpen(ctx context.Context, actorUserID, secretID, connectionID string) *sshOpenLog {
+	l := r.logger(ctx).With(log.F("actor_user_id", actorUserID), log.F("secret_id", secretID), log.F("connection_id", connectionID))
+	l.Info("ssh session requested")
+	return &sshOpenLog{l: l, started: time.Now()}
+}
+
+func (o *sshOpenLog) target(targetID string) { o.l = o.l.With(log.F("target_id", targetID)) }
+
+func (o *sshOpenLog) endpoint(host string, port, hostKeys int) {
+	o.l = o.l.With(log.F("host", host), log.F("port", port))
+	o.l.Debug("ssh session target resolved", log.F("host_keys", hostKeys))
+}
+
+func (o *sshOpenLog) issued(sessionID string) {
+	o.l.Info("ssh session ticket issued", log.F("session_id", sessionID), log.F("duration_ms", time.Since(o.started).Milliseconds()))
+}
+
+// failed logs the step that failed and returns the error for the client.
+// When the request ran out of time it names the service that didn't answer;
+// any other error passes through unchanged.
+func (o *sshOpenLog) failed(ctx context.Context, step, service string, err error) error {
+	if service != "" && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		err = status.Errorf(codes.DeadlineExceeded, "%s didn't answer within %s while opening the session", service, openSSHSessionTimeout)
+	}
+	o.l.Warn("ssh session ticket failed", log.F("step", step), log.F("error", err.Error()), log.F("duration_ms", time.Since(o.started).Milliseconds()))
+	return err
+}
 
 // resolveSSHEndpoint turns a targetId into host + port, plus the target's
 // pinned SSH host keys for the broker, via the vault's

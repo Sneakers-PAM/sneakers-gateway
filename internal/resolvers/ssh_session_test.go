@@ -7,11 +7,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	gqlclient "github.com/99designs/gqlgen/client"
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
+	log "github.com/Bugs5382/go-log"
 	sshbrokerv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/sshbroker/v1"
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	"google.golang.org/grpc"
@@ -221,4 +224,150 @@ func TestBrokerActorCarriesThePrincipalKind(t *testing.T) {
 			t.Fatalf("%v: broker actor = %+v", in, got)
 		}
 	}
+}
+
+// hangingSSHBroker never answers CreateSession until the call's context ends.
+type hangingSSHBroker struct {
+	sshbrokerv1.SSHBrokerServiceClient
+}
+
+func (hangingSSHBroker) CreateSession(ctx context.Context, _ *sshbrokerv1.CreateSessionRequest, _ ...grpc.CallOption) (*sshbrokerv1.CreateSessionResponse, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// A broker (or vault) that never answers must not hold the terminal on
+// "Opening session": the ticket request is bounded and names what stalled.
+func TestSshSessionTicketIsBoundedWhenTheBrokerHangs(t *testing.T) {
+	old := openSSHSessionTimeout
+	openSSHSessionTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { openSSHSessionTimeout = old })
+
+	c := newSSHClient(&fakeSSHVault{targetID: "target-1"}, hangingSSHBroker{}, "user-morgan")
+	var resp struct {
+		OpenSshSession struct{ Ticket string }
+	}
+	started := time.Now()
+	err := c.Post(openSSHSessionMutation, &resp)
+	if err == nil {
+		t.Fatal("expected an error from a broker that never answers")
+	}
+	if took := time.Since(started); took > 3*time.Second {
+		t.Fatalf("ticket request took %s, want it bounded", took)
+	}
+	if !strings.Contains(err.Error(), "the SSH broker didn't answer") {
+		t.Fatalf("error = %v, want it to name the SSH broker", err)
+	}
+}
+
+// recordedLine is one line a recordingLog took.
+type recordedLine struct {
+	level, msg string
+	fields     map[string]any
+}
+
+// recordingLog is a log.Logger that keeps every line, with the fields
+// added by With.
+type recordingLog struct {
+	lines *[]recordedLine
+	base  []log.Field
+}
+
+func newRecordingLog() *recordingLog { return &recordingLog{lines: &[]recordedLine{}} }
+
+func (l *recordingLog) add(level, msg string, fields []log.Field) {
+	m := map[string]any{}
+	for _, f := range append(append([]log.Field{}, l.base...), fields...) {
+		m[f.Key] = f.Val
+	}
+	*l.lines = append(*l.lines, recordedLine{level: level, msg: msg, fields: m})
+}
+
+func (l *recordingLog) Debug(msg string, f ...log.Field) { l.add("debug", msg, f) }
+func (l *recordingLog) Info(msg string, f ...log.Field)  { l.add("info", msg, f) }
+func (l *recordingLog) Warn(msg string, f ...log.Field)  { l.add("warn", msg, f) }
+func (l *recordingLog) Error(_ error, msg string, f ...log.Field) {
+	l.add("error", msg, f)
+}
+func (l *recordingLog) Fatal(_ error, msg string, f ...log.Field) { l.add("fatal", msg, f) }
+func (l *recordingLog) With(f ...log.Field) log.Logger {
+	return &recordingLog{lines: l.lines, base: append(append([]log.Field{}, l.base...), f...)}
+}
+func (l *recordingLog) Ctx(context.Context) log.Logger { return l }
+
+// want returns the line with msg, failing unless it has the level and the
+// fields given.
+func (l *recordingLog) want(t *testing.T, msg, level string, fields map[string]any) recordedLine {
+	t.Helper()
+	for _, line := range *l.lines {
+		if line.msg != msg {
+			continue
+		}
+		if line.level != level {
+			t.Fatalf("%q logged at %s, want %s", msg, line.level, level)
+		}
+		for k, v := range fields {
+			if line.fields[k] != v {
+				t.Fatalf("%q field %s = %v, want %v (%+v)", msg, k, line.fields[k], v, line.fields)
+			}
+		}
+		return line
+	}
+	t.Fatalf("no %q line in %+v", msg, *l.lines)
+	return recordedLine{}
+}
+
+func newLoggedSSHClient(fv vaultv1.VaultServiceClient, fb sshbrokerv1.SSHBrokerServiceClient, lg log.Logger) *gqlclient.Client {
+	h := handler.New(NewExecutableSchema(Config{Resolvers: &Resolver{Vault: fv, SSHBroker: fb, Log: lg}}))
+	h.AddTransport(transport.POST{})
+	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(WithActor(r.Context(), "user-morgan")))
+	})
+	return gqlclient.New(wrapped)
+}
+
+// A session open is logged at info level on the way in and when the ticket
+// comes back, with who asked and for which target, and never a secret.
+func TestSshSessionOpenIsLogged(t *testing.T) {
+	lg := newRecordingLog()
+	c := newLoggedSSHClient(&fakeSSHVault{targetID: "target-1"}, &fakeSSHBroker{}, lg)
+	var resp struct {
+		OpenSshSession struct {
+			WsURL, Ticket, SessionID string
+			ExpiresInSeconds         int
+		}
+	}
+	if err := c.Post(openSSHSessionMutation, &resp); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	lg.want(t, "ssh session requested", "info", map[string]any{"actor_user_id": "user-morgan", "secret_id": "s1"})
+	got := lg.want(t, "ssh session ticket issued", "info", map[string]any{
+		"target_id": "target-1", "session_id": "sess-1", "host": "host.example.org", "port": 22,
+	})
+	if _, ok := got.fields["duration_ms"]; !ok {
+		t.Fatalf("issued line has no duration: %+v", got)
+	}
+	for _, line := range *lg.lines {
+		for k, v := range line.fields {
+			if k == "ticket" || v == "ticket-abc" {
+				t.Fatalf("the ticket reached the log: %+v", line)
+			}
+		}
+	}
+}
+
+func TestSshSessionOpenFailureIsLogged(t *testing.T) {
+	old := openSSHSessionTimeout
+	openSSHSessionTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { openSSHSessionTimeout = old })
+
+	lg := newRecordingLog()
+	c := newLoggedSSHClient(&fakeSSHVault{targetID: "target-1"}, hangingSSHBroker{}, lg)
+	var resp struct {
+		OpenSshSession struct{ Ticket string }
+	}
+	if err := c.Post(openSSHSessionMutation, &resp); err == nil {
+		t.Fatal("expected an error")
+	}
+	lg.want(t, "ssh session ticket failed", "warn", map[string]any{"step": "broker", "target_id": "target-1"})
 }
