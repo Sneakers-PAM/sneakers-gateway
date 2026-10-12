@@ -55,7 +55,7 @@ func newBreakGlassClient(id *breakGlassIdentity, v *breakGlassVault) *gqlclient.
 	h.AddTransport(transport.POST{})
 	h.SetErrorPresenter(gqlerr.Present)
 	return gqlclient.New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r.WithContext(WithActor(r.Context(), "u-ada")))
+		h.ServeHTTP(w, r.WithContext(WithSessionRef(WithActor(r.Context(), "u-ada"), "ref-web-ada")))
 	}))
 }
 
