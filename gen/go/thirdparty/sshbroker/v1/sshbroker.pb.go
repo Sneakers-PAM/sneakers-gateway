@@ -98,6 +98,10 @@ type ActorContext struct {
 	// sneakers.vault.v1.ActorContext.principal_kind (same field number). Any
 	// kind but HUMAN is refused with PermissionDenied, on both paths.
 	PrincipalKind PrincipalKind `protobuf:"varint,6,opt,name=principal_kind,json=principalKind,proto3,enum=sneakers.sshbroker.v1.PrincipalKind" json:"principal_kind,omitempty"`
+	// The opaque reference to the person's signed-in web session, as in
+	// sneakers.vault.v1.ActorContext.session_ref (same field number). The
+	// broker passes it to the vault with the key reveal.
+	SessionRef    string `protobuf:"bytes,12,opt,name=session_ref,json=sessionRef,proto3" json:"session_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -167,6 +171,13 @@ func (x *ActorContext) GetPrincipalKind() PrincipalKind {
 	return PrincipalKind_PRINCIPAL_KIND_HUMAN
 }
 
+func (x *ActorContext) GetSessionRef() string {
+	if x != nil {
+		return x.SessionRef
+	}
+	return ""
+}
+
 type CreateSessionRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Host     string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
@@ -187,8 +198,9 @@ type CreateSessionRequest struct {
 	Actor *ActorContext `protobuf:"bytes,10,opt,name=actor,proto3" json:"actor,omitempty"`
 	// host_keys are the target's pinned SSH host keys, one OpenSSH public key
 	// per entry in authorized_keys form, copied from the vault target. The
-	// broker connects only when the host presents one of them: with none it
-	// refuses ("host key not pinned for this target"), and with others it
+	// broker connects only when the host presents one of them: with none,
+	// CreateSession refuses up front (HOST_KEY_NOT_PINNED) and the dial would
+	// refuse too ("host key not pinned for this target"); with others the dial
 	// refuses ("host key mismatch"). They travel on the ticket, including the
 	// shared-store copy (public keys, not secrets).
 	HostKeys      []string `protobuf:"bytes,11,rep,name=host_keys,json=hostKeys,proto3" json:"host_keys,omitempty"`
@@ -304,11 +316,15 @@ func (x *CreateSessionRequest) GetHostKeys() []string {
 }
 
 type CreateSessionResponse struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	SessionId        string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Ticket           string                 `protobuf:"bytes,2,opt,name=ticket,proto3" json:"ticket,omitempty"`            // single-use, opaque
-	WsUrl            string                 `protobuf:"bytes,3,opt,name=ws_url,json=wsUrl,proto3" json:"ws_url,omitempty"` // base WS url (browser appends ?ticket=)
-	ExpiresInSeconds int32                  `protobuf:"varint,4,opt,name=expires_in_seconds,json=expiresInSeconds,proto3" json:"expires_in_seconds,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Ticket    string                 `protobuf:"bytes,2,opt,name=ticket,proto3" json:"ticket,omitempty"` // single-use, opaque
+	// The configured public WebSocket URL (SSHBROKER_PUBLIC_WS_URL). The web
+	// app takes its path and opens it on the page's own origin, so a box
+	// opened by its name, IPv4 or IPv6 address reaches the broker on that
+	// same address; the browser appends ?ticket=.
+	WsUrl            string `protobuf:"bytes,3,opt,name=ws_url,json=wsUrl,proto3" json:"ws_url,omitempty"`
+	ExpiresInSeconds int32  `protobuf:"varint,4,opt,name=expires_in_seconds,json=expiresInSeconds,proto3" json:"expires_in_seconds,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -512,14 +528,16 @@ var File_sneakers_sshbroker_v1_sshbroker_proto protoreflect.FileDescriptor
 
 const file_sneakers_sshbroker_v1_sshbroker_proto_rawDesc = "" +
 	"\n" +
-	"%sneakers/sshbroker/v1/sshbroker.proto\x12\x15sneakers.sshbroker.v1\"\xd2\x01\n" +
+	"%sneakers/sshbroker/v1/sshbroker.proto\x12\x15sneakers.sshbroker.v1\"\xf3\x01\n" +
 	"\fActorContext\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\"\n" +
 	"\ris_site_admin\x18\x02 \x01(\bR\visSiteAdmin\x12\x17\n" +
 	"\ais_root\x18\x03 \x01(\bR\x06isRoot\x12\x1f\n" +
 	"\vgroup_names\x18\x04 \x03(\tR\n" +
 	"groupNames\x12K\n" +
-	"\x0eprincipal_kind\x18\x06 \x01(\x0e2$.sneakers.sshbroker.v1.PrincipalKindR\rprincipalKind\"\xf2\x02\n" +
+	"\x0eprincipal_kind\x18\x06 \x01(\x0e2$.sneakers.sshbroker.v1.PrincipalKindR\rprincipalKind\x12\x1f\n" +
+	"\vsession_ref\x18\f \x01(\tR\n" +
+	"sessionRef\"\xf2\x02\n" +
 	"\x14CreateSessionRequest\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
