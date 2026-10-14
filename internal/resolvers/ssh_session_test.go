@@ -187,6 +187,55 @@ func assertEndpoint(t *testing.T, req *sshbrokerv1.CreateSessionRequest) {
 	}
 }
 
+// TestSshSessionAllowsPasswordAccountSecret proves a Password Account (SSH)
+// secret (type-unix-ssh) opens a session, with password_auth set so the
+// broker knows to reveal the password, not a key.
+func TestSshSessionAllowsPasswordAccountSecret(t *testing.T) {
+	fv := &fakeSSHVault{secretTypeID: "type-unix-ssh", targetID: "target-1"}
+	fb := &fakeSSHBroker{}
+	c := newSSHClient(fv, fb, "user-morgan")
+
+	var resp struct {
+		OpenSshSession struct {
+			WsURL, Ticket, SessionID string
+			ExpiresInSeconds         int
+		}
+	}
+	c.MustPost(openSSHSessionMutation, &resp)
+
+	if !fb.called {
+		t.Fatalf("expected CreateSession to be called for a Password Account (SSH) secret")
+	}
+	req := fb.lastReq
+	if !req.GetPasswordAuth() {
+		t.Fatalf("password_auth = false, want true for a type-unix-ssh secret")
+	}
+	if req.GetPrivateKey() != "" {
+		t.Fatalf("gateway must not forward key material for a password secret: %+v", req)
+	}
+	assertEndpoint(t, req)
+}
+
+// A key secret must never set password_auth: the broker would otherwise try
+// to reveal a "password" field the secret doesn't have.
+func TestSshSessionKeySecretLeavesPasswordAuthFalse(t *testing.T) {
+	fv := &fakeSSHVault{targetID: "target-1"} // defaults to type-ssh-key
+	fb := &fakeSSHBroker{}
+	c := newSSHClient(fv, fb, "user-morgan")
+
+	var resp struct {
+		OpenSshSession struct {
+			WsURL, Ticket, SessionID string
+			ExpiresInSeconds         int
+		}
+	}
+	c.MustPost(openSSHSessionMutation, &resp)
+
+	if fb.lastReq.GetPasswordAuth() {
+		t.Fatalf("password_auth = true, want false for a type-ssh-key secret")
+	}
+}
+
 // TestSshSessionReturnsBrokerTicket proves the broker's ticket is surfaced back
 // to the caller unchanged.
 func TestSshSessionReturnsBrokerTicket(t *testing.T) {
