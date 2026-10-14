@@ -923,8 +923,9 @@ func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string, 
 	if err != nil {
 		return nil, op.failed(ctx, "secret", "the vault", err)
 	}
-	if sec.GetSecret().GetTypeId() != "type-ssh-key" {
-		return nil, op.failed(ctx, "secret", "", fmt.Errorf("secret is not an SSH key"))
+	typeID := sec.GetSecret().GetTypeId()
+	if typeID != "type-ssh-key" && typeID != "type-unix-ssh" {
+		return nil, op.failed(ctx, "secret", "", fmt.Errorf("secret is not an SSH key or a Password Account (SSH)"))
 	}
 	targetID := sec.GetSecret().GetTargetId()
 	if targetID == "" {
@@ -941,23 +942,26 @@ func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string, 
 		return nil, op.failed(ctx, "username", "the vault", err)
 	}
 	op.endpoint(host, port, len(hostKeys))
-	// Hand the broker a REFERENCE (secret id + actor), not the key. The broker
-	// can run >1 replica: it stores only the reference in a shared ticket store
-	// and, on the pod that terminates the SSH session, reveals the private key
-	// from the vault itself (RevealSecretField, RBAC-gated + audited) with this
-	// same actor. So the key is never fetched/forwarded here — it stays in the
-	// vault until the redeeming pod needs it, and RBAC/audit are unchanged
-	// because the broker passes this actor straight through.
+	// Hand the broker a REFERENCE (secret id + actor), not the credential. The
+	// broker can run >1 replica: it stores only the reference in a shared
+	// ticket store and, on the pod that terminates the SSH session, reveals
+	// the private key (or, for a Password Account (SSH) secret, the password
+	// -- PasswordAuth tells it which) from the vault itself (RevealSecretField,
+	// RBAC-gated + audited) with this same actor. So the credential is never
+	// fetched/forwarded here -- it stays in the vault until the redeeming pod
+	// needs it, and RBAC/audit are unchanged because the broker passes this
+	// actor straight through.
 	resp, err := r.SSHBroker.CreateSession(ctx, &sshbrokerv1.CreateSessionRequest{
-		Host:        host,
-		Port:        safeconv.Int32(port),
-		Username:    fields.GetFields()["username"],
-		ActorUserId: actor.GetUserId(),
-		SecretId:    secretID,
-		TargetId:    targetID,
-		TtlSeconds:  30,
-		HostKeys:    hostKeys,
-		Actor:       brokerActor(actor),
+		Host:         host,
+		Port:         safeconv.Int32(port),
+		Username:     fields.GetFields()["username"],
+		ActorUserId:  actor.GetUserId(),
+		SecretId:     secretID,
+		TargetId:     targetID,
+		TtlSeconds:   30,
+		HostKeys:     hostKeys,
+		Actor:        brokerActor(actor),
+		PasswordAuth: typeID == "type-unix-ssh",
 	})
 	if err != nil {
 		return nil, op.failed(ctx, "broker", "the SSH broker", err)
