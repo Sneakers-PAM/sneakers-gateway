@@ -522,6 +522,7 @@ type ComplexityRoot struct {
 	Secret struct {
 		AlwaysRequireApproval  func(childComplexity int) int
 		CanRead                func(childComplexity int) int
+		CreatorPrincipalID     func(childComplexity int) int
 		ExpiresAt              func(childComplexity int) int
 		FolderID               func(childComplexity int) int
 		HeartbeatBlockedReason func(childComplexity int) int
@@ -3654,6 +3655,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Secret.CanRead(childComplexity), true
+	case "Secret.creatorPrincipalId":
+		if e.ComplexityRoot.Secret.CreatorPrincipalID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Secret.CreatorPrincipalID(childComplexity), true
 	case "Secret.expiresAt":
 		if e.ComplexityRoot.Secret.ExpiresAt == nil {
 			break
@@ -4803,8 +4810,12 @@ enum RaciAction { C I A R }
 
 # A folder's step-up-on-reveal override.
 enum StepUpMode { inherit require off }
-# Tri-state grant per action cell: allow, deny, or blank (fall through).
-enum RaciGrant { allow deny }
+# Tri-state grant per action cell: allow, deny, or blank (fall through). own
+# is valid only on the C (read) cell: "contribute, own reveal" — combined
+# with an R allow, create/update anywhere R allows, but reveal only a secret
+# this principal created (see Secret.creatorPrincipalId). Saving own on any
+# cell but C is refused.
+enum RaciGrant { allow deny own }
 
 # One grant cell on a RACI rule row. A missing action = blank (fall through).
 type RaciRuleGrant {
@@ -4892,6 +4903,11 @@ type Secret {
   folderId: String!
   typeId: String!
   targetId: String
+  # The principal (human user id or non-human principal id) that created
+  # this secret, set once at creation. Used by an "own reveal" folder grant
+  # to decide whether this secret is readable; empty on a secret created
+  # before this field existed.
+  creatorPrincipalId: String
   expiresAt: String
   lastHeartbeatResult: HeartbeatResult
   verifiedAt: String
@@ -6772,6 +6788,8 @@ func (ec *executionContext) childFields_Secret(ctx context.Context, field graphq
 		return ec.fieldContext_Secret_typeId(ctx, field)
 	case "targetId":
 		return ec.fieldContext_Secret_targetId(ctx, field)
+	case "creatorPrincipalId":
+		return ec.fieldContext_Secret_creatorPrincipalId(ctx, field)
 	case "expiresAt":
 		return ec.fieldContext_Secret_expiresAt(ctx, field)
 	case "lastHeartbeatResult":
@@ -20734,6 +20752,29 @@ func (ec *executionContext) fieldContext_Secret_targetId(_ context.Context, fiel
 	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _Secret_creatorPrincipalId(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Secret_creatorPrincipalId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatorPrincipalID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Secret_creatorPrincipalId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _Secret_expiresAt(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -30471,6 +30512,8 @@ func (ec *executionContext) _Secret(ctx context.Context, sel ast.SelectionSet, o
 			}
 		case "targetId":
 			out.Values[i] = ec._Secret_targetId(ctx, field, obj)
+		case "creatorPrincipalId":
+			out.Values[i] = ec._Secret_creatorPrincipalId(ctx, field, obj)
 		case "expiresAt":
 			out.Values[i] = ec._Secret_expiresAt(ctx, field, obj)
 		case "lastHeartbeatResult":

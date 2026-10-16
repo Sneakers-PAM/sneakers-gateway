@@ -92,8 +92,12 @@ enum RaciAction { C I A R }
 
 # A folder's step-up-on-reveal override.
 enum StepUpMode { inherit require off }
-# Tri-state grant per action cell: allow, deny, or blank (fall through).
-enum RaciGrant { allow deny }
+# Tri-state grant per action cell: allow, deny, or blank (fall through). own
+# is valid only on the C (read) cell: "contribute, own reveal" — combined
+# with an R allow, create/update anywhere R allows, but reveal only a secret
+# this principal created (see Secret.creatorPrincipalId). Saving own on any
+# cell but C is refused.
+enum RaciGrant { allow deny own }
 
 # One grant cell on a RACI rule row. A missing action = blank (fall through).
 type RaciRuleGrant {
@@ -181,6 +185,11 @@ type Secret {
   folderId: String!
   typeId: String!
   targetId: String
+  # The principal (human user id or non-human principal id) that created
+  # this secret, set once at creation. Used by an "own reveal" folder grant
+  # to decide whether this secret is readable; empty on a secret created
+  # before this field existed.
+  creatorPrincipalId: String
   expiresAt: String
   lastHeartbeatResult: HeartbeatResult
   verifiedAt: String

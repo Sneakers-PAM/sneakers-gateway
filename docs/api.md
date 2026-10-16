@@ -192,6 +192,16 @@ default) and normalizes a legacy single-`connectionId` save, same as it always h
 `connectionId` names one of that target's own connections; naming any other id, or one that isn't
 `ssh`, is refused the same way an unresolvable target or connection already is.
 
+### Contribute, own reveal
+
+`RaciGrant` gains `own`, valid only on the `C` (read) cell. Combined with `R: allow` it is a grant
+for a machine principal: create and update anywhere `R` allows in the folder, but reveal only a
+secret whose `creatorPrincipalId` is its own — never a blanket folder read. Saving `own` on any
+cell but `C` is refused, same as any other vault validation error. `Secret.creatorPrincipalId` is
+the secret's creator (set once, at creation); null on a secret created before this field existed.
+The vault's full rules (every read path this closes, the refusal and audit shape) are in
+[sneakers-vault docs/api.md](https://github.com/Sneakers-PAM/sneakers-vault/blob/main/docs/api.md).
+
 ### Audit subject
 
 `AuditRecord.subjectKind`, `subjectId` and `subjectName` resolve the raw `subject` string (which

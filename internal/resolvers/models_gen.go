@@ -419,6 +419,7 @@ type Secret struct {
 	FolderID               string           `json:"folderId"`
 	TypeID                 string           `json:"typeId"`
 	TargetID               *string          `json:"targetId,omitempty"`
+	CreatorPrincipalID     *string          `json:"creatorPrincipalId,omitempty"`
 	ExpiresAt              *string          `json:"expiresAt,omitempty"`
 	LastHeartbeatResult    *HeartbeatResult `json:"lastHeartbeatResult,omitempty"`
 	VerifiedAt             *string          `json:"verifiedAt,omitempty"`
@@ -1303,16 +1304,18 @@ type RaciGrant string
 const (
 	RaciGrantAllow RaciGrant = "allow"
 	RaciGrantDeny  RaciGrant = "deny"
+	RaciGrantOwn   RaciGrant = "own"
 )
 
 var AllRaciGrant = []RaciGrant{
 	RaciGrantAllow,
 	RaciGrantDeny,
+	RaciGrantOwn,
 }
 
 func (e RaciGrant) IsValid() bool {
 	switch e {
-	case RaciGrantAllow, RaciGrantDeny:
+	case RaciGrantAllow, RaciGrantDeny, RaciGrantOwn:
 		return true
 	}
 	return false
