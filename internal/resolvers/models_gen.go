@@ -420,6 +420,7 @@ type Secret struct {
 	TypeID                 string           `json:"typeId"`
 	TargetID               *string          `json:"targetId,omitempty"`
 	CreatorPrincipalID     *string          `json:"creatorPrincipalId,omitempty"`
+	TargetIds              []string         `json:"targetIds"`
 	ExpiresAt              *string          `json:"expiresAt,omitempty"`
 	LastHeartbeatResult    *HeartbeatResult `json:"lastHeartbeatResult,omitempty"`
 	VerifiedAt             *string          `json:"verifiedAt,omitempty"`

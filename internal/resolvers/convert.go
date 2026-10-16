@@ -325,6 +325,7 @@ func gqlSecret(s *vaultv1.Secret) *Secret {
 	return &Secret{
 		ID: s.GetId(), Name: s.GetName(), FolderID: s.GetFolderId(), TypeID: s.GetTypeId(),
 		TargetID: strPtr(s.GetTargetId()), CreatorPrincipalID: emptyToNil(s.GetCreatorPrincipalId()),
+		TargetIds: append([]string{}, s.GetTargetIds()...),
 		ExpiresAt: strPtr(s.GetExpiresAt()), LastHeartbeatResult: heartbeatGQL(s.GetLastHeartbeatResult()),
 		VerifiedAt: strPtr(s.GetVerifiedAt()),
 		Masked:     boolPtr(true), ViewCount: intPtr(int(s.GetViewCount())), LastAccessedAt: strPtr(s.GetLastAccessedAt()),

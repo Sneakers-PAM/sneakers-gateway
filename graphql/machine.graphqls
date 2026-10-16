@@ -16,6 +16,12 @@ type SecretSummary {
   folderId: ID!
   typeId: ID!
   targetId: ID
+  # Every attached target, in attach order (#168); targetId above stays the
+  # first/primary entry. setSecretTargetForPrincipal's targetId still means
+  # "replace the whole list with just this one" — attachSecretTargetForPrincipal/
+  # detachSecretTargetForPrincipal add or remove one target without touching
+  # the others.
+  targetIds: [ID!]!
   # The secret is opted out of scheduled rotation / heartbeat checks.
   rotationOptOut: Boolean!
   heartbeatOptOut: Boolean!
@@ -410,6 +416,12 @@ type Mutation {
   # RACI-Author on the secret and a target the caller can see. Replace
   # semantics: the whole target list becomes just this one (#168).
   setSecretTargetForPrincipal(secretId: ID!, targetId: ID): SecretSummary!
+
+  # Attach/detach one target on a secret's list, without touching the others
+  # (#168) — unlike setSecretTargetForPrincipal, which replaces the whole
+  # list. Same RACI-Author + usable-target gate.
+  attachSecretTargetForPrincipal(secretId: ID!, targetId: ID!): SecretSummary!
+  detachSecretTargetForPrincipal(secretId: ID!, targetId: ID!): SecretSummary!
 
   # Regenerate the type's password field under its policy and store it as a
   # new version, as the calling principal (#169). Requires RACI-Author

@@ -190,6 +190,11 @@ type Secret {
   # to decide whether this secret is readable; empty on a secret created
   # before this field existed.
   creatorPrincipalId: String
+  # Every attached target, in attach order (#168); targetId above stays the
+  # first/primary entry, kept in sync. updateSecret's targetId still means
+  # "replace the whole list with just this one" — attachSecretTarget/
+  # detachSecretTarget add or remove one target without touching the others.
+  targetIds: [String!]!
   expiresAt: String
   lastHeartbeatResult: HeartbeatResult
   verifiedAt: String
@@ -1144,6 +1149,11 @@ type Mutation {
 
   createSecret(input: CreateSecretInput!): Secret!
   updateSecret(id: ID!, input: UpdateSecretInput!): Secret!
+  # Attach/detach one target on a secret's list, never touching the others
+  # (#168) — unlike updateSecret's targetId, which replaces the whole list
+  # with just the one it names.
+  attachSecretTarget(secretId: ID!, targetId: ID!): Secret!
+  detachSecretTarget(secretId: ID!, targetId: ID!): Secret!
   # Reveals ONE sensitive field; audited + RBAC-gated server-side.
   revealSecretField(id: ID!, fieldKey: String!): String!
   # Reveals ONE field from a prior version; audited + RBAC-gated server-side.

@@ -109,6 +109,7 @@ type SecretSummary struct {
 	FolderID               string           `json:"folderId"`
 	TypeID                 string           `json:"typeId"`
 	TargetID               *string          `json:"targetId,omitempty"`
+	TargetIds              []string         `json:"targetIds"`
 	RotationOptOut         bool             `json:"rotationOptOut"`
 	HeartbeatOptOut        bool             `json:"heartbeatOptOut"`
 	ValueVersion           int              `json:"valueVersion"`

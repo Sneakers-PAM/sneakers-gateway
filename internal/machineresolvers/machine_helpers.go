@@ -87,6 +87,7 @@ func summaryOf(sec *vaultv1.Secret) *SecretSummary {
 		Name:            sec.GetName(),
 		FolderID:        sec.GetFolderId(),
 		TypeID:          sec.GetTypeId(),
+		TargetIds:       append([]string{}, sec.GetTargetIds()...),
 		RotationOptOut:  sec.GetRotationOptOut(),
 		HeartbeatOptOut: sec.GetHeartbeatOptOut(),
 

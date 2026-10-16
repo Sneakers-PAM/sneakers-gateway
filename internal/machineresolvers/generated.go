@@ -71,9 +71,11 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
+		AttachSecretTargetForPrincipal   func(childComplexity int, secretID string, targetID string) int
 		ChangeSecretTypeForPrincipal     func(childComplexity int, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*SecretFieldInput) int
 		CreateFolderForPrincipal         func(childComplexity int, parentID string, name string) int
 		CreateSecretForPrincipal         func(childComplexity int, folderID string, typeID string, name string, fields []*SecretFieldInput, targetID *string, disableRotation *bool, disableHeartbeat *bool, keepFolder *bool) int
+		DetachSecretTargetForPrincipal   func(childComplexity int, secretID string, targetID string) int
 		GenerateSecretForPrincipal       func(childComplexity int, folderID string, typeID string, name string, fields []*SecretFieldInput, policyID *string, targetID *string, returnValue *bool, disableRotation *bool, disableHeartbeat *bool, keepFolder *bool) int
 		MoveSecretForPrincipal           func(childComplexity int, id string, destFolderID string) int
 		PrepareSecretUse                 func(childComplexity int, secretID string, fieldKey string, argv []string, clientLabel *string, reveal *bool, runID *string, purpose *string) int
@@ -152,6 +154,7 @@ type ComplexityRoot struct {
 		RotationEnabled        func(childComplexity int) int
 		RotationOptOut         func(childComplexity int) int
 		TargetID               func(childComplexity int) int
+		TargetIds              func(childComplexity int) int
 		TypeID                 func(childComplexity int) int
 		ValueChangedAt         func(childComplexity int) int
 		ValueVersion           func(childComplexity int) int
@@ -218,6 +221,8 @@ type MutationResolver interface {
 	RequestSecretCheck(ctx context.Context, secretID string) (int, error)
 	SaveTargetForPrincipal(ctx context.Context, input MachineTargetInput) (*MachineTarget, error)
 	SetSecretTargetForPrincipal(ctx context.Context, secretID string, targetID *string) (*SecretSummary, error)
+	AttachSecretTargetForPrincipal(ctx context.Context, secretID string, targetID string) (*SecretSummary, error)
+	DetachSecretTargetForPrincipal(ctx context.Context, secretID string, targetID string) (*SecretSummary, error)
 	RotateSecretForPrincipal(ctx context.Context, secretID string, policyID *string) (*RotatedSecret, error)
 	RestoreSecretVersionForPrincipal(ctx context.Context, secretID string, versionNo int) (*SecretSummary, error)
 	SetSecretAutomationForPrincipal(ctx context.Context, secretID string, disableRotation bool, disableHeartbeat bool) (*SecretSummary, error)
@@ -391,6 +396,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.MachineTarget.SecretCount(childComplexity), true
 
+	case "Mutation.attachSecretTargetForPrincipal":
+		if e.ComplexityRoot.Mutation.AttachSecretTargetForPrincipal == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_attachSecretTargetForPrincipal_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.AttachSecretTargetForPrincipal(childComplexity, args["secretId"].(string), args["targetId"].(string)), true
 	case "Mutation.changeSecretTypeForPrincipal":
 		if e.ComplexityRoot.Mutation.ChangeSecretTypeForPrincipal == nil {
 			break
@@ -424,6 +440,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateSecretForPrincipal(childComplexity, args["folderId"].(string), args["typeId"].(string), args["name"].(string), args["fields"].([]*SecretFieldInput), args["targetId"].(*string), args["disableRotation"].(*bool), args["disableHeartbeat"].(*bool), args["keepFolder"].(*bool)), true
+	case "Mutation.detachSecretTargetForPrincipal":
+		if e.ComplexityRoot.Mutation.DetachSecretTargetForPrincipal == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_detachSecretTargetForPrincipal_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DetachSecretTargetForPrincipal(childComplexity, args["secretId"].(string), args["targetId"].(string)), true
 	case "Mutation.generateSecretForPrincipal":
 		if e.ComplexityRoot.Mutation.GenerateSecretForPrincipal == nil {
 			break
@@ -879,6 +906,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretSummary.TargetID(childComplexity), true
+	case "SecretSummary.targetIds":
+		if e.ComplexityRoot.SecretSummary.TargetIds == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.TargetIds(childComplexity), true
 	case "SecretSummary.typeId":
 		if e.ComplexityRoot.SecretSummary.TypeID == nil {
 			break
@@ -1182,6 +1215,12 @@ type SecretSummary {
   folderId: ID!
   typeId: ID!
   targetId: ID
+  # Every attached target, in attach order (#168); targetId above stays the
+  # first/primary entry. setSecretTargetForPrincipal's targetId still means
+  # "replace the whole list with just this one" — attachSecretTargetForPrincipal/
+  # detachSecretTargetForPrincipal add or remove one target without touching
+  # the others.
+  targetIds: [ID!]!
   # The secret is opted out of scheduled rotation / heartbeat checks.
   rotationOptOut: Boolean!
   heartbeatOptOut: Boolean!
@@ -1577,6 +1616,12 @@ type Mutation {
   # semantics: the whole target list becomes just this one (#168).
   setSecretTargetForPrincipal(secretId: ID!, targetId: ID): SecretSummary!
 
+  # Attach/detach one target on a secret's list, without touching the others
+  # (#168) — unlike setSecretTargetForPrincipal, which replaces the whole
+  # list. Same RACI-Author + usable-target gate.
+  attachSecretTargetForPrincipal(secretId: ID!, targetId: ID!): SecretSummary!
+  detachSecretTargetForPrincipal(secretId: ID!, targetId: ID!): SecretSummary!
+
   # Regenerate the type's password field under its policy and store it as a
   # new version, as the calling principal (#169). Requires RACI-Author
   # (never RACI-C) on the secret's folder chain — the same grant
@@ -1760,6 +1805,8 @@ func (ec *executionContext) childFields_SecretSummary(ctx context.Context, field
 		return ec.fieldContext_SecretSummary_typeId(ctx, field)
 	case "targetId":
 		return ec.fieldContext_SecretSummary_targetId(ctx, field)
+	case "targetIds":
+		return ec.fieldContext_SecretSummary_targetIds(ctx, field)
 	case "rotationOptOut":
 		return ec.fieldContext_SecretSummary_rotationOptOut(ctx, field)
 	case "heartbeatOptOut":
@@ -2000,6 +2047,28 @@ func (ec *executionContext) childFields___Type(ctx context.Context, field graphq
 
 // region    ***************************** args.gotpl *****************************
 
+func (ec *executionContext) field_Mutation_attachSecretTargetForPrincipal_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "secretId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["secretId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "targetId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["targetId"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_changeSecretTypeForPrincipal_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2127,6 +2196,28 @@ func (ec *executionContext) field_Mutation_createSecretForPrincipal_args(ctx con
 		return nil, err
 	}
 	args["keepFolder"] = arg7
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_detachSecretTargetForPrincipal_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "secretId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["secretId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "targetId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["targetId"] = arg1
 	return args, nil
 }
 
@@ -3785,6 +3876,94 @@ func (ec *executionContext) fieldContext_Mutation_setSecretTargetForPrincipal(ct
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_attachSecretTargetForPrincipal(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_attachSecretTargetForPrincipal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().AttachSecretTargetForPrincipal(ctx, fc.Args["secretId"].(string), fc.Args["targetId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *SecretSummary) graphql.Marshaler {
+			return ec.marshalNSecretSummary2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋmachineresolversᚐSecretSummary(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_attachSecretTargetForPrincipal(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretSummary(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_attachSecretTargetForPrincipal_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_detachSecretTargetForPrincipal(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_detachSecretTargetForPrincipal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DetachSecretTargetForPrincipal(ctx, fc.Args["secretId"].(string), fc.Args["targetId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *SecretSummary) graphql.Marshaler {
+			return ec.marshalNSecretSummary2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋmachineresolversᚐSecretSummary(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_detachSecretTargetForPrincipal(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretSummary(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_detachSecretTargetForPrincipal_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_rotateSecretForPrincipal(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5029,6 +5208,29 @@ func (ec *executionContext) _SecretSummary_targetId(ctx context.Context, field g
 	)
 }
 func (ec *executionContext) fieldContext_SecretSummary_targetId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _SecretSummary_targetIds(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_targetIds(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TargetIds, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNID2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_targetIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type ID does not have child fields"))
 }
 
@@ -7616,6 +7818,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "attachSecretTargetForPrincipal":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_attachSecretTargetForPrincipal(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "detachSecretTargetForPrincipal":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_detachSecretTargetForPrincipal(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "rotateSecretForPrincipal":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_rotateSecretForPrincipal(ctx, field)
@@ -8251,6 +8467,11 @@ func (ec *executionContext) _SecretSummary(ctx context.Context, sel ast.Selectio
 			}
 		case "targetId":
 			out.Values[i] = ec._SecretSummary_targetId(ctx, field, obj)
+		case "targetIds":
+			out.Values[i] = ec._SecretSummary_targetIds(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "rotationOptOut":
 			out.Values[i] = ec._SecretSummary_rotationOptOut(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -9076,6 +9297,36 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNID2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNID2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNID2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalNInt2int(ctx context.Context, v any) (int, error) {

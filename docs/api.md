@@ -192,6 +192,21 @@ default) and normalizes a legacy single-`connectionId` save, same as it always h
 `connectionId` names one of that target's own connections; naming any other id, or one that isn't
 `ssh`, is refused the same way an unresolvable target or connection already is.
 
+### One secret, many targets
+
+`Secret.targetIds` (`[String!]!`) lists every target a secret is attached to, in attach order;
+`Secret.targetId` stays the first/primary entry, kept in sync, for a caller that hasn't moved to
+the list. `updateSecret`'s `targetId` keeps its existing meaning: replace the whole list with just
+this one.
+
+- `attachSecretTarget(secretId, targetId)` and `detachSecretTarget(secretId, targetId)` add or
+  remove ONE target without touching the others, and are idempotent: attaching an
+  already-attached target, or detaching one that isn't attached, is a no-op, not an error.
+- Host-key pins (`Target.sshHostKeys`) stay per target, unaffected.
+- `openSshSession` on a secret attached to more than one target needs `targetId` to say which one
+  to open; see [sneakers-vault docs/api.md](https://github.com/Sneakers-PAM/sneakers-vault/blob/main/docs/api.md)
+  for how heartbeat and rotation run per target.
+
 ### Contribute, own reveal
 
 `RaciGrant` gains `own`, valid only on the `C` (read) cell. Combined with `R: allow` it is a grant

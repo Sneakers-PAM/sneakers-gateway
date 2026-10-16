@@ -21,6 +21,17 @@
 
 `targetsForPrincipal(query, connectionId)` lists the targets the caller can see, each with `sshHostKeys` (the pinned SSH host keys; `[]` when not pinned). `saveTargetForPrincipal(input)` creates or updates one; `sshHostKeys` in the input is the whole pin list, left out to keep the current pins. Changing the pins needs a human site admin, so a token gets `PermissionDenied` if it sends a different list. See [api.md](api.md#targets-and-ssh-host-keys).
 
+### One secret, many targets
+
+`SecretSummary.targetIds` lists every target a secret is attached to, in attach order; `targetId` stays the first/primary entry. `setSecretTargetForPrincipal(secretId, targetId)` keeps its existing meaning: replace the whole list with just this one (or clear it, omitting `targetId`).
+
+| Mutation | Needs | Returns |
+|---|---|---|
+| `attachSecretTargetForPrincipal(secretId, targetId)` | Author on the secret, a target the caller can see | `SecretSummary` |
+| `detachSecretTargetForPrincipal(secretId, targetId)` | Author on the secret | `SecretSummary` |
+
+Both add or remove ONE target without touching the others, and both are idempotent: attaching an already-attached target, or detaching one that isn't attached, is a no-op, not an error.
+
 ## Rotate and restore
 
 A principal with Author (never just read) on a secret can rotate it and roll back to an earlier version, without the human web's MFA/checkout.

@@ -225,6 +225,28 @@ func (r *mutationResolver) SetSecretTargetForPrincipal(ctx context.Context, secr
 	return summaryOf(resp.GetSecret()), nil
 }
 
+// AttachSecretTargetForPrincipal is the resolver for the attachSecretTargetForPrincipal field.
+func (r *mutationResolver) AttachSecretTargetForPrincipal(ctx context.Context, secretID string, targetID string) (*SecretSummary, error) {
+	resp, err := r.Vault.AttachSecretTargetForPrincipal(ctx, &vaultv1.AttachSecretTargetForPrincipalRequest{
+		Actor: resolvers.MachineActorOf(ctx), SecretId: secretID, TargetId: targetID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return summaryOf(resp.GetSecret()), nil
+}
+
+// DetachSecretTargetForPrincipal is the resolver for the detachSecretTargetForPrincipal field.
+func (r *mutationResolver) DetachSecretTargetForPrincipal(ctx context.Context, secretID string, targetID string) (*SecretSummary, error) {
+	resp, err := r.Vault.DetachSecretTargetForPrincipal(ctx, &vaultv1.DetachSecretTargetForPrincipalRequest{
+		Actor: resolvers.MachineActorOf(ctx), SecretId: secretID, TargetId: targetID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return summaryOf(resp.GetSecret()), nil
+}
+
 // RotateSecretForPrincipal is the resolver for the rotateSecretForPrincipal field.
 func (r *mutationResolver) RotateSecretForPrincipal(ctx context.Context, secretID string, policyID *string) (*RotatedSecret, error) {
 	resp, err := r.Vault.RotateSecretForPrincipal(ctx, &vaultv1.RotateSecretForPrincipalRequest{
