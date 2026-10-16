@@ -16,6 +16,12 @@ type SecretSummary {
   folderId: ID!
   typeId: ID!
   targetId: ID
+  # Every attached target, in attach order (#168); targetId above stays the
+  # first/primary entry. setSecretTargetForPrincipal's targetId still means
+  # "replace the whole list with just this one" — attachSecretTargetForPrincipal/
+  # detachSecretTargetForPrincipal add or remove one target without touching
+  # the others.
+  targetIds: [ID!]!
   # The secret is opted out of scheduled rotation / heartbeat checks.
   rotationOptOut: Boolean!
   heartbeatOptOut: Boolean!
@@ -76,6 +82,14 @@ type SecretPlacement {
 type GeneratedSecret {
   secret: SecretSummary!
   generatedValue: String
+}
+
+# rotateSecretForPrincipal's result: unlike generateSecretForPrincipal's
+# generatedValue (returned only when asked), newValue is always set — the
+# whole point of calling rotate is to push the new value to the target next.
+type RotatedSecret {
+  secret: SecretSummary!
+  newValue: String!
 }
 
 # One field key/value pair for createSecretForPrincipal /
@@ -399,8 +413,30 @@ type Mutation {
   saveTargetForPrincipal(input: MachineTargetInput!): MachineTarget!
 
   # Attach a target to a secret, or detach it when targetId is omitted. Needs
-  # RACI-Author on the secret and a target the caller can see.
+  # RACI-Author on the secret and a target the caller can see. Replace
+  # semantics: the whole target list becomes just this one (#168).
   setSecretTargetForPrincipal(secretId: ID!, targetId: ID): SecretSummary!
+
+  # Attach/detach one target on a secret's list, without touching the others
+  # (#168) — unlike setSecretTargetForPrincipal, which replaces the whole
+  # list. Same RACI-Author + usable-target gate.
+  attachSecretTargetForPrincipal(secretId: ID!, targetId: ID!): SecretSummary!
+  detachSecretTargetForPrincipal(secretId: ID!, targetId: ID!): SecretSummary!
+
+  # Regenerate the type's password field under its policy and store it as a
+  # new version, as the calling principal (#169). Requires RACI-Author
+  # (never RACI-C) on the secret's folder chain — the same grant
+  # createSecretForPrincipal needs. Refused while a scheduled rotation of
+  # the secret is queued or running. The new value is always returned: the
+  # caller's reason to rotate (e.g. a local-admin-password broker) is to
+  # push it to the target next, store then set.
+  rotateSecretForPrincipal(secretId: ID!, policyId: ID): RotatedSecret!
+
+  # Make a prior version current again, as the calling principal (#169).
+  # Requires RACI-Author on the secret's folder chain (never the human-only
+  # recovery role the web's restore needs). A new version, never a history
+  # rewrite. Refused while a scheduled rotation is queued or running.
+  restoreSecretVersionForPrincipal(secretId: ID!, versionNo: Int!): SecretSummary!
 
   # Opt a secret out of (true) or back into (false) scheduled rotation and
   # heartbeat checks. Needs RACI-Author on the secret. Both flags are set on

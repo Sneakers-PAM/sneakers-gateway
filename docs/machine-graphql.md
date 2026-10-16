@@ -21,6 +21,30 @@
 
 `targetsForPrincipal(query, connectionId)` lists the targets the caller can see, each with `sshHostKeys` (the pinned SSH host keys; `[]` when not pinned). `saveTargetForPrincipal(input)` creates or updates one; `sshHostKeys` in the input is the whole pin list, left out to keep the current pins. Changing the pins needs a human site admin, so a token gets `PermissionDenied` if it sends a different list. See [api.md](api.md#targets-and-ssh-host-keys).
 
+### One secret, many targets
+
+`SecretSummary.targetIds` lists every target a secret is attached to, in attach order; `targetId` stays the first/primary entry. `setSecretTargetForPrincipal(secretId, targetId)` keeps its existing meaning: replace the whole list with just this one (or clear it, omitting `targetId`).
+
+| Mutation | Needs | Returns |
+|---|---|---|
+| `attachSecretTargetForPrincipal(secretId, targetId)` | Author on the secret, a target the caller can see | `SecretSummary` |
+| `detachSecretTargetForPrincipal(secretId, targetId)` | Author on the secret | `SecretSummary` |
+
+Both add or remove ONE target without touching the others, and both are idempotent: attaching an already-attached target, or detaching one that isn't attached, is a no-op, not an error.
+
+## Rotate and restore
+
+A principal with Author (never just read) on a secret can rotate it and roll back to an earlier version, without the human web's MFA/checkout.
+
+| Mutation | Needs | Returns |
+|---|---|---|
+| `rotateSecretForPrincipal(secretId, policyId)` | Author on the secret | `RotatedSecret { secret, newValue }` |
+| `restoreSecretVersionForPrincipal(secretId, versionNo)` | Author on the secret | `SecretSummary` |
+
+- `rotateSecretForPrincipal` regenerates the type's password field under its policy (or the override named by `policyId`) and stores it as a new version. `newValue` is always set — unlike `generateSecretForPrincipal`'s opt-in `generatedValue`, rotating is always for pushing the new value to the target next: store first, then set on the host.
+- `restoreSecretVersionForPrincipal` makes a prior version current again, as a new version — never a history rewrite.
+- Both are refused (`FailedPrecondition`, audited) while a scheduled rotation of the secret is queued or running, and neither ever changes a target's pinned SSH host keys.
+
 ## Secret uses
 
 Personal tokens only. `prepareSecretUse(secretId, fieldKey, argv, clientLabel, reveal, runId, purpose)` asks to use one field for the exact command in `argv` (or, with `reveal: true`, for the value itself); `secretUse(id)` polls it and `redeemSecretUse(id)` collects the value once, after approval. A use is approved at once unless the secret's approval level needs a decision (see [api.md](api.md#pending-secret-uses-approvals-and-runs)): then it waits for an owner or approver, or, when `confirm` is true, for the token's own person to confirm the task once in the web. There is no second factor on this path: after `/login`, a token needs no MFA.

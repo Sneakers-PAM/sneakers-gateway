@@ -324,7 +324,8 @@ func stepUpModeProto(m StepUpMode) vaultv1.StepUpMode {
 func gqlSecret(s *vaultv1.Secret) *Secret {
 	return &Secret{
 		ID: s.GetId(), Name: s.GetName(), FolderID: s.GetFolderId(), TypeID: s.GetTypeId(),
-		TargetID:  strPtr(s.GetTargetId()),
+		TargetID: strPtr(s.GetTargetId()), CreatorPrincipalID: emptyToNil(s.GetCreatorPrincipalId()),
+		TargetIds: append([]string{}, s.GetTargetIds()...),
 		ExpiresAt: strPtr(s.GetExpiresAt()), LastHeartbeatResult: heartbeatGQL(s.GetLastHeartbeatResult()),
 		VerifiedAt: strPtr(s.GetVerifiedAt()),
 		Masked:     boolPtr(true), ViewCount: intPtr(int(s.GetViewCount())), LastAccessedAt: strPtr(s.GetLastAccessedAt()),
@@ -543,7 +544,7 @@ func gqlRaciGrants(grants map[string]string) []*RaciRuleGrant {
 			continue
 		}
 		switch RaciGrant(v) {
-		case RaciGrantAllow, RaciGrantDeny:
+		case RaciGrantAllow, RaciGrantDeny, RaciGrantOwn:
 			out = append(out, &RaciRuleGrant{Action: act, Value: RaciGrant(v)})
 		}
 	}
@@ -566,7 +567,7 @@ func protoRaciRuleInput(in *RaciRuleInput) *vaultv1.RaciRule {
 		if g == nil {
 			continue
 		}
-		if g.Value == RaciGrantAllow || g.Value == RaciGrantDeny {
+		if g.Value == RaciGrantAllow || g.Value == RaciGrantDeny || g.Value == RaciGrantOwn {
 			grants[string(g.Action)] = string(g.Value)
 		}
 	}

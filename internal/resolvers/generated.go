@@ -320,6 +320,7 @@ type ComplexityRoot struct {
 		AddApprovalComment       func(childComplexity int, requestID string, body string) int
 		AddFolderRule            func(childComplexity int, folderID string, subjectKind SubjectKind, subjectID string, role FolderRole) int
 		AddGroupMember           func(childComplexity int, userID string, groupID string) int
+		AttachSecretTarget       func(childComplexity int, secretID string, targetID string) int
 		BeginMfaPasskey          func(childComplexity int) int
 		BreakGlassSecret         func(childComplexity int, secretID string, reason string, code string, sessionID *string) int
 		CheckinSecret            func(childComplexity int, secretID string) int
@@ -347,6 +348,7 @@ type ComplexityRoot struct {
 		DeleteSecret             func(childComplexity int, id string) int
 		DeleteSecretType         func(childComplexity int, id string) int
 		DeleteTarget             func(childComplexity int, id string) int
+		DetachSecretTarget       func(childComplexity int, secretID string, targetID string) int
 		DisableServiceAccount    func(childComplexity int, id string) int
 		ExportCertificate        func(childComplexity int, secretID string, format string, newPassphrase *string) int
 		GenerateKeyPair          func(childComplexity int, format string) int
@@ -522,6 +524,7 @@ type ComplexityRoot struct {
 	Secret struct {
 		AlwaysRequireApproval  func(childComplexity int) int
 		CanRead                func(childComplexity int) int
+		CreatorPrincipalID     func(childComplexity int) int
 		ExpiresAt              func(childComplexity int) int
 		FolderID               func(childComplexity int) int
 		HeartbeatBlockedReason func(childComplexity int) int
@@ -541,6 +544,7 @@ type ComplexityRoot struct {
 		RotationIntervalDays   func(childComplexity int) int
 		RotationOptOut         func(childComplexity int) int
 		TargetID               func(childComplexity int) int
+		TargetIds              func(childComplexity int) int
 		TypeID                 func(childComplexity int) int
 		VerifiedAt             func(childComplexity int) int
 		ViewCount              func(childComplexity int) int
@@ -758,6 +762,8 @@ type MutationResolver interface {
 	ImportExtensionFromJSON(ctx context.Context, json string) (*SecretType, error)
 	CreateSecret(ctx context.Context, input CreateSecretInput) (*Secret, error)
 	UpdateSecret(ctx context.Context, id string, input UpdateSecretInput) (*Secret, error)
+	AttachSecretTarget(ctx context.Context, secretID string, targetID string) (*Secret, error)
+	DetachSecretTarget(ctx context.Context, secretID string, targetID string) (*Secret, error)
 	RevealSecretField(ctx context.Context, id string, fieldKey string) (string, error)
 	RevealSecretVersionField(ctx context.Context, secretID string, versionNo int, fieldKey string) (string, error)
 	RestoreSecretVersion(ctx context.Context, secretID string, versionNo int) (*Secret, error)
@@ -2047,6 +2053,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.AddGroupMember(childComplexity, args["userId"].(string), args["groupId"].(string)), true
+	case "Mutation.attachSecretTarget":
+		if e.ComplexityRoot.Mutation.AttachSecretTarget == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_attachSecretTarget_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.AttachSecretTarget(childComplexity, args["secretId"].(string), args["targetId"].(string)), true
 	case "Mutation.beginMfaPasskey":
 		if e.ComplexityRoot.Mutation.BeginMfaPasskey == nil {
 			break
@@ -2339,6 +2356,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteTarget(childComplexity, args["id"].(string)), true
+	case "Mutation.detachSecretTarget":
+		if e.ComplexityRoot.Mutation.DetachSecretTarget == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_detachSecretTarget_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DetachSecretTarget(childComplexity, args["secretId"].(string), args["targetId"].(string)), true
 	case "Mutation.disableServiceAccount":
 		if e.ComplexityRoot.Mutation.DisableServiceAccount == nil {
 			break
@@ -3654,6 +3682,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Secret.CanRead(childComplexity), true
+	case "Secret.creatorPrincipalId":
+		if e.ComplexityRoot.Secret.CreatorPrincipalID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Secret.CreatorPrincipalID(childComplexity), true
 	case "Secret.expiresAt":
 		if e.ComplexityRoot.Secret.ExpiresAt == nil {
 			break
@@ -3768,6 +3802,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Secret.TargetID(childComplexity), true
+	case "Secret.targetIds":
+		if e.ComplexityRoot.Secret.TargetIds == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Secret.TargetIds(childComplexity), true
 	case "Secret.typeId":
 		if e.ComplexityRoot.Secret.TypeID == nil {
 			break
@@ -4803,8 +4843,12 @@ enum RaciAction { C I A R }
 
 # A folder's step-up-on-reveal override.
 enum StepUpMode { inherit require off }
-# Tri-state grant per action cell: allow, deny, or blank (fall through).
-enum RaciGrant { allow deny }
+# Tri-state grant per action cell: allow, deny, or blank (fall through). own
+# is valid only on the C (read) cell: "contribute, own reveal" — combined
+# with an R allow, create/update anywhere R allows, but reveal only a secret
+# this principal created (see Secret.creatorPrincipalId). Saving own on any
+# cell but C is refused.
+enum RaciGrant { allow deny own }
 
 # One grant cell on a RACI rule row. A missing action = blank (fall through).
 type RaciRuleGrant {
@@ -4892,6 +4936,16 @@ type Secret {
   folderId: String!
   typeId: String!
   targetId: String
+  # The principal (human user id or non-human principal id) that created
+  # this secret, set once at creation. Used by an "own reveal" folder grant
+  # to decide whether this secret is readable; empty on a secret created
+  # before this field existed.
+  creatorPrincipalId: String
+  # Every attached target, in attach order (#168); targetId above stays the
+  # first/primary entry, kept in sync. updateSecret's targetId still means
+  # "replace the whole list with just this one" — attachSecretTarget/
+  # detachSecretTarget add or remove one target without touching the others.
+  targetIds: [String!]!
   expiresAt: String
   lastHeartbeatResult: HeartbeatResult
   verifiedAt: String
@@ -5846,6 +5900,11 @@ type Mutation {
 
   createSecret(input: CreateSecretInput!): Secret!
   updateSecret(id: ID!, input: UpdateSecretInput!): Secret!
+  # Attach/detach one target on a secret's list, never touching the others
+  # (#168) — unlike updateSecret's targetId, which replaces the whole list
+  # with just the one it names.
+  attachSecretTarget(secretId: ID!, targetId: ID!): Secret!
+  detachSecretTarget(secretId: ID!, targetId: ID!): Secret!
   # Reveals ONE sensitive field; audited + RBAC-gated server-side.
   revealSecretField(id: ID!, fieldKey: String!): String!
   # Reveals ONE field from a prior version; audited + RBAC-gated server-side.
@@ -6772,6 +6831,10 @@ func (ec *executionContext) childFields_Secret(ctx context.Context, field graphq
 		return ec.fieldContext_Secret_typeId(ctx, field)
 	case "targetId":
 		return ec.fieldContext_Secret_targetId(ctx, field)
+	case "creatorPrincipalId":
+		return ec.fieldContext_Secret_creatorPrincipalId(ctx, field)
+	case "targetIds":
+		return ec.fieldContext_Secret_targetIds(ctx, field)
 	case "expiresAt":
 		return ec.fieldContext_Secret_expiresAt(ctx, field)
 	case "lastHeartbeatResult":
@@ -7392,6 +7455,28 @@ func (ec *executionContext) field_Mutation_addGroupMember_args(ctx context.Conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_attachSecretTarget_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "secretId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["secretId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "targetId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["targetId"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_breakGlassSecret_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7969,6 +8054,28 @@ func (ec *executionContext) field_Mutation_deleteTarget_args(ctx context.Context
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_detachSecretTarget_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "secretId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["secretId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "targetId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["targetId"] = arg1
 	return args, nil
 }
 
@@ -14634,6 +14741,94 @@ func (ec *executionContext) fieldContext_Mutation_updateSecret(ctx context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_attachSecretTarget(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_attachSecretTarget(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().AttachSecretTarget(ctx, fc.Args["secretId"].(string), fc.Args["targetId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Secret) graphql.Marshaler {
+			return ec.marshalNSecret2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecret(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_attachSecretTarget(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Secret(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_attachSecretTarget_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_detachSecretTarget(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_detachSecretTarget(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DetachSecretTarget(ctx, fc.Args["secretId"].(string), fc.Args["targetId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Secret) graphql.Marshaler {
+			return ec.marshalNSecret2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecret(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_detachSecretTarget(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Secret(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_detachSecretTarget_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_revealSecretField(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -20731,6 +20926,52 @@ func (ec *executionContext) _Secret_targetId(ctx context.Context, field graphql.
 	)
 }
 func (ec *executionContext) fieldContext_Secret_targetId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Secret_creatorPrincipalId(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Secret_creatorPrincipalId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatorPrincipalID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Secret_creatorPrincipalId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Secret_targetIds(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Secret_targetIds(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TargetIds, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Secret_targetIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
@@ -28316,6 +28557,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "attachSecretTarget":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_attachSecretTarget(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "detachSecretTarget":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_detachSecretTarget(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "revealSecretField":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_revealSecretField(ctx, field)
@@ -30471,6 +30726,13 @@ func (ec *executionContext) _Secret(ctx context.Context, sel ast.SelectionSet, o
 			}
 		case "targetId":
 			out.Values[i] = ec._Secret_targetId(ctx, field, obj)
+		case "creatorPrincipalId":
+			out.Values[i] = ec._Secret_creatorPrincipalId(ctx, field, obj)
+		case "targetIds":
+			out.Values[i] = ec._Secret_targetIds(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "expiresAt":
 			out.Values[i] = ec._Secret_expiresAt(ctx, field, obj)
 		case "lastHeartbeatResult":

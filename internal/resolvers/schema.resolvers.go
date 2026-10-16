@@ -194,6 +194,28 @@ func (r *mutationResolver) UpdateSecret(ctx context.Context, id string, input Up
 	return gqlSecret(resp.GetSecret()), nil
 }
 
+// AttachSecretTarget is the resolver for the attachSecretTarget field.
+func (r *mutationResolver) AttachSecretTarget(ctx context.Context, secretID string, targetID string) (*Secret, error) {
+	resp, err := r.Vault.AttachSecretTarget(ctx, &vaultv1.AttachSecretTargetRequest{
+		Actor: actorOf(ctx), SecretId: secretID, TargetId: targetID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return gqlSecret(resp.GetSecret()), nil
+}
+
+// DetachSecretTarget is the resolver for the detachSecretTarget field.
+func (r *mutationResolver) DetachSecretTarget(ctx context.Context, secretID string, targetID string) (*Secret, error) {
+	resp, err := r.Vault.DetachSecretTarget(ctx, &vaultv1.DetachSecretTargetRequest{
+		Actor: actorOf(ctx), SecretId: secretID, TargetId: targetID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return gqlSecret(resp.GetSecret()), nil
+}
+
 // RevealSecretField is the resolver for the revealSecretField field.
 func (r *mutationResolver) RevealSecretField(ctx context.Context, id string, fieldKey string) (string, error) {
 	resp, err := r.Vault.RevealSecretField(ctx, &vaultv1.RevealSecretFieldRequest{Actor: actorOf(ctx), Id: id, FieldKey: fieldKey})

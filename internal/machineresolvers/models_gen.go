@@ -79,6 +79,11 @@ type RedeemedSecretUse struct {
 	Value string     `json:"value"`
 }
 
+type RotatedSecret struct {
+	Secret   *SecretSummary `json:"secret"`
+	NewValue string         `json:"newValue"`
+}
+
 type SecretCheckStatus struct {
 	Result        string `json:"result"`
 	CheckedAtUnix int    `json:"checkedAtUnix"`
@@ -104,6 +109,7 @@ type SecretSummary struct {
 	FolderID               string           `json:"folderId"`
 	TypeID                 string           `json:"typeId"`
 	TargetID               *string          `json:"targetId,omitempty"`
+	TargetIds              []string         `json:"targetIds"`
 	RotationOptOut         bool             `json:"rotationOptOut"`
 	HeartbeatOptOut        bool             `json:"heartbeatOptOut"`
 	ValueVersion           int              `json:"valueVersion"`
