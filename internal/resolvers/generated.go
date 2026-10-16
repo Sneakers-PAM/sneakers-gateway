@@ -361,7 +361,7 @@ type ComplexityRoot struct {
 		MintAPIToken             func(childComplexity int, serviceAccountID string, scope string, expiresAt *int) int
 		MoveFolder               func(childComplexity int, id string, newParentID *string) int
 		OpenBreakGlassSession    func(childComplexity int, reason string, code string) int
-		OpenSSHSession           func(childComplexity int, secretID string, connectionID *string) int
+		OpenSSHSession           func(childComplexity int, secretID string, connectionID *string, targetID *string) int
 		PinTargetHostKey         func(childComplexity int, targetID string, fingerprint string) int
 		PrepareSecretReveal      func(childComplexity int, secretID string, fieldKey string, runID *string) int
 		RedeemSecretReveal       func(childComplexity int, id string) int
@@ -478,6 +478,7 @@ type ComplexityRoot struct {
 		SecretUsesToDecide        func(childComplexity int) int
 		SecretVersions            func(childComplexity int, secretID string) int
 		SecretsByStatus           func(childComplexity int, status string) int
+		SecretsByTarget           func(childComplexity int, targetID string) int
 		SecretsInFolder           func(childComplexity int, folderID string, includeRetired *bool) int
 		SecuritySettings          func(childComplexity int) int
 		ServiceAccounts           func(childComplexity int) int
@@ -821,7 +822,7 @@ type MutationResolver interface {
 	UpdateUser(ctx context.Context, userID string, name string, email string, username string) (*User, error)
 	MarkNotificationRead(ctx context.Context, id string) (bool, error)
 	MarkAllNotificationsRead(ctx context.Context) (bool, error)
-	OpenSSHSession(ctx context.Context, secretID string, connectionID *string) (*SSHSessionTicket, error)
+	OpenSSHSession(ctx context.Context, secretID string, connectionID *string, targetID *string) (*SSHSessionTicket, error)
 	CreateServiceAccount(ctx context.Context, name string, description string) (*ServiceAccount, error)
 	DisableServiceAccount(ctx context.Context, id string) (*ServiceAccount, error)
 	MintAPIToken(ctx context.Context, serviceAccountID string, scope string, expiresAt *int) (*MintAPITokenResult, error)
@@ -855,6 +856,7 @@ type QueryResolver interface {
 	BreakGlassBrowse(ctx context.Context, sessionID string, folderID *string) (*BreakGlassBrowse, error)
 	BreakGlassSessions(ctx context.Context, limit *int) ([]*BreakGlassSession, error)
 	SecretsInFolder(ctx context.Context, folderID string, includeRetired *bool) ([]*Secret, error)
+	SecretsByTarget(ctx context.Context, targetID string) ([]*Secret, error)
 	Secret(ctx context.Context, id string) (*Secret, error)
 	SecretStats(ctx context.Context) (*SecretStats, error)
 	TopAccessedSecrets(ctx context.Context, limit *int) ([]*Secret, error)
@@ -2504,7 +2506,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.OpenSSHSession(childComplexity, args["secretId"].(string), args["connectionId"].(*string)), true
+		return e.ComplexityRoot.Mutation.OpenSSHSession(childComplexity, args["secretId"].(string), args["connectionId"].(*string), args["targetId"].(*string)), true
 	case "Mutation.pinTargetHostKey":
 		if e.ComplexityRoot.Mutation.PinTargetHostKey == nil {
 			break
@@ -3434,6 +3436,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SecretsByStatus(childComplexity, args["status"].(string)), true
+	case "Query.secretsByTarget":
+		if e.ComplexityRoot.Query.SecretsByTarget == nil {
+			break
+		}
+
+		args, err := ec.field_Query_secretsByTarget_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SecretsByTarget(childComplexity, args["targetId"].(string)), true
 	case "Query.secretsInFolder":
 		if e.ComplexityRoot.Query.SecretsInFolder == nil {
 			break
@@ -5677,6 +5690,11 @@ type Query {
   # for the audit log. limit defaults to 50, at most 200.
   breakGlassSessions(limit: Int): [BreakGlassSession!]!
   secretsInFolder(folderId: String!, includeRetired: Boolean): [Secret!]!
+  # Every secret attached to a target (#168), for the target's own page.
+  # Same visibility as secretsInFolder: a secret the caller can see but not
+  # read is included locked (canRead false); one an explicit deny covers is
+  # omitted.
+  secretsByTarget(targetId: ID!): [Secret!]!
   secret(id: ID!): Secret
   secretStats: SecretStats!
   topAccessedSecrets(limit: Int): [Secret!]!
@@ -6077,12 +6095,15 @@ type Mutation {
   # Mark all of the acting user's notifications read.
   markAllNotificationsRead: Boolean!
 
-  # Authorizes an interactive SSH session against an ssh-key secret's bound
-  # target: reveals the key (audited, RBAC-gated), hands session parameters to
-  # sshbroker, and returns a single-use WebSocket ticket. Starts on the
-  # target's default connection unless connectionId names one of the
-  # target's own connections.
-  openSshSession(secretId: ID!, connectionId: ID): SshSessionTicket!
+  # Authorizes an interactive SSH session against one of an ssh-key secret's
+  # attached targets: reveals the key (audited, RBAC-gated), hands session
+  # parameters to sshbroker, and returns a single-use WebSocket ticket.
+  # Starts on the target's default connection unless connectionId names one
+  # of the target's own connections. targetId picks which attached target to
+  # open: required when the secret has more than one, and defaults to the
+  # only one otherwise (#168). sshbroker independently checks targetId is
+  # actually attached before any auth is sent.
+  openSshSession(secretId: ID!, connectionId: ID, targetId: ID): SshSessionTicket!
 
   # Service-account + API-token management. Site-admin-only:
   # these are the human /graphql admin operations for the machine-auth surface
@@ -8348,6 +8369,14 @@ func (ec *executionContext) field_Mutation_openSshSession_args(ctx context.Conte
 		return nil, err
 	}
 	args["connectionId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "targetId",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOID2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["targetId"] = arg2
 	return args, nil
 }
 
@@ -9498,6 +9527,20 @@ func (ec *executionContext) field_Query_secretsByStatus_args(ctx context.Context
 		return nil, err
 	}
 	args["status"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_secretsByTarget_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "targetId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["targetId"] = arg0
 	return args, nil
 }
 
@@ -17293,7 +17336,7 @@ func (ec *executionContext) _Mutation_openSshSession(ctx context.Context, field 
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().OpenSSHSession(ctx, fc.Args["secretId"].(string), fc.Args["connectionId"].(*string))
+			return ec.Resolvers.Mutation().OpenSSHSession(ctx, fc.Args["secretId"].(string), fc.Args["connectionId"].(*string), fc.Args["targetId"].(*string))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *SSHSessionTicket) graphql.Marshaler {
@@ -19128,6 +19171,50 @@ func (ec *executionContext) fieldContext_Query_secretsInFolder(ctx context.Conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_secretsInFolder_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_secretsByTarget(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_secretsByTarget(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SecretsByTarget(ctx, fc.Args["targetId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*Secret) graphql.Marshaler {
+			return ec.marshalNSecret2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_secretsByTarget(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Secret(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_secretsByTarget_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -29799,6 +29886,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_secretsInFolder(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "secretsByTarget":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_secretsByTarget(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

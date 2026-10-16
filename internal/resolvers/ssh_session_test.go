@@ -30,7 +30,8 @@ type fakeSSHVault struct {
 
 	secretTypeID string // defaults to "type-ssh-key" if empty
 	targetID     string
-	getSecretErr error // simulate an upstream authz/read denial on GetSecret
+	targetIDs    []string // #168: several attached targets; wins over targetID when set
+	getSecretErr error    // simulate an upstream authz/read denial on GetSecret
 }
 
 func (f *fakeSSHVault) GetSecret(_ context.Context, req *vaultv1.GetSecretRequest, _ ...grpc.CallOption) (*vaultv1.GetSecretResponse, error) {
@@ -41,16 +42,22 @@ func (f *fakeSSHVault) GetSecret(_ context.Context, req *vaultv1.GetSecretReques
 	if typeID == "" {
 		typeID = "type-ssh-key"
 	}
-	return &vaultv1.GetSecretResponse{Secret: &vaultv1.Secret{
-		Id:       req.GetId(),
-		TypeId:   typeID,
-		TargetId: f.targetID,
-	}}, nil
+	sec := &vaultv1.Secret{Id: req.GetId(), TypeId: typeID}
+	if f.targetID != "" {
+		sec.TargetId = f.targetID
+		sec.TargetIds = []string{f.targetID}
+	}
+	if len(f.targetIDs) > 0 {
+		sec.TargetId = f.targetIDs[0]
+		sec.TargetIds = f.targetIDs
+	}
+	return &vaultv1.GetSecretResponse{Secret: sec}, nil
 }
 
 func (f *fakeSSHVault) ListTargets(_ context.Context, _ *vaultv1.ListTargetsRequest, _ ...grpc.CallOption) (*vaultv1.ListTargetsResponse, error) {
 	return &vaultv1.ListTargetsResponse{Targets: []*vaultv1.Target{
 		{Id: "target-1", Hostname: "host.example.org", ConnectionId: "conn-1"},
+		{Id: "target-2", Hostname: "host-2.example.org", ConnectionId: "conn-1"},
 	}}, nil
 }
 
@@ -97,6 +104,8 @@ func newSSHClient(fv vaultv1.VaultServiceClient, fb sshbrokerv1.SSHBrokerService
 }
 
 const openSSHSessionMutation = `mutation { openSshSession(secretId:"s1") { wsUrl ticket sessionId expiresInSeconds } }`
+
+const openSSHSessionWithTargetMutation = `mutation($targetId: ID) { openSshSession(secretId:"s1", targetId: $targetId) { wsUrl ticket sessionId expiresInSeconds } }`
 
 func TestSshSessionGetSecretDeniedDoesNotCallBroker(t *testing.T) {
 	fv := &fakeSSHVault{targetID: "target-1", getSecretErr: fmt.Errorf("permission denied")}
@@ -255,6 +264,102 @@ func TestSshSessionReturnsBrokerTicket(t *testing.T) {
 	if got.WsURL != "ws://localhost:9096/ssh/session" || got.Ticket != "ticket-abc" ||
 		got.SessionID != "sess-1" || got.ExpiresInSeconds != 30 {
 		t.Fatalf("ticket not surfaced correctly: %+v", got)
+	}
+}
+
+// TestSshSessionDefaultsToTheOnlyTarget proves a secret with exactly one
+// attached target opens on it without targetId being given (#168: required
+// only when there's more than one).
+func TestSshSessionDefaultsToTheOnlyTarget(t *testing.T) {
+	fv := &fakeSSHVault{targetID: "target-1"}
+	fb := &fakeSSHBroker{}
+	c := newSSHClient(fv, fb, "user-morgan")
+
+	var resp struct {
+		OpenSshSession struct {
+			WsURL, Ticket, SessionID string
+			ExpiresInSeconds         int
+		}
+	}
+	c.MustPost(openSSHSessionMutation, &resp)
+	if fb.lastReq.GetTargetId() != "target-1" {
+		t.Fatalf("target_id = %q, want target-1", fb.lastReq.GetTargetId())
+	}
+	if got := fb.lastReq.GetSecretTargetIds(); len(got) != 1 || got[0] != "target-1" {
+		t.Fatalf("secret_target_ids = %v, want [target-1]", got)
+	}
+}
+
+// TestSshSessionRequiresTargetIdWhenSeveralAreAttached proves a secret
+// attached to more than one target refuses to pick one on its own.
+func TestSshSessionRequiresTargetIdWhenSeveralAreAttached(t *testing.T) {
+	fv := &fakeSSHVault{targetIDs: []string{"target-1", "target-2"}}
+	fb := &fakeSSHBroker{}
+	c := newSSHClient(fv, fb, "user-morgan")
+
+	var resp struct {
+		OpenSshSession struct {
+			WsURL, Ticket, SessionID string
+			ExpiresInSeconds         int
+		}
+	}
+	err := c.Post(openSSHSessionMutation, &resp)
+	if err == nil {
+		t.Fatal("expected an error when targetId is omitted and the secret has several targets")
+	}
+	if fb.called {
+		t.Fatal("CreateSession must not be called without a chosen target")
+	}
+}
+
+// TestSshSessionOpensEachOfSeveralAttachedTargets is #168's "picking each":
+// given an explicit targetId, the gateway opens on that one and carries the
+// secret's full attached-target list to the broker, so the broker can check
+// attachment independently.
+func TestSshSessionOpensEachOfSeveralAttachedTargets(t *testing.T) {
+	for _, targetID := range []string{"target-1", "target-2"} {
+		t.Run(targetID, func(t *testing.T) {
+			fv := &fakeSSHVault{targetIDs: []string{"target-1", "target-2"}}
+			fb := &fakeSSHBroker{}
+			c := newSSHClient(fv, fb, "user-morgan")
+
+			var resp struct {
+				OpenSshSession struct {
+					WsURL, Ticket, SessionID string
+					ExpiresInSeconds         int
+				}
+			}
+			c.MustPost(openSSHSessionWithTargetMutation, &resp, gqlclient.Var("targetId", targetID))
+			if fb.lastReq.GetTargetId() != targetID {
+				t.Fatalf("target_id = %q, want %q", fb.lastReq.GetTargetId(), targetID)
+			}
+			if got := fb.lastReq.GetSecretTargetIds(); len(got) != 2 {
+				t.Fatalf("secret_target_ids = %v, want both attached targets", got)
+			}
+		})
+	}
+}
+
+// TestSshSessionRefusesATargetNotAttachedToTheSecret proves a targetId that
+// isn't one of the secret's attached targets is refused by the gateway
+// itself, with a clear error, before the broker is ever called.
+func TestSshSessionRefusesATargetNotAttachedToTheSecret(t *testing.T) {
+	fv := &fakeSSHVault{targetIDs: []string{"target-1", "target-2"}}
+	fb := &fakeSSHBroker{}
+	c := newSSHClient(fv, fb, "user-morgan")
+
+	var resp struct {
+		OpenSshSession struct {
+			WsURL, Ticket, SessionID string
+			ExpiresInSeconds         int
+		}
+	}
+	err := c.Post(openSSHSessionWithTargetMutation, &resp, gqlclient.Var("targetId", "target-not-attached"))
+	if err == nil {
+		t.Fatal("expected an error for a target not attached to the secret")
+	}
+	if fb.called {
+		t.Fatal("CreateSession must not be called for a target not attached to the secret")
 	}
 }
 

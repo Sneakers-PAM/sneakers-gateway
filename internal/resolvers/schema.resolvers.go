@@ -936,7 +936,7 @@ func (r *mutationResolver) MarkAllNotificationsRead(ctx context.Context) (bool, 
 }
 
 // OpenSSHSession is the resolver for the openSshSession field.
-func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string, connectionID *string) (*SSHSessionTicket, error) {
+func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string, connectionID *string, targetID *string) (*SSHSessionTicket, error) {
 	ctx, cancel := context.WithTimeout(ctx, openSSHSessionTimeout)
 	defer cancel()
 	actor := actorOf(ctx)
@@ -949,12 +949,13 @@ func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string, 
 	if typeID != "type-ssh-key" && typeID != "type-unix-ssh" {
 		return nil, op.failed(ctx, "secret", "", fmt.Errorf("secret is not an SSH key or a Password Account (SSH)"))
 	}
-	targetID := sec.GetSecret().GetTargetId()
-	if targetID == "" {
-		return nil, op.failed(ctx, "secret", "", fmt.Errorf("secret has no target host"))
+	attachedTargetIDs := sec.GetSecret().GetTargetIds()
+	resolvedTargetID, err := chooseTarget(attachedTargetIDs, deref(targetID))
+	if err != nil {
+		return nil, op.failed(ctx, "secret", "", err)
 	}
-	op.target(targetID)
-	host, port, hostKeys, err := r.resolveSSHEndpoint(ctx, targetID, deref(connectionID))
+	op.target(resolvedTargetID)
+	host, port, hostKeys, err := r.resolveSSHEndpoint(ctx, resolvedTargetID, deref(connectionID))
 	if err != nil {
 		return nil, op.failed(ctx, "target", "the vault", err)
 	}
@@ -974,16 +975,17 @@ func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string, 
 	// needs it, and RBAC/audit are unchanged because the broker passes this
 	// actor straight through.
 	resp, err := r.SSHBroker.CreateSession(ctx, &sshbrokerv1.CreateSessionRequest{
-		Host:         host,
-		Port:         safeconv.Int32(port),
-		Username:     fields.GetFields()["username"],
-		ActorUserId:  actor.GetUserId(),
-		SecretId:     secretID,
-		TargetId:     targetID,
-		TtlSeconds:   30,
-		HostKeys:     hostKeys,
-		Actor:        brokerActor(actor),
-		PasswordAuth: typeID == "type-unix-ssh",
+		Host:            host,
+		Port:            safeconv.Int32(port),
+		Username:        fields.GetFields()["username"],
+		ActorUserId:     actor.GetUserId(),
+		SecretId:        secretID,
+		TargetId:        resolvedTargetID,
+		SecretTargetIds: attachedTargetIDs,
+		TtlSeconds:      30,
+		HostKeys:        hostKeys,
+		Actor:           brokerActor(actor),
+		PasswordAuth:    typeID == "type-unix-ssh",
 	})
 	if err != nil {
 		return nil, op.failed(ctx, "broker", "the SSH broker", err)
@@ -1416,6 +1418,21 @@ func (r *queryResolver) BreakGlassSessions(ctx context.Context, limit *int) ([]*
 func (r *queryResolver) SecretsInFolder(ctx context.Context, folderID string, includeRetired *bool) ([]*Secret, error) {
 	resp, err := r.Vault.ListSecretsInFolder(ctx, &vaultv1.ListSecretsInFolderRequest{
 		Actor: actorOf(ctx), FolderId: folderID, IncludeRetired: bderef(includeRetired),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Secret, 0, len(resp.GetSecrets()))
+	for _, s := range resp.GetSecrets() {
+		out = append(out, gqlSecretWithAccess(s))
+	}
+	return out, nil
+}
+
+// SecretsByTarget is the resolver for the secretsByTarget field.
+func (r *queryResolver) SecretsByTarget(ctx context.Context, targetID string) ([]*Secret, error) {
+	resp, err := r.Vault.ListSecretsByTarget(ctx, &vaultv1.ListSecretsByTargetRequest{
+		Actor: actorOf(ctx), TargetId: targetID,
 	})
 	if err != nil {
 		return nil, err

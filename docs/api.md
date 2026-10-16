@@ -203,8 +203,17 @@ this one.
   remove ONE target without touching the others, and are idempotent: attaching an
   already-attached target, or detaching one that isn't attached, is a no-op, not an error.
 - Host-key pins (`Target.sshHostKeys`) stay per target, unaffected.
-- `openSshSession` on a secret attached to more than one target needs `targetId` to say which one
-  to open; see [sneakers-vault docs/api.md](https://github.com/Sneakers-PAM/sneakers-vault/blob/main/docs/api.md)
+- `openSshSession(secretId, connectionId, targetId)`: `targetId` picks which of the secret's
+  attached targets to open a session on. It's required when `targetIds` has more than one entry
+  (refused otherwise, with no target chosen), defaults to the only one when there's exactly one,
+  and is refused if it names a target that isn't attached to the secret at all. The gateway also
+  forwards the secret's full attached-target list to sshbroker (`CreateSession.secretTargetIds`),
+  which independently checks the chosen target is actually one of them before any auth is sent —
+  the gateway's own check is for a clear error; the broker's is the real gate.
+- `secretsByTarget(targetId): [Secret!]!` lists every secret attached to a target, for the
+  target's own page ("every secret attached to this target"), with the same `canRead` visibility
+  as `secretsInFolder`.
+- See [sneakers-vault docs/api.md](https://github.com/Sneakers-PAM/sneakers-vault/blob/main/docs/api.md)
   for how heartbeat and rotation run per target.
 
 ### Contribute, own reveal
