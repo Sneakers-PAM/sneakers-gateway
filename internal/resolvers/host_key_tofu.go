@@ -23,7 +23,10 @@ import (
 // Nothing is ever pinned automatically.
 
 func errHostKeyPinNotAdmin() error {
-	return gatewayError(codes.PermissionDenied, "SSH host keys are pinned by a site admin", "HOST_KEY_PIN_NOT_ADMIN")
+	return gatewayError(codes.PermissionDenied,
+		"SSH host keys are pinned by a person in the admin app (Targets → Scan and pin). "+
+			"An agent's token can't change them, even an admin's.",
+		"HOST_KEY_PIN_NOT_ADMIN")
 }
 
 func errHostKeyChanged() error {
