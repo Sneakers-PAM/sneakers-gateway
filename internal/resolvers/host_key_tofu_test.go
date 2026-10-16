@@ -155,8 +155,8 @@ func TestHostKeyTofuIsForSiteAdmins(t *testing.T) {
 	var resp map[string]any
 	for _, q := range []string{scanQuery, pinMutation(tofuFP)} {
 		err := c.Post(q, &resp)
-		if err == nil || !strings.Contains(err.Error(), "site admin") {
-			t.Fatalf("%s: err %v, want a site-admin refusal", q, err)
+		if err == nil || !strings.Contains(err.Error(), "admin app") {
+			t.Fatalf("%s: err %v, want an admin-app refusal", q, err)
 		}
 	}
 	if len(fb.scans) != 0 || fv.lastSave != nil {

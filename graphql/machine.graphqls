@@ -34,6 +34,11 @@ type SecretSummary {
   rotatesOnCheckin: Boolean!
   # Heartbeat checks run against the target.
   heartbeatEnabled: Boolean!
+  # Why heartbeat isn't enabled yet, for a heartbeat-capable type: "no
+  # target", "no connection" or, for an SSH Key secret, "no pinned host key"
+  # on the target. Null once heartbeatEnabled is true, when heartbeat is
+  # opted out on purpose, or when the type has no heartbeat at all.
+  heartbeatBlockedReason: String
   # Last rotation outcome (OK, FAILED, DEGRADED, ROTATING); null = never rotated.
   lastRotationResult: String
   # RFC3339 of the last successful rotation and of the next scheduled one.
@@ -90,13 +95,18 @@ input FieldMappingInput {
 # Result of changeSecretTypeForPrincipal: the secret's summary under its new
 # type, the field KEYS now populated (never values), the old field KEYS whose
 # values had no field in the new type and were appended to its notes field
-# (never values), and what the change left the secret's rotation, heartbeat
-# and target at.
+# (never values), what the change left the secret's rotation, heartbeat and
+# target at, and the label the new version records for the change itself.
 type TypeChangedSecret {
   secret: SecretSummary!
   fieldKeys: [String!]!
   movedToNotesKeys: [String!]!
   automation: TypeChangeAutomation!
+  # Describes the change itself (old type name -> new type name, fields
+  # added, renamed and carried over), the same text recorded on the new
+  # version (SecretVersion.changeLabel) — so a type change never reads in
+  # history as just "Changed: <field>".
+  changeLabel: String
 }
 
 # The secret's automation and target after a type change, derived from the new

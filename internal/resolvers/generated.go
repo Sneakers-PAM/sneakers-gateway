@@ -29,6 +29,7 @@ type Config = graphql.Config[ResolverRoot, DirectiveRoot, ComplexityRoot]
 type ResolverRoot interface {
 	Mutation() MutationResolver
 	Query() QueryResolver
+	Secret() SecretResolver
 	Subscription() SubscriptionResolver
 }
 
@@ -519,29 +520,30 @@ type ComplexityRoot struct {
 	}
 
 	Secret struct {
-		AlwaysRequireApproval func(childComplexity int) int
-		CanRead               func(childComplexity int) int
-		ExpiresAt             func(childComplexity int) int
-		FolderID              func(childComplexity int) int
-		HeartbeatOptOut       func(childComplexity int) int
-		ID                    func(childComplexity int) int
-		LastAccessedAt        func(childComplexity int) int
-		LastHeartbeatResult   func(childComplexity int) int
-		LastRotationResult    func(childComplexity int) int
-		Masked                func(childComplexity int) int
-		Name                  func(childComplexity int) int
-		NextRotationAt        func(childComplexity int) int
-		Position              func(childComplexity int) int
-		RequireTokenApproval  func(childComplexity int) int
-		Retired               func(childComplexity int) int
-		RetiredAt             func(childComplexity int) int
-		RotatedAt             func(childComplexity int) int
-		RotationIntervalDays  func(childComplexity int) int
-		RotationOptOut        func(childComplexity int) int
-		TargetID              func(childComplexity int) int
-		TypeID                func(childComplexity int) int
-		VerifiedAt            func(childComplexity int) int
-		ViewCount             func(childComplexity int) int
+		AlwaysRequireApproval  func(childComplexity int) int
+		CanRead                func(childComplexity int) int
+		ExpiresAt              func(childComplexity int) int
+		FolderID               func(childComplexity int) int
+		HeartbeatBlockedReason func(childComplexity int) int
+		HeartbeatOptOut        func(childComplexity int) int
+		ID                     func(childComplexity int) int
+		LastAccessedAt         func(childComplexity int) int
+		LastHeartbeatResult    func(childComplexity int) int
+		LastRotationResult     func(childComplexity int) int
+		Masked                 func(childComplexity int) int
+		Name                   func(childComplexity int) int
+		NextRotationAt         func(childComplexity int) int
+		Position               func(childComplexity int) int
+		RequireTokenApproval   func(childComplexity int) int
+		Retired                func(childComplexity int) int
+		RetiredAt              func(childComplexity int) int
+		RotatedAt              func(childComplexity int) int
+		RotationIntervalDays   func(childComplexity int) int
+		RotationOptOut         func(childComplexity int) int
+		TargetID               func(childComplexity int) int
+		TypeID                 func(childComplexity int) int
+		VerifiedAt             func(childComplexity int) int
+		ViewCount              func(childComplexity int) int
 	}
 
 	SecretFieldDef struct {
@@ -623,6 +625,7 @@ type ComplexityRoot struct {
 
 	SecretVersion struct {
 		Active           func(childComplexity int) int
+		ChangeLabel      func(childComplexity int) int
 		ChangedFieldKeys func(childComplexity int) int
 		CreatedAt        func(childComplexity int) int
 		CreatedBy        func(childComplexity int) int
@@ -876,6 +879,9 @@ type QueryResolver interface {
 	Diagnostics(ctx context.Context) (*Diagnostics, error)
 	Maintenance(ctx context.Context) (*Maintenance, error)
 	Appliance(ctx context.Context) (*Appliance, error)
+}
+type SecretResolver interface {
+	HeartbeatBlockedReason(ctx context.Context, obj *Secret) (*string, error)
 }
 type SubscriptionResolver interface {
 	SecretStats(ctx context.Context) (<-chan *SecretStats, error)
@@ -3660,6 +3666,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Secret.FolderID(childComplexity), true
+	case "Secret.heartbeatBlockedReason":
+		if e.ComplexityRoot.Secret.HeartbeatBlockedReason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Secret.HeartbeatBlockedReason(childComplexity), true
 	case "Secret.heartbeatOptOut":
 		if e.ComplexityRoot.Secret.HeartbeatOptOut == nil {
 			break
@@ -4107,6 +4119,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretVersion.Active(childComplexity), true
+	case "SecretVersion.changeLabel":
+		if e.ComplexityRoot.SecretVersion.ChangeLabel == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretVersion.ChangeLabel(childComplexity), true
 	case "SecretVersion.changedFieldKeys":
 		if e.ComplexityRoot.SecretVersion.ChangedFieldKeys == nil {
 			break
@@ -4890,6 +4908,12 @@ type Secret {
   # rotated / heartbeat-checked, even if its type supports it.
   rotationOptOut: Boolean
   heartbeatOptOut: Boolean
+  # Why heartbeat can't be switched on right now, for a heartbeat-capable type
+  # whose heartbeat isn't running: "no target", "no connection" or, for an SSH
+  # Key secret, "no pinned host key" on the target. Null when heartbeat is
+  # already running, when it's switched off on purpose (heartbeatOptOut), or
+  # when the type isn't heartbeat-capable at all.
+  heartbeatBlockedReason: String
   # Approval-required: a non-owner needs one owner's approval for each reveal
   # or use, in the web or through a personal token. Owners are exempt.
   requireTokenApproval: Boolean
@@ -4958,6 +4982,12 @@ type SecretVersion {
   # version (the oldest version reports all its keys; a removed field counts as
   # changed). Empty when a version changed no values. Never exposes a value.
   changedFieldKeys: [String!]!
+  # Set only for a version a type change produced: describes the change itself
+  # ("Type changed: Password -> Password Account (SSH); added host; fields
+  # carried over: username, password"), naming any field added, renamed or
+  # dropped by the mapping. Null for every other version, which renders from
+  # changedFieldKeys as before ("Changed: <field>, <field>").
+  changeLabel: String
 }
 
 # A folder move in a secret's history, read from the audit trail. The folder
@@ -6770,6 +6800,8 @@ func (ec *executionContext) childFields_Secret(ctx context.Context, field graphq
 		return ec.fieldContext_Secret_rotationOptOut(ctx, field)
 	case "heartbeatOptOut":
 		return ec.fieldContext_Secret_heartbeatOptOut(ctx, field)
+	case "heartbeatBlockedReason":
+		return ec.fieldContext_Secret_heartbeatBlockedReason(ctx, field)
 	case "requireTokenApproval":
 		return ec.fieldContext_Secret_requireTokenApproval(ctx, field)
 	case "alwaysRequireApproval":
@@ -6952,6 +6984,8 @@ func (ec *executionContext) childFields_SecretVersion(ctx context.Context, field
 		return ec.fieldContext_SecretVersion_fieldKeys(ctx, field)
 	case "changedFieldKeys":
 		return ec.fieldContext_SecretVersion_changedFieldKeys(ctx, field)
+	case "changeLabel":
+		return ec.fieldContext_SecretVersion_changeLabel(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecretVersion", field.Name)
 }
@@ -21022,6 +21056,29 @@ func (ec *executionContext) fieldContext_Secret_heartbeatOptOut(_ context.Contex
 	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _Secret_heartbeatBlockedReason(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Secret_heartbeatBlockedReason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Secret().HeartbeatBlockedReason(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Secret_heartbeatBlockedReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Secret", field, true, true, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _Secret_requireTokenApproval(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22536,6 +22593,29 @@ func (ec *executionContext) _SecretVersion_changedFieldKeys(ctx context.Context,
 	)
 }
 func (ec *executionContext) fieldContext_SecretVersion_changedFieldKeys(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretVersion", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretVersion_changeLabel(ctx context.Context, field graphql.CollectedField, obj *SecretVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretVersion_changeLabel(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ChangeLabel, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretVersion_changeLabel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SecretVersion", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
@@ -30372,22 +30452,22 @@ func (ec *executionContext) _Secret(ctx context.Context, sel ast.SelectionSet, o
 		case "id":
 			out.Values[i] = ec._Secret_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "name":
 			out.Values[i] = ec._Secret_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "folderId":
 			out.Values[i] = ec._Secret_folderId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "typeId":
 			out.Values[i] = ec._Secret_typeId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "targetId":
 			out.Values[i] = ec._Secret_targetId(ctx, field, obj)
@@ -30406,12 +30486,12 @@ func (ec *executionContext) _Secret(ctx context.Context, sel ast.SelectionSet, o
 		case "retired":
 			out.Values[i] = ec._Secret_retired(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "retiredAt":
 			out.Values[i] = ec._Secret_retiredAt(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "lastRotationResult":
 			out.Values[i] = ec._Secret_lastRotationResult(ctx, field, obj)
@@ -30425,6 +30505,39 @@ func (ec *executionContext) _Secret(ctx context.Context, sel ast.SelectionSet, o
 			out.Values[i] = ec._Secret_rotationOptOut(ctx, field, obj)
 		case "heartbeatOptOut":
 			out.Values[i] = ec._Secret_heartbeatOptOut(ctx, field, obj)
+		case "heartbeatBlockedReason":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Secret_heartbeatBlockedReason(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "requireTokenApproval":
 			out.Values[i] = ec._Secret_requireTokenApproval(ctx, field, obj)
 		case "alwaysRequireApproval":
@@ -30434,7 +30547,7 @@ func (ec *executionContext) _Secret(ctx context.Context, sel ast.SelectionSet, o
 		case "position":
 			out.Values[i] = ec._Secret_position(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
@@ -30991,6 +31104,8 @@ func (ec *executionContext) _SecretVersion(ctx context.Context, sel ast.Selectio
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "changeLabel":
+			out.Values[i] = ec._SecretVersion_changeLabel(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

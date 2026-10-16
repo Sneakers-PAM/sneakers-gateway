@@ -197,6 +197,12 @@ type Secret {
   # rotated / heartbeat-checked, even if its type supports it.
   rotationOptOut: Boolean
   heartbeatOptOut: Boolean
+  # Why heartbeat can't be switched on right now, for a heartbeat-capable type
+  # whose heartbeat isn't running: "no target", "no connection" or, for an SSH
+  # Key secret, "no pinned host key" on the target. Null when heartbeat is
+  # already running, when it's switched off on purpose (heartbeatOptOut), or
+  # when the type isn't heartbeat-capable at all.
+  heartbeatBlockedReason: String
   # Approval-required: a non-owner needs one owner's approval for each reveal
   # or use, in the web or through a personal token. Owners are exempt.
   requireTokenApproval: Boolean
@@ -265,6 +271,12 @@ type SecretVersion {
   # version (the oldest version reports all its keys; a removed field counts as
   # changed). Empty when a version changed no values. Never exposes a value.
   changedFieldKeys: [String!]!
+  # Set only for a version a type change produced: describes the change itself
+  # ("Type changed: Password -> Password Account (SSH); added host; fields
+  # carried over: username, password"), naming any field added, renamed or
+  # dropped by the mapping. Null for every other version, which renders from
+  # changedFieldKeys as before ("Changed: <field>, <field>").
+  changeLabel: String
 }
 
 # A folder move in a secret's history, read from the audit trail. The folder

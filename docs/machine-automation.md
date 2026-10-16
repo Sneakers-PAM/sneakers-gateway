@@ -5,6 +5,7 @@ On `/machine/graphql` (schema `graphql/machine.graphqls`) a principal with RACI-
 - `setSecretAutomationForPrincipal(secretId, disableRotation, disableHeartbeat): SecretSummary!` sets both flags on every call: `true` opts out, `false` opts back in. Vault audits each flag that changes; a call that changes nothing is a no-op.
 - `createSecretForPrincipal` and `generateSecretForPrincipal` take optional `disableRotation` and `disableHeartbeat` (default `false`) to opt a new secret out at creation.
 - `SecretSummary.rotationOptOut` and `SecretSummary.heartbeatOptOut` show the current state on every mutation and query that returns a summary.
+- `SecretSummary.heartbeatBlockedReason` names what's missing for a heartbeat-capable secret whose heartbeat isn't running: `"no target"`, `"no connection"` or, for an SSH Key secret, `"no pinned host key"`. Null once `heartbeatEnabled` is true, when it's opted out on purpose, or when the type has no heartbeat at all — so `createSecretForPrincipal`'s result can say heartbeat is available once that's fixed.
 
 Needs a vault that serves `SetSecretAutomationForPrincipal`.
 

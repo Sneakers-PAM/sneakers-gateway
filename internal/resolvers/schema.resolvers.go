@@ -1726,6 +1726,56 @@ func (r *queryResolver) Appliance(ctx context.Context) (*Appliance, error) {
 	return applianceOf(r.Resolver.Appliance), nil
 }
 
+// HeartbeatBlockedReason is the resolver for the heartbeatBlockedReason
+// field. Forced (gqlgen.yml), so it only runs when a caller selects it.
+//
+// Vault's GetSecret/ListSecretsInFolder — every RPC behind a human secret
+// read — never compute this (only the *ForPrincipal responses do, via
+// vault's principalSecretView), so it's derived here from the same catalog
+// and target data the type-change preview already reads
+// (typeChangeAutomationOf), mirroring vault's own heartbeatUnreadyReason.
+func (r *secretResolver) HeartbeatBlockedReason(ctx context.Context, obj *Secret) (*string, error) {
+	if obj.HeartbeatOptOut != nil && *obj.HeartbeatOptOut {
+		return nil, nil
+	}
+	types, err := r.Vault.ListSecretTypes(ctx, &vaultv1.ListSecretTypesRequest{})
+	if err != nil {
+		return nil, err
+	}
+	var heartbeatCapable bool
+	for _, t := range types.GetTypes() {
+		if t.GetId() == obj.TypeID {
+			heartbeatCapable = t.GetHeartbeat()
+			break
+		}
+	}
+	if !heartbeatCapable {
+		return nil, nil
+	}
+	targetID := deref(obj.TargetID)
+	if targetID == "" {
+		return strPtr("no target"), nil
+	}
+	tl, err := r.Vault.ListTargets(ctx, &vaultv1.ListTargetsRequest{Actor: actorOf(ctx)})
+	if err != nil {
+		return nil, err
+	}
+	var tgt *vaultv1.Target
+	for _, t := range tl.GetTargets() {
+		if t.GetId() == targetID {
+			tgt = t
+			break
+		}
+	}
+	if tgt == nil || tgt.GetConnectionId() == "" {
+		return strPtr("no connection"), nil
+	}
+	if obj.TypeID == "type-ssh-key" && len(tgt.GetSshHostKeys()) == 0 {
+		return strPtr("no pinned host key"), nil
+	}
+	return nil, nil
+}
+
 // SecretStats is the resolver for the secretStats subscription: it pushes the
 // acting user's dashboard rollup over the WebSocket. RACI scoping is automatic —
 // actorOf(ctx) carries the socket's authenticated actor (resolved from the
@@ -1790,9 +1840,13 @@ func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
+// Secret returns SecretResolver implementation.
+func (r *Resolver) Secret() SecretResolver { return &secretResolver{r} }
+
 // Subscription returns SubscriptionResolver implementation.
 func (r *Resolver) Subscription() SubscriptionResolver { return &subscriptionResolver{r} }
 
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type secretResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }

@@ -15,3 +15,8 @@ resolver:
   package: resolvers
   layout: follow-schema
 skip_mod_tidy: true
+models:
+  Secret:
+    fields:
+      heartbeatBlockedReason:
+        resolver: true

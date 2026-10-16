@@ -414,29 +414,30 @@ type RaciRuleInput struct {
 }
 
 type Secret struct {
-	ID                    string           `json:"id"`
-	Name                  string           `json:"name"`
-	FolderID              string           `json:"folderId"`
-	TypeID                string           `json:"typeId"`
-	TargetID              *string          `json:"targetId,omitempty"`
-	ExpiresAt             *string          `json:"expiresAt,omitempty"`
-	LastHeartbeatResult   *HeartbeatResult `json:"lastHeartbeatResult,omitempty"`
-	VerifiedAt            *string          `json:"verifiedAt,omitempty"`
-	Masked                *bool            `json:"masked,omitempty"`
-	ViewCount             *int             `json:"viewCount,omitempty"`
-	LastAccessedAt        *string          `json:"lastAccessedAt,omitempty"`
-	Retired               bool             `json:"retired"`
-	RetiredAt             string           `json:"retiredAt"`
-	LastRotationResult    *RotationState   `json:"lastRotationResult,omitempty"`
-	RotatedAt             *string          `json:"rotatedAt,omitempty"`
-	RotationIntervalDays  *int             `json:"rotationIntervalDays,omitempty"`
-	NextRotationAt        *string          `json:"nextRotationAt,omitempty"`
-	RotationOptOut        *bool            `json:"rotationOptOut,omitempty"`
-	HeartbeatOptOut       *bool            `json:"heartbeatOptOut,omitempty"`
-	RequireTokenApproval  *bool            `json:"requireTokenApproval,omitempty"`
-	AlwaysRequireApproval *bool            `json:"alwaysRequireApproval,omitempty"`
-	CanRead               *bool            `json:"canRead,omitempty"`
-	Position              int              `json:"position"`
+	ID                     string           `json:"id"`
+	Name                   string           `json:"name"`
+	FolderID               string           `json:"folderId"`
+	TypeID                 string           `json:"typeId"`
+	TargetID               *string          `json:"targetId,omitempty"`
+	ExpiresAt              *string          `json:"expiresAt,omitempty"`
+	LastHeartbeatResult    *HeartbeatResult `json:"lastHeartbeatResult,omitempty"`
+	VerifiedAt             *string          `json:"verifiedAt,omitempty"`
+	Masked                 *bool            `json:"masked,omitempty"`
+	ViewCount              *int             `json:"viewCount,omitempty"`
+	LastAccessedAt         *string          `json:"lastAccessedAt,omitempty"`
+	Retired                bool             `json:"retired"`
+	RetiredAt              string           `json:"retiredAt"`
+	LastRotationResult     *RotationState   `json:"lastRotationResult,omitempty"`
+	RotatedAt              *string          `json:"rotatedAt,omitempty"`
+	RotationIntervalDays   *int             `json:"rotationIntervalDays,omitempty"`
+	NextRotationAt         *string          `json:"nextRotationAt,omitempty"`
+	RotationOptOut         *bool            `json:"rotationOptOut,omitempty"`
+	HeartbeatOptOut        *bool            `json:"heartbeatOptOut,omitempty"`
+	HeartbeatBlockedReason *string          `json:"heartbeatBlockedReason,omitempty"`
+	RequireTokenApproval   *bool            `json:"requireTokenApproval,omitempty"`
+	AlwaysRequireApproval  *bool            `json:"alwaysRequireApproval,omitempty"`
+	CanRead                *bool            `json:"canRead,omitempty"`
+	Position               int              `json:"position"`
 }
 
 type SecretFieldDef struct {
@@ -548,6 +549,7 @@ type SecretVersion struct {
 	Active           bool     `json:"active"`
 	FieldKeys        []string `json:"fieldKeys"`
 	ChangedFieldKeys []string `json:"changedFieldKeys"`
+	ChangeLabel      *string  `json:"changeLabel,omitempty"`
 }
 
 type SecuritySettings struct {

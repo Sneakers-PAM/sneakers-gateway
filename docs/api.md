@@ -121,6 +121,16 @@ active secret in the folder exactly once, and the caller needs RACI Author on th
 own it; the vault refuses anything else (`INVALID_ARGUMENT` or `PERMISSION_DENIED`) and changes
 nothing.
 
+### Heartbeat readiness
+
+`Secret.heartbeatBlockedReason` (human schema) names what's missing before a heartbeat-capable
+secret's heartbeat can be switched on: `"no target"`, `"no connection"` or, for an SSH Key secret,
+`"no pinned host key"` on the target. It's null once heartbeat is already running, when it's opted
+out on purpose (`heartbeatOptOut`), or when the type has no heartbeat at all. The gateway derives
+it from `secretTypes` and `targets` (the vault's `GetSecret`/`secretsInFolder` don't compute it;
+only the machine schema's `*ForPrincipal` responses do, as `SecretSummary.heartbeatBlockedReason`).
+`setSecretAutomation` still refuses an explicit switch-on before then, naming the same reason.
+
 ### Targets and SSH host keys
 
 `Target.sshHostKeys` (human schema) and `MachineTarget.sshHostKeys` (machine schema) list the SSH
@@ -317,7 +327,11 @@ the human schema has these operations; `/machine/graphql` has none of them.
 ### Recovery
 
 A secret's prior values are a separate recovery surface. `secretVersions` lists the versions and
-their field keys to any reader, never a value. `revealSecretVersionField` and
+their field keys to any reader, never a value. `SecretVersion.changeLabel` is set only on a version
+a type change produced ("Type changed: Password -> Password Account (SSH); added host; fields
+carried over: username, password"), naming any field added, renamed or dropped by the mapping; it's
+null on every other version, which renders from `changedFieldKeys` as before ("Changed:
+`<field>`, `<field>`"). `revealSecretVersionField` and
 `restoreSecretVersion(secretId, versionNo)`, which makes a prior version's fields the current ones
 as a new version, need the identity role `recovery` and a fresh second factor. The gateway sends
 the role as `is_recovery` on the vault actor, read from identity on every request, and the vault
