@@ -926,6 +926,11 @@ type Query {
   # for the audit log. limit defaults to 50, at most 200.
   breakGlassSessions(limit: Int): [BreakGlassSession!]!
   secretsInFolder(folderId: String!, includeRetired: Boolean): [Secret!]!
+  # Every secret attached to a target (#168), for the target's own page.
+  # Same visibility as secretsInFolder: a secret the caller can see but not
+  # read is included locked (canRead false); one an explicit deny covers is
+  # omitted.
+  secretsByTarget(targetId: ID!): [Secret!]!
   secret(id: ID!): Secret
   secretStats: SecretStats!
   topAccessedSecrets(limit: Int): [Secret!]!
@@ -1326,12 +1331,15 @@ type Mutation {
   # Mark all of the acting user's notifications read.
   markAllNotificationsRead: Boolean!
 
-  # Authorizes an interactive SSH session against an ssh-key secret's bound
-  # target: reveals the key (audited, RBAC-gated), hands session parameters to
-  # sshbroker, and returns a single-use WebSocket ticket. Starts on the
-  # target's default connection unless connectionId names one of the
-  # target's own connections.
-  openSshSession(secretId: ID!, connectionId: ID): SshSessionTicket!
+  # Authorizes an interactive SSH session against one of an ssh-key secret's
+  # attached targets: reveals the key (audited, RBAC-gated), hands session
+  # parameters to sshbroker, and returns a single-use WebSocket ticket.
+  # Starts on the target's default connection unless connectionId names one
+  # of the target's own connections. targetId picks which attached target to
+  # open: required when the secret has more than one, and defaults to the
+  # only one otherwise (#168). sshbroker independently checks targetId is
+  # actually attached before any auth is sent.
+  openSshSession(secretId: ID!, connectionId: ID, targetId: ID): SshSessionTicket!
 
   # Service-account + API-token management. Site-admin-only:
   # these are the human /graphql admin operations for the machine-auth surface

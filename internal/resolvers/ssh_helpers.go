@@ -60,6 +60,28 @@ func (o *sshOpenLog) failed(ctx context.Context, step, service string, err error
 	return err
 }
 
+// chooseTarget resolves which of a secret's attached targets to open a
+// session on (#168): required when there's more than one, defaults to the
+// only one when there's exactly one, and must be one of the attached
+// targets when given explicitly. sshbroker independently re-checks
+// attachment before any auth is sent; this is the user-facing half of that
+// same rule (a clear error instead of a bare refusal).
+func chooseTarget(attached []string, wanted string) (string, error) {
+	if len(attached) == 0 {
+		return "", fmt.Errorf("secret has no target host")
+	}
+	if wanted == "" {
+		if len(attached) > 1 {
+			return "", fmt.Errorf("secret has more than one target: targetId is required")
+		}
+		return attached[0], nil
+	}
+	if !slices.Contains(attached, wanted) {
+		return "", fmt.Errorf("target is not attached to this secret")
+	}
+	return wanted, nil
+}
+
 // resolveSSHEndpoint turns a targetId into host + port, plus the target's
 // pinned SSH host keys for the broker, via the vault's
 // ListTargets/ListConnections (no single join RPC exists). wantConnID, when
