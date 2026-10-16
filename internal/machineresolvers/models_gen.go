@@ -79,6 +79,11 @@ type RedeemedSecretUse struct {
 	Value string     `json:"value"`
 }
 
+type RotatedSecret struct {
+	Secret   *SecretSummary `json:"secret"`
+	NewValue string         `json:"newValue"`
+}
+
 type SecretCheckStatus struct {
 	Result        string `json:"result"`
 	CheckedAtUnix int    `json:"checkedAtUnix"`

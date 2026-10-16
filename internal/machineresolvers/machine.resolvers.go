@@ -225,6 +225,28 @@ func (r *mutationResolver) SetSecretTargetForPrincipal(ctx context.Context, secr
 	return summaryOf(resp.GetSecret()), nil
 }
 
+// RotateSecretForPrincipal is the resolver for the rotateSecretForPrincipal field.
+func (r *mutationResolver) RotateSecretForPrincipal(ctx context.Context, secretID string, policyID *string) (*RotatedSecret, error) {
+	resp, err := r.Vault.RotateSecretForPrincipal(ctx, &vaultv1.RotateSecretForPrincipalRequest{
+		Actor: resolvers.MachineActorOf(ctx), SecretId: secretID, PolicyId: deref(policyID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &RotatedSecret{Secret: summaryOf(resp.GetSecret()), NewValue: resp.GetNewValue()}, nil
+}
+
+// RestoreSecretVersionForPrincipal is the resolver for the restoreSecretVersionForPrincipal field.
+func (r *mutationResolver) RestoreSecretVersionForPrincipal(ctx context.Context, secretID string, versionNo int) (*SecretSummary, error) {
+	resp, err := r.Vault.RestoreSecretVersionForPrincipal(ctx, &vaultv1.RestoreSecretVersionForPrincipalRequest{
+		Actor: resolvers.MachineActorOf(ctx), SecretId: secretID, VersionNo: safeconv.Int32(versionNo),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return summaryOf(resp.GetSecret()), nil
+}
+
 // SetSecretAutomationForPrincipal is the resolver for the setSecretAutomationForPrincipal field.
 func (r *mutationResolver) SetSecretAutomationForPrincipal(ctx context.Context, secretID string, disableRotation bool, disableHeartbeat bool) (*SecretSummary, error) {
 	resp, err := r.Vault.SetSecretAutomationForPrincipal(ctx, &vaultv1.SetSecretAutomationForPrincipalRequest{
