@@ -130,23 +130,24 @@ type ComplexityRoot struct {
 	}
 
 	SecretSummary struct {
-		FolderID            func(childComplexity int) int
-		HeartbeatEnabled    func(childComplexity int) int
-		HeartbeatOptOut     func(childComplexity int) int
-		ID                  func(childComplexity int) int
-		LastHeartbeatResult func(childComplexity int) int
-		LastRotationResult  func(childComplexity int) int
-		Name                func(childComplexity int) int
-		NextRotationAt      func(childComplexity int) int
-		Placement           func(childComplexity int) int
-		RotatedAt           func(childComplexity int) int
-		RotatesOnCheckin    func(childComplexity int) int
-		RotationEnabled     func(childComplexity int) int
-		RotationOptOut      func(childComplexity int) int
-		TargetID            func(childComplexity int) int
-		TypeID              func(childComplexity int) int
-		ValueChangedAt      func(childComplexity int) int
-		ValueVersion        func(childComplexity int) int
+		FolderID               func(childComplexity int) int
+		HeartbeatBlockedReason func(childComplexity int) int
+		HeartbeatEnabled       func(childComplexity int) int
+		HeartbeatOptOut        func(childComplexity int) int
+		ID                     func(childComplexity int) int
+		LastHeartbeatResult    func(childComplexity int) int
+		LastRotationResult     func(childComplexity int) int
+		Name                   func(childComplexity int) int
+		NextRotationAt         func(childComplexity int) int
+		Placement              func(childComplexity int) int
+		RotatedAt              func(childComplexity int) int
+		RotatesOnCheckin       func(childComplexity int) int
+		RotationEnabled        func(childComplexity int) int
+		RotationOptOut         func(childComplexity int) int
+		TargetID               func(childComplexity int) int
+		TypeID                 func(childComplexity int) int
+		ValueChangedAt         func(childComplexity int) int
+		ValueVersion           func(childComplexity int) int
 	}
 
 	SecretTypeField struct {
@@ -750,6 +751,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretSummary.FolderID(childComplexity), true
+	case "SecretSummary.heartbeatBlockedReason":
+		if e.ComplexityRoot.SecretSummary.HeartbeatBlockedReason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretSummary.HeartbeatBlockedReason(childComplexity), true
 	case "SecretSummary.heartbeatEnabled":
 		if e.ComplexityRoot.SecretSummary.HeartbeatEnabled == nil {
 			break
@@ -1149,6 +1156,11 @@ type SecretSummary {
   rotatesOnCheckin: Boolean!
   # Heartbeat checks run against the target.
   heartbeatEnabled: Boolean!
+  # Why heartbeat isn't enabled yet, for a heartbeat-capable type: "no
+  # target", "no connection" or, for an SSH Key secret, "no pinned host key"
+  # on the target. Null once heartbeatEnabled is true, when heartbeat is
+  # opted out on purpose, or when the type has no heartbeat at all.
+  heartbeatBlockedReason: String
   # Last rotation outcome (OK, FAILED, DEGRADED, ROTATING); null = never rotated.
   lastRotationResult: String
   # RFC3339 of the last successful rotation and of the next scheduled one.
@@ -1684,6 +1696,8 @@ func (ec *executionContext) childFields_SecretSummary(ctx context.Context, field
 		return ec.fieldContext_SecretSummary_rotatesOnCheckin(ctx, field)
 	case "heartbeatEnabled":
 		return ec.fieldContext_SecretSummary_heartbeatEnabled(ctx, field)
+	case "heartbeatBlockedReason":
+		return ec.fieldContext_SecretSummary_heartbeatBlockedReason(ctx, field)
 	case "lastRotationResult":
 		return ec.fieldContext_SecretSummary_lastRotationResult(ctx, field)
 	case "rotatedAt":
@@ -4914,6 +4928,29 @@ func (ec *executionContext) fieldContext_SecretSummary_heartbeatEnabled(_ contex
 	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _SecretSummary_heartbeatBlockedReason(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretSummary_heartbeatBlockedReason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HeartbeatBlockedReason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretSummary_heartbeatBlockedReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretSummary", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _SecretSummary_lastRotationResult(ctx context.Context, field graphql.CollectedField, obj *SecretSummary) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7923,6 +7960,8 @@ func (ec *executionContext) _SecretSummary(ctx context.Context, sel ast.Selectio
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "heartbeatBlockedReason":
+			out.Values[i] = ec._SecretSummary_heartbeatBlockedReason(ctx, field, obj)
 		case "lastRotationResult":
 			out.Values[i] = ec._SecretSummary_lastRotationResult(ctx, field, obj)
 		case "rotatedAt":

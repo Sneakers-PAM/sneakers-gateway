@@ -90,13 +90,14 @@ func summaryOf(sec *vaultv1.Secret) *SecretSummary {
 		RotationOptOut:  sec.GetRotationOptOut(),
 		HeartbeatOptOut: sec.GetHeartbeatOptOut(),
 
-		ValueVersion:     int(sec.GetValueVersion()),
-		ValueChangedAt:   emptyToNil(sec.GetValueChangedAt()),
-		RotationEnabled:  sec.GetRotationEnabled(),
-		RotatesOnCheckin: sec.GetRotatesOnCheckin(),
-		HeartbeatEnabled: sec.GetHeartbeatEnabled(),
-		RotatedAt:        emptyToNil(sec.GetRotatedAt()),
-		NextRotationAt:   emptyToNil(sec.GetNextRotationAt()),
+		ValueVersion:           int(sec.GetValueVersion()),
+		ValueChangedAt:         emptyToNil(sec.GetValueChangedAt()),
+		RotationEnabled:        sec.GetRotationEnabled(),
+		RotatesOnCheckin:       sec.GetRotatesOnCheckin(),
+		HeartbeatEnabled:       sec.GetHeartbeatEnabled(),
+		HeartbeatBlockedReason: emptyToNil(sec.GetHeartbeatBlockedReason()),
+		RotatedAt:              emptyToNil(sec.GetRotatedAt()),
+		NextRotationAt:         emptyToNil(sec.GetNextRotationAt()),
 	}
 	if tid := sec.GetTargetId(); tid != "" {
 		out.TargetID = &tid

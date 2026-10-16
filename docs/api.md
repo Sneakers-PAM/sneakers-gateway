@@ -121,6 +121,16 @@ active secret in the folder exactly once, and the caller needs RACI Author on th
 own it; the vault refuses anything else (`INVALID_ARGUMENT` or `PERMISSION_DENIED`) and changes
 nothing.
 
+### Heartbeat readiness
+
+`Secret.heartbeatBlockedReason` (human schema) names what's missing before a heartbeat-capable
+secret's heartbeat can be switched on: `"no target"`, `"no connection"` or, for an SSH Key secret,
+`"no pinned host key"` on the target. It's null once heartbeat is already running, when it's opted
+out on purpose (`heartbeatOptOut`), or when the type has no heartbeat at all. The gateway derives
+it from `secretTypes` and `targets` (the vault's `GetSecret`/`secretsInFolder` don't compute it;
+only the machine schema's `*ForPrincipal` responses do, as `SecretSummary.heartbeatBlockedReason`).
+`setSecretAutomation` still refuses an explicit switch-on before then, naming the same reason.
+
 ### Targets and SSH host keys
 
 `Target.sshHostKeys` (human schema) and `MachineTarget.sshHostKeys` (machine schema) list the SSH
