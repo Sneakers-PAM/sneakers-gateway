@@ -548,6 +548,7 @@ type SecretVersion struct {
 	Active           bool     `json:"active"`
 	FieldKeys        []string `json:"fieldKeys"`
 	ChangedFieldKeys []string `json:"changedFieldKeys"`
+	ChangeLabel      *string  `json:"changeLabel,omitempty"`
 }
 
 type SecuritySettings struct {

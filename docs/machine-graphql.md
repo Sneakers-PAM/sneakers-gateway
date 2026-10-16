@@ -33,7 +33,9 @@ Personal tokens only. `prepareSecretUse(secretId, fieldKey, argv, clientLabel, r
 
 ## Change type
 
-`changeSecretTypeForPrincipal(id, newTypeId, fieldMapping, fields)` needs Author on the secret and returns `TypeChangedSecret { secret, fieldKeys, movedToNotesKeys, automation }`. `movedToNotesKeys` lists the old field keys (never values) whose values had no field in the new type and were appended to its notes field. Vault applies the value rules: nothing is dropped, sensitive values only move into sensitive fields, and the prior values stay in version history. Any type may be converted into or out of any other, including rotation/heartbeat types (AD, Windows, database accounts) and the certificate type. Dropping checkout from a plain checkout type is still refused.
+`changeSecretTypeForPrincipal(id, newTypeId, fieldMapping, fields)` needs Author on the secret and returns `TypeChangedSecret { secret, fieldKeys, movedToNotesKeys, automation, changeLabel }`. `movedToNotesKeys` lists the old field keys (never values) whose values had no field in the new type and were appended to its notes field. Vault applies the value rules: nothing is dropped, sensitive values only move into sensitive fields, and the prior values stay in version history. Any type may be converted into or out of any other, including rotation/heartbeat types (AD, Windows, database accounts) and the certificate type. Dropping checkout from a plain checkout type is still refused.
+
+`changeLabel` is vault's own description of the change ("Type changed: Password -> Password Account (SSH); added host; fields carried over: username, password"), the same text recorded on the new version (`SecretVersion.changeLabel`), passed through unchanged.
 
 `automation` is derived from the new type and the returned secret. The gateway reads the type catalog for it, only when it is selected.
 

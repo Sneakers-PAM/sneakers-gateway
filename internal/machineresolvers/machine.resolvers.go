@@ -129,7 +129,10 @@ func (r *mutationResolver) ChangeSecretTypeForPrincipal(ctx context.Context, id 
 	if moved == nil {
 		moved = []string{}
 	}
-	return &TypeChangedSecret{Secret: summaryOf(resp.GetSecret()), FieldKeys: keys, MovedToNotesKeys: moved}, nil
+	return &TypeChangedSecret{
+		Secret: summaryOf(resp.GetSecret()), FieldKeys: keys, MovedToNotesKeys: moved,
+		ChangeLabel: emptyToNil(resp.GetChangeLabel()),
+	}, nil
 }
 
 // RenameSecretForPrincipal is the resolver for the renameSecretForPrincipal field.

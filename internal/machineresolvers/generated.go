@@ -185,6 +185,7 @@ type ComplexityRoot struct {
 
 	TypeChangedSecret struct {
 		Automation       func(childComplexity int) int
+		ChangeLabel      func(childComplexity int) int
 		FieldKeys        func(childComplexity int) int
 		MovedToNotesKeys func(childComplexity int) int
 		Secret           func(childComplexity int) int
@@ -988,6 +989,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TypeChangedSecret.Automation(childComplexity), true
+	case "TypeChangedSecret.changeLabel":
+		if e.ComplexityRoot.TypeChangedSecret.ChangeLabel == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TypeChangedSecret.ChangeLabel(childComplexity), true
 	case "TypeChangedSecret.fieldKeys":
 		if e.ComplexityRoot.TypeChangedSecret.FieldKeys == nil {
 			break
@@ -1198,13 +1205,18 @@ input FieldMappingInput {
 # Result of changeSecretTypeForPrincipal: the secret's summary under its new
 # type, the field KEYS now populated (never values), the old field KEYS whose
 # values had no field in the new type and were appended to its notes field
-# (never values), and what the change left the secret's rotation, heartbeat
-# and target at.
+# (never values), what the change left the secret's rotation, heartbeat and
+# target at, and the label the new version records for the change itself.
 type TypeChangedSecret {
   secret: SecretSummary!
   fieldKeys: [String!]!
   movedToNotesKeys: [String!]!
   automation: TypeChangeAutomation!
+  # Describes the change itself (old type name -> new type name, fields
+  # added, renamed and carried over), the same text recorded on the new
+  # version (SecretVersion.changeLabel) — so a type change never reads in
+  # history as just "Changed: <field>".
+  changeLabel: String
 }
 
 # The secret's automation and target after a type change, derived from the new
@@ -1764,6 +1776,8 @@ func (ec *executionContext) childFields_TypeChangedSecret(ctx context.Context, f
 		return ec.fieldContext_TypeChangedSecret_movedToNotesKeys(ctx, field)
 	case "automation":
 		return ec.fieldContext_TypeChangedSecret_automation(ctx, field)
+	case "changeLabel":
+		return ec.fieldContext_TypeChangedSecret_changeLabel(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type TypeChangedSecret", field.Name)
 }
@@ -5649,6 +5663,29 @@ func (ec *executionContext) fieldContext_TypeChangedSecret_automation(_ context.
 	return fc, nil
 }
 
+func (ec *executionContext) _TypeChangedSecret_changeLabel(ctx context.Context, field graphql.CollectedField, obj *TypeChangedSecret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TypeChangedSecret_changeLabel(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ChangeLabel, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TypeChangedSecret_changeLabel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TypeChangedSecret", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _UpdatedSecretFields_secret(ctx context.Context, field graphql.CollectedField, obj *UpdatedSecretFields) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8224,6 +8261,8 @@ func (ec *executionContext) _TypeChangedSecret(ctx context.Context, sel ast.Sele
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "changeLabel":
+			out.Values[i] = ec._TypeChangedSecret_changeLabel(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

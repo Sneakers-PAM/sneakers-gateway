@@ -157,6 +157,7 @@ type TypeChangedSecret struct {
 	FieldKeys        []string              `json:"fieldKeys"`
 	MovedToNotesKeys []string              `json:"movedToNotesKeys"`
 	Automation       *TypeChangeAutomation `json:"automation"`
+	ChangeLabel      *string               `json:"changeLabel,omitempty"`
 }
 
 type UpdatedSecretFields struct {

@@ -90,13 +90,18 @@ input FieldMappingInput {
 # Result of changeSecretTypeForPrincipal: the secret's summary under its new
 # type, the field KEYS now populated (never values), the old field KEYS whose
 # values had no field in the new type and were appended to its notes field
-# (never values), and what the change left the secret's rotation, heartbeat
-# and target at.
+# (never values), what the change left the secret's rotation, heartbeat and
+# target at, and the label the new version records for the change itself.
 type TypeChangedSecret {
   secret: SecretSummary!
   fieldKeys: [String!]!
   movedToNotesKeys: [String!]!
   automation: TypeChangeAutomation!
+  # Describes the change itself (old type name -> new type name, fields
+  # added, renamed and carried over), the same text recorded on the new
+  # version (SecretVersion.changeLabel) — so a type change never reads in
+  # history as just "Changed: <field>".
+  changeLabel: String
 }
 
 # The secret's automation and target after a type change, derived from the new

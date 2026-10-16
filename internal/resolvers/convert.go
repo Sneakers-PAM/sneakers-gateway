@@ -698,6 +698,7 @@ func gqlSecretVersion(v *vaultv1.SecretVersion, createdByName string) *SecretVer
 		Active:           v.GetActive(),
 		FieldKeys:        keys,
 		ChangedFieldKeys: changed,
+		ChangeLabel:      emptyToNil(v.GetChangeLabel()),
 	}
 }
 

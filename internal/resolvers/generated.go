@@ -623,6 +623,7 @@ type ComplexityRoot struct {
 
 	SecretVersion struct {
 		Active           func(childComplexity int) int
+		ChangeLabel      func(childComplexity int) int
 		ChangedFieldKeys func(childComplexity int) int
 		CreatedAt        func(childComplexity int) int
 		CreatedBy        func(childComplexity int) int
@@ -4107,6 +4108,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecretVersion.Active(childComplexity), true
+	case "SecretVersion.changeLabel":
+		if e.ComplexityRoot.SecretVersion.ChangeLabel == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretVersion.ChangeLabel(childComplexity), true
 	case "SecretVersion.changedFieldKeys":
 		if e.ComplexityRoot.SecretVersion.ChangedFieldKeys == nil {
 			break
@@ -4958,6 +4965,12 @@ type SecretVersion {
   # version (the oldest version reports all its keys; a removed field counts as
   # changed). Empty when a version changed no values. Never exposes a value.
   changedFieldKeys: [String!]!
+  # Set only for a version a type change produced: describes the change itself
+  # ("Type changed: Password -> Password Account (SSH); added host; fields
+  # carried over: username, password"), naming any field added, renamed or
+  # dropped by the mapping. Null for every other version, which renders from
+  # changedFieldKeys as before ("Changed: <field>, <field>").
+  changeLabel: String
 }
 
 # A folder move in a secret's history, read from the audit trail. The folder
@@ -6952,6 +6965,8 @@ func (ec *executionContext) childFields_SecretVersion(ctx context.Context, field
 		return ec.fieldContext_SecretVersion_fieldKeys(ctx, field)
 	case "changedFieldKeys":
 		return ec.fieldContext_SecretVersion_changedFieldKeys(ctx, field)
+	case "changeLabel":
+		return ec.fieldContext_SecretVersion_changeLabel(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecretVersion", field.Name)
 }
@@ -22539,6 +22554,29 @@ func (ec *executionContext) fieldContext_SecretVersion_changedFieldKeys(_ contex
 	return graphql.NewScalarFieldContext("SecretVersion", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _SecretVersion_changeLabel(ctx context.Context, field graphql.CollectedField, obj *SecretVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretVersion_changeLabel(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ChangeLabel, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretVersion_changeLabel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretVersion", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _SecuritySettings_defaultPasswordPolicyId(ctx context.Context, field graphql.CollectedField, obj *SecuritySettings) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -30991,6 +31029,8 @@ func (ec *executionContext) _SecretVersion(ctx context.Context, sel ast.Selectio
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "changeLabel":
+			out.Values[i] = ec._SecretVersion_changeLabel(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

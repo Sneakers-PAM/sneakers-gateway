@@ -317,7 +317,11 @@ the human schema has these operations; `/machine/graphql` has none of them.
 ### Recovery
 
 A secret's prior values are a separate recovery surface. `secretVersions` lists the versions and
-their field keys to any reader, never a value. `revealSecretVersionField` and
+their field keys to any reader, never a value. `SecretVersion.changeLabel` is set only on a version
+a type change produced ("Type changed: Password -> Password Account (SSH); added host; fields
+carried over: username, password"), naming any field added, renamed or dropped by the mapping; it's
+null on every other version, which renders from `changedFieldKeys` as before ("Changed:
+`<field>`, `<field>`"). `revealSecretVersionField` and
 `restoreSecretVersion(secretId, versionNo)`, which makes a prior version's fields the current ones
 as a new version, need the identity role `recovery` and a fresh second factor. The gateway sends
 the role as `is_recovery` on the vault actor, read from identity on every request, and the vault
