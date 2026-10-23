@@ -1,6 +1,6 @@
 module github.com/Sneakers-PAM/sneakers-gateway
 
-go 1.26.9
+go 1.26.10
 
 tool github.com/99designs/gqlgen
 
