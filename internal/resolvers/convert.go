@@ -6,6 +6,7 @@ package resolvers
 import (
 	"sort"
 	"strings"
+	"time"
 
 	auditv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/audit/v1"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
@@ -461,7 +462,10 @@ func protoPolicyInput(in PasswordPolicyInput) *vaultv1.PasswordPolicy {
 		EndLiteral: deref(in.EndLiteral), ExcludeChars: deref(in.ExcludeChars),
 	}
 }
-func gqlSettings(s *vaultv1.SecuritySettings) *SecuritySettings {
+
+// gqlSettings maps the vault's settings and adds the MFA window the gateway
+// reads from its own MFA_MAX_AGE, which the vault doesn't report.
+func gqlSettings(s *vaultv1.SecuritySettings, mfaMaxAge time.Duration) *SecuritySettings {
 	return &SecuritySettings{
 		DefaultPasswordPolicyID:        strPtr(s.GetDefaultPasswordPolicyId()),
 		RequireMfaForSensitiveCheckout: s.GetRequireMfaForSensitiveCheckout(),
@@ -469,6 +473,7 @@ func gqlSettings(s *vaultv1.SecuritySettings) *SecuritySettings {
 		RequestHistoryRetentionDays:    intPtr(int(s.GetRequestHistoryRetentionDays())),
 		SessionTTLSeconds:              intPtr(int(s.GetSessionTtlSeconds())),
 		RequireMfaForReveal:            s.GetRequireMfaForReveal(),
+		MfaMaxAgeSeconds:               int(mfaMaxAge / time.Second),
 	}
 }
 

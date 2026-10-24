@@ -249,6 +249,11 @@ reveal or check-out needs a step-up. Where a reveal needs one is set globally by
 (`inherit`, `require` or `off`, shown as `Folder.revealStepUp`; inherited down the tree; site
 admins only). Machine callers never carry the time.
 
+`SecuritySettings.mfaMaxAgeSeconds` reports the window this gateway enforces, read from its own
+`MFA_MAX_AGE` at start: `1800` (30 minutes) when unset, `0` when every sensitive action asks. It's
+read-only; set `MFA_MAX_AGE` where the services run (the chart's `global.mfaMaxAge` sets it on the
+vault, the workflow and the gateway together).
+
 ### Pending secret uses, approvals and runs
 
 The vault decides who needs an approval (see the vault's docs/api.md, "Approval levels"): a secret

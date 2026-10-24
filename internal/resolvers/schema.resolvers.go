@@ -104,7 +104,7 @@ func (r *mutationResolver) UpdateSecuritySettings(ctx context.Context, input Sec
 	if err != nil {
 		return nil, err
 	}
-	return gqlSettings(resp.GetSettings()), nil
+	return gqlSettings(resp.GetSettings(), r.mfaMaxAge()), nil
 }
 
 // CreateSecretType is the resolver for the createSecretType field.
@@ -1357,7 +1357,7 @@ func (r *queryResolver) SecuritySettings(ctx context.Context) (*SecuritySettings
 	if err != nil {
 		return nil, err
 	}
-	return gqlSettings(resp.GetSettings()), nil
+	return gqlSettings(resp.GetSettings(), r.mfaMaxAge()), nil
 }
 
 // SecretTypes is the resolver for the secretTypes field.

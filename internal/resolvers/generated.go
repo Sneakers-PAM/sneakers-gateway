@@ -642,6 +642,7 @@ type ComplexityRoot struct {
 	SecuritySettings struct {
 		AllowAPIForSensitive           func(childComplexity int) int
 		DefaultPasswordPolicyID        func(childComplexity int) int
+		MfaMaxAgeSeconds               func(childComplexity int) int
 		RequestHistoryRetentionDays    func(childComplexity int) int
 		RequireMfaForReveal            func(childComplexity int) int
 		RequireMfaForSensitiveCheckout func(childComplexity int) int
@@ -4227,6 +4228,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecuritySettings.DefaultPasswordPolicyID(childComplexity), true
+	case "SecuritySettings.mfaMaxAgeSeconds":
+		if e.ComplexityRoot.SecuritySettings.MfaMaxAgeSeconds == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecuritySettings.MfaMaxAgeSeconds(childComplexity), true
 	case "SecuritySettings.requestHistoryRetentionDays":
 		if e.ComplexityRoot.SecuritySettings.RequestHistoryRetentionDays == nil {
 			break
@@ -5259,6 +5266,10 @@ type SecuritySettings {
   sessionTtlSeconds: Int
   # Global default for step-up MFA before a reveal; folders override it.
   requireMfaForReveal: Boolean!
+  # How recent a second factor must be (MFA_MAX_AGE), in seconds, as this
+  # gateway enforces it: 1800 (30m) when unset, 0 when every sensitive action
+  # asks. Read-only; set where the services run.
+  mfaMaxAgeSeconds: Int!
 }
 # Partial update: only the fields provided are changed.
 input SecuritySettingsInput {
@@ -7088,6 +7099,8 @@ func (ec *executionContext) childFields_SecuritySettings(ctx context.Context, fi
 		return ec.fieldContext_SecuritySettings_sessionTtlSeconds(ctx, field)
 	case "requireMfaForReveal":
 		return ec.fieldContext_SecuritySettings_requireMfaForReveal(ctx, field)
+	case "mfaMaxAgeSeconds":
+		return ec.fieldContext_SecuritySettings_mfaMaxAgeSeconds(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecuritySettings", field.Name)
 }
@@ -23085,6 +23098,29 @@ func (ec *executionContext) fieldContext_SecuritySettings_requireMfaForReveal(_ 
 	return graphql.NewScalarFieldContext("SecuritySettings", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _SecuritySettings_mfaMaxAgeSeconds(ctx context.Context, field graphql.CollectedField, obj *SecuritySettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecuritySettings_mfaMaxAgeSeconds(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MfaMaxAgeSeconds, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecuritySettings_mfaMaxAgeSeconds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecuritySettings", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
 func (ec *executionContext) _ServiceAccount_id(ctx context.Context, field graphql.CollectedField, obj *ServiceAccount) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -31529,6 +31565,11 @@ func (ec *executionContext) _SecuritySettings(ctx context.Context, sel ast.Selec
 			out.Values[i] = ec._SecuritySettings_sessionTtlSeconds(ctx, field, obj)
 		case "requireMfaForReveal":
 			out.Values[i] = ec._SecuritySettings_requireMfaForReveal(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mfaMaxAgeSeconds":
+			out.Values[i] = ec._SecuritySettings_mfaMaxAgeSeconds(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
