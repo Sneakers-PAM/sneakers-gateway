@@ -495,6 +495,10 @@ type SecuritySettings {
   sessionTtlSeconds: Int
   # Global default for step-up MFA before a reveal; folders override it.
   requireMfaForReveal: Boolean!
+  # How recent a second factor must be (MFA_MAX_AGE), in seconds, as this
+  # gateway enforces it: 1800 (30m) when unset, 0 when every sensitive action
+  # asks. Read-only; set where the services run.
+  mfaMaxAgeSeconds: Int!
 }
 # Partial update: only the fields provided are changed.
 input SecuritySettingsInput {

@@ -561,6 +561,7 @@ type SecuritySettings struct {
 	RequestHistoryRetentionDays    *int    `json:"requestHistoryRetentionDays,omitempty"`
 	SessionTTLSeconds              *int    `json:"sessionTtlSeconds,omitempty"`
 	RequireMfaForReveal            bool    `json:"requireMfaForReveal"`
+	MfaMaxAgeSeconds               int     `json:"mfaMaxAgeSeconds"`
 }
 
 type SecuritySettingsInput struct {

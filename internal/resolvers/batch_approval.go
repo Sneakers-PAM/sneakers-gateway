@@ -46,6 +46,14 @@ func (r *Resolver) logger(ctx context.Context) log.Logger {
 	return r.Log.Ctx(ctx)
 }
 
+// mfaMaxAge is the configured MFA_MAX_AGE window, or the default when unset.
+func (r *Resolver) mfaMaxAge() time.Duration {
+	if r.MFAMaxAge > 0 {
+		return r.MFAMaxAge
+	}
+	return defaultMFAMaxAge
+}
+
 // mfaFreshUntil is when the session's second factor stops covering an
 // approval, or zero when it doesn't cover one now.
 func (r *Resolver) mfaFreshUntil(ctx context.Context) time.Time {
@@ -53,10 +61,7 @@ func (r *Resolver) mfaFreshUntil(ctx context.Context) time.Time {
 	if at.IsZero() {
 		return time.Time{}
 	}
-	maxAge := r.MFAMaxAge
-	if maxAge <= 0 {
-		maxAge = defaultMFAMaxAge
-	}
+	maxAge := r.mfaMaxAge()
 	// A window under the skew allowance (MFA_MAX_AGE=0) still covers the
 	// action retried right after its step-up.
 	maxAge = max(maxAge, mfaClockSkew)
