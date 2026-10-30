@@ -526,12 +526,13 @@ its credential id; the gateway doesn't write a second copy.
 ## OAuth for native clients
 
 With `OAUTH_PUBLIC_URL` set, the gateway is an OAuth 2.0 authorization server for native clients
-(loopback redirect URIs, PKCE `S256`), which is how the MCP server gets a personal token:
+(loopback redirect URIs, PKCE `S256`), which is how the MCP server and the CLIs (`sneakers-put
+login`, `sneakers-run login`) get a personal token:
 
 | Route | Purpose |
 |---|---|
 | `GET /.well-known/oauth-authorization-server` | Server metadata. |
-| `POST /oauth2/register` | Dynamic client registration (loopback redirect URIs only). |
+| `POST /oauth2/register` | Dynamic client registration (loopback redirect URIs only). A CLI sends `"software_id": "sneakers-cli"`. |
 | `GET /oauth2/authorize` | Start the flow; the user signs in and consents in the UI. |
 | `GET /oauth2/consent/{id}`, `POST /oauth2/consent/{id}` | Read and answer the consent request (signed-in user). |
 | `POST /oauth2/consent/{id}/email-code`, `POST /oauth2/consent/{id}/passkey/begin` | Step-up second factor for the consent. |
@@ -546,15 +547,22 @@ after SSO), an approval with no `factor` answers 403 `{"error":"step_up_required
 stays pending for a retry with a factor. A `factor` that is given is always verified; a wrong one is
 401 `{"error":"invalid_code"}`. Denying needs no factor.
 
-A token minted here is recorded by identity with `client_kind: mcp`; one minted on the tokens page
-is `cli`. Together with Hydra client-credentials JWTs (audience `sneakers-mcp`), the `mcp` tokens
-are the MCP agent tokens.
+A client says it's a Sneakers CLI by registering with the RFC 7591 `software_id` `sneakers-cli`;
+the registration answer echoes it. The token minted for that client is recorded by identity with
+`client_kind: cli`, like one minted on the tokens page. Every other client is an MCP client, and its
+token is recorded with `client_kind: mcp`. Together with Hydra client-credentials JWTs (audience
+`sneakers-mcp`), the `mcp` tokens are the MCP agent tokens. A client keeps the kind it registered
+with; a client registered before the kinds existed is an MCP client.
 
-**MCP off** (`MCP_ENABLED=false`): every route above, and every MCP agent token on
-`/machine/graphql`, answers `403` with
+**MCP off** (`MCP_ENABLED=false`): the metadata stays up and CLI clients sign in as usual. For an
+MCP client, every route above (registration, authorize, the consent routes and the token
+exchange), and every MCP agent token on `/machine/graphql`, answers `403` with
 `{"error":"MCP_DISABLED","message":"MCP is turned off on this appliance (setting mcp.enabled)"}`,
-before identity or Hydra is called for a JWT, so no new agent token can be minted or used.
-Personal tokens with `client_kind: cli` and service-account API tokens keep working.
+before identity or Hydra is called for a JWT, so no new agent token can be minted or used. This
+includes an MCP client registered, or a consent started, while the MCP was still on. Personal
+tokens with `client_kind: cli` and service-account API tokens keep working, and turning the MCP
+off revokes only `mcp` tokens. With `OAUTH_PUBLIC_URL` unset there is no authorization server, so
+while the MCP is off the routes answer `MCP_DISABLED` to everyone.
 
 **Machine API off** (`MACHINE_API_ENABLED=false`): `/machine/graphql` answers `403` with
 `{"error":"MACHINE_API_DISABLED","message":"The machine API is turned off on this install (setting MACHINE_API_ENABLED)"}`

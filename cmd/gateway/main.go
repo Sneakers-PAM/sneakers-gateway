@@ -405,8 +405,9 @@ func main() {
 	}
 	cors := corsP.wrap
 	mux := http.NewServeMux()
-	// MCP off: the OAuth routes that mint MCP agent tokens answer
-	// MCP_DISABLED, and the machine API refuses the agent tokens (below).
+	// MCP off: the OAuth routes answer MCP_DISABLED to MCP clients (CLI
+	// clients still sign in), and the machine API refuses the agent tokens
+	// (below).
 	mcpEnabled := switchOn(os.Getenv("MCP_ENABLED"))
 	machineAPIEnabled := switchOn(os.Getenv("MACHINE_API_ENABLED"))
 	// The switches come from the environment (the appliance's MCP switch
@@ -415,10 +416,7 @@ func main() {
 	logger.Info().Bool("mcp_enabled", mcpEnabled).Bool("machine_api_enabled", machineAPIEnabled).
 		Bool("hydra_enabled", envTrue("HYDRA_ENABLED")).Str("oauth_public_url", os.Getenv("OAUTH_PUBLIC_URL")).
 		Msg("mcp and machine-API switches")
-	if !mcpEnabled {
-		mux.Handle("/oauth2/", bff.MCPOff())
-		mux.Handle("/.well-known/oauth-authorization-server", bff.MCPOff())
-	}
+	oauthMounted := false
 	// valkeyInfo reads the session store's INFO for the diagnostics; it stays
 	// nil (not configured) in noauth mode, which has no Valkey client.
 	var valkeyInfo func(context.Context) (string, error)
@@ -458,15 +456,17 @@ func main() {
 		valkeyPing = func(ctx context.Context) error { return valkey.Redis().Ping(ctx).Err() }
 		bffH.Log = reqLog
 		bffH.Audit = auditClient
-		// MCP /login: the OAuth native-app authorization server that issues
-		// personal tokens. Mounted only when the env's public UI URL is set.
-		if pub := env("OAUTH_PUBLIC_URL", ""); pub != "" && mcpEnabled {
-			o := (&bff.OAuth{Handler: bffH, Store: bffH.OAuthStore, PublicURL: pub}).Routes()
+		// MCP /login and the CLIs' login: the OAuth native-app authorization
+		// server that issues personal tokens. Mounted whenever the env's
+		// public UI URL is set; with the MCP off it serves CLI clients only.
+		if pub := env("OAUTH_PUBLIC_URL", ""); pub != "" {
+			o := (&bff.OAuth{Handler: bffH, Store: bffH.OAuthStore, PublicURL: pub, MCPDisabled: !mcpEnabled}).Routes()
 			mux.Handle("/oauth2/", o)
 			mux.Handle("/.well-known/oauth-authorization-server", o)
-			logger.Info().Str("issuer", pub).Msg("mcp: the OAuth authorization server is mounted")
-		} else if mcpEnabled {
-			logger.Warn().Msg("mcp: on, but OAUTH_PUBLIC_URL is unset, so no OAuth authorization server is mounted")
+			oauthMounted = true
+			logger.Info().Str("issuer", pub).Bool("mcp_clients", mcpEnabled).Msg("oauth: the authorization server for native clients is mounted")
+		} else {
+			logger.Warn().Bool("mcp_enabled", mcpEnabled).Msg("oauth: OAUTH_PUBLIC_URL is unset, so no authorization server is mounted and neither MCP clients nor the CLIs can sign in")
 		}
 		mux.Handle("/auth/login", cors(http.HandlerFunc(bffH.Login)))
 		mux.Handle("/auth/logout", cors(http.HandlerFunc(bffH.Logout)))
@@ -544,6 +544,12 @@ func main() {
 			},
 		})
 		mux.Handle("/graphql", cors(withActor(identityClient, gql)))
+	}
+	// With the MCP off and no authorization server mounted, the OAuth routes
+	// still name the switch rather than answering 404.
+	if !mcpEnabled && !oauthMounted {
+		mux.Handle("/oauth2/", bff.MCPOff())
+		mux.Handle("/.well-known/oauth-authorization-server", bff.MCPOff())
 	}
 	conns := diagServices{
 		identity: idConn, vault: conn, workflow: wfConn, audit: auditConn, notify: nConn, sshbroker: sshbrokerConn,

@@ -16,6 +16,16 @@ const CodeMCPDisabled = "MCP_DISABLED"
 // ClientKindMCP is the client_kind of personal tokens minted for MCP clients.
 const ClientKindMCP = "mcp"
 
+// ClientKindCLI is the client_kind of personal tokens for the Sneakers CLIs
+// (sneakers-put, sneakers-run): minted on the tokens page, or by the OAuth
+// flow for a client registered with software_id CLISoftwareID. They follow
+// the machine API switch, not the MCP switch.
+const ClientKindCLI = "cli"
+
+// CLISoftwareID is the RFC 7591 software_id a native client sends at
+// registration to say it's a Sneakers CLI rather than an MCP agent.
+const CLISoftwareID = "sneakers-cli"
+
 const mcpDisabledMessage = "MCP is turned off on this appliance (setting mcp.enabled)"
 
 func writeMCPDisabled(w http.ResponseWriter) {
