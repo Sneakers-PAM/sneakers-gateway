@@ -17,18 +17,25 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/Bugs5382/go-log"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 )
 
-// OAuth is the authorization server behind MCP /login: RFC 8252 native-app
-// sign-in with PKCE, issuing a personal token. The browser part runs on the
-// signed-in Sneakers session; consent needs a session factor within
-// MFA_MAX_AGE or a factor given with it, checked once.
+// OAuth is the authorization server behind MCP /login and the CLIs' login:
+// RFC 8252 native-app sign-in with PKCE, issuing a personal token. The
+// browser part runs on the signed-in Sneakers session; consent needs a
+// session factor within MFA_MAX_AGE or a factor given with it, checked once.
+// A client registered with software_id CLISoftwareID gets client_kind cli
+// tokens and keeps signing in while the MCP is off; every other client is an
+// MCP client, gets client_kind mcp tokens and follows the MCP switch.
 type OAuth struct {
 	Handler   *Handler
 	Store     OAuthStore
 	PublicURL string
 	Now       func() time.Time
+	// MCPDisabled is the MCP switch (MCP_ENABLED=false): MCP clients are
+	// refused with MCP_DISABLED at every step, CLI clients carry on.
+	MCPDisabled bool
 }
 
 const (
@@ -41,6 +48,18 @@ type oauthClient struct {
 	ID           string   `json:"id"`
 	Name         string   `json:"name"`
 	RedirectURIs []string `json:"redirect_uris"`
+	// Kind is ClientKindCLI or ClientKindMCP; a client stored before kinds
+	// existed has none and is an MCP client.
+	Kind string `json:"kind,omitempty"`
+}
+
+func (c oauthClient) kind() string { return clientKind(c.Kind) }
+
+func clientKind(k string) string {
+	if k == ClientKindCLI {
+		return ClientKindCLI
+	}
+	return ClientKindMCP
 }
 
 type oauthRequest struct {
@@ -58,6 +77,7 @@ type oauthCode struct {
 	RedirectURI string    `json:"redirect_uri"`
 	Challenge   string    `json:"challenge"`
 	Label       string    `json:"label"`
+	ClientKind  string    `json:"client_kind,omitempty"`
 	ExpiresAt   time.Time `json:"expires_at"`
 }
 
@@ -128,12 +148,22 @@ func randomID() (string, error) {
 }
 
 func (o *OAuth) register(w http.ResponseWriter, r *http.Request) {
+	lg := o.Handler.logger().Ctx(r.Context())
 	var in struct {
 		ClientName   string   `json:"client_name"`
 		RedirectURIs []string `json:"redirect_uris"`
+		SoftwareID   string   `json:"software_id"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&in); err != nil || len(in.RedirectURIs) == 0 || len(in.RedirectURIs) > 10 {
+		lg.Debug("oauth register refused: invalid client metadata")
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_client_metadata"})
+		return
+	}
+	kind := ClientKindMCP
+	if strings.TrimSpace(in.SoftwareID) == CLISoftwareID {
+		kind = ClientKindCLI
+	}
+	if o.refuseMCP(w, r, kind, "register") {
 		return
 	}
 	for _, u := range in.RedirectURIs {
@@ -147,18 +177,45 @@ func (o *OAuth) register(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
 		return
 	}
-	c := oauthClient{ID: "snkc_" + id, Name: strings.TrimSpace(in.ClientName), RedirectURIs: in.RedirectURIs}
+	c := oauthClient{ID: "snkc_" + id, Name: strings.TrimSpace(in.ClientName), RedirectURIs: in.RedirectURIs, Kind: kind}
 	if c.Name == "" {
 		c.Name = "MCP client"
+		if kind == ClientKindCLI {
+			c.Name = "Sneakers CLI"
+		}
 	}
 	if err := o.Store.Put(r.Context(), "client:"+c.ID, c, oauthClientTTL); err != nil {
+		lg.Error(err, "oauth register: the client store is unavailable")
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporarily_unavailable"})
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{
+	lg.Info("oauth client registered", log.F("client_id", c.ID), log.F("client_kind", kind))
+	out := map[string]any{
 		"client_id": c.ID, "client_name": c.Name, "redirect_uris": c.RedirectURIs,
 		"token_endpoint_auth_method": "none", "grant_types": []string{"authorization_code"}, "response_types": []string{"code"},
-	})
+	}
+	if kind == ClientKindCLI {
+		out["software_id"] = CLISoftwareID
+	}
+	writeJSON(w, http.StatusCreated, out)
+}
+
+// refuseMCP answers MCP_DISABLED, and reports true, when the MCP is off and
+// the step is for an MCP client. CLI clients are never refused here.
+func (o *OAuth) refuseMCP(w http.ResponseWriter, r *http.Request, kind, step string) bool {
+	if !o.MCPDisabled || clientKind(kind) != ClientKindMCP {
+		return false
+	}
+	o.Handler.logger().Ctx(r.Context()).Info("oauth refused: the MCP is off and this is an MCP client", log.F("step", step))
+	writeMCPDisabled(w)
+	return true
+}
+
+// refuseMCPRequest is refuseMCP for a step on a parked authorization
+// request, whose client decides the kind.
+func (o *OAuth) refuseMCPRequest(w http.ResponseWriter, r *http.Request, req oauthRequest, step string) bool {
+	c, _ := o.client(r.Context(), req.ClientID)
+	return o.refuseMCP(w, r, c.Kind, step)
 }
 
 func (o *OAuth) client(ctx context.Context, id string) (oauthClient, bool) {
@@ -185,6 +242,9 @@ func (o *OAuth) authorize(w http.ResponseWriter, r *http.Request) {
 	}
 	if !registered {
 		http.Error(w, "unknown client or redirect_uri", http.StatusBadRequest)
+		return
+	}
+	if o.refuseMCP(w, r, c.Kind, "authorize") {
 		return
 	}
 	state := q.Get("state")
@@ -222,6 +282,9 @@ func (o *OAuth) consentDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c, _ := o.client(r.Context(), req.ClientID)
+	if o.refuseMCP(w, r, c.Kind, "consent details") {
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"clientName": c.Name, "redirectHost": hostOf(req.RedirectURI), "factorRequired": !o.Handler.mfaFresh(sess),
 	})
@@ -264,6 +327,9 @@ func (o *OAuth) consent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "request_expired"})
 		return
 	}
+	if o.refuseMCPRequest(w, r, req, "consent") {
+		return
+	}
 	if !in.Approve {
 		_, _ = o.Store.Take(r.Context(), "request:"+id, &req)
 		writeJSON(w, http.StatusOK, map[string]string{"redirect": withQuery(req.RedirectURI, url.Values{"error": {"access_denied"}, "state": {req.State}})})
@@ -302,7 +368,7 @@ func (o *OAuth) consent(w http.ResponseWriter, r *http.Request) {
 	}
 	grant := oauthCode{
 		UserID: sess.UserID, ClientID: req.ClientID, ClientName: c.Name, RedirectURI: req.RedirectURI,
-		Challenge: req.Challenge, Label: strings.TrimSpace(in.Label), ExpiresAt: o.now().Add(oauthCodeTTL),
+		Challenge: req.Challenge, Label: strings.TrimSpace(in.Label), ClientKind: c.kind(), ExpiresAt: o.now().Add(oauthCodeTTL),
 	}
 	if err := o.Store.Put(r.Context(), "code:"+code, grant, oauthCodeTTL); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporarily_unavailable"})
@@ -355,22 +421,31 @@ func (o *OAuth) token(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported_grant_type"})
 		return
 	}
+	lg := o.Handler.logger().Ctx(r.Context())
 	grant, err := o.redeem(r.Context(), r.PostForm)
 	if errors.Is(err, errInvalidGrant) {
+		lg.Debug("oauth token refused: invalid grant")
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
 		return
 	}
 	if err != nil {
+		lg.Error(err, "oauth token: the code store is unavailable")
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporarily_unavailable"})
 		return
 	}
+	kind := clientKind(grant.ClientKind)
+	if o.refuseMCP(w, r, kind, "token") {
+		return
+	}
 	resp, err := o.Handler.Identity.MintUserToken(r.Context(), &identityv1.MintUserTokenRequest{
-		UserId: grant.UserID, Label: grant.Label, ClientName: grant.ClientName, ClientKind: ClientKindMCP,
+		UserId: grant.UserID, Label: grant.Label, ClientName: grant.ClientName, ClientKind: kind,
 	})
 	if err != nil {
+		lg.Error(err, "oauth token: identity refused to mint the personal token", log.F("client_kind", kind))
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
 		return
 	}
+	lg.Info("oauth token minted", log.F("client_id", grant.ClientID), log.F("client_kind", kind), log.F("token_id", resp.GetMeta().GetId()))
 	writeJSON(w, http.StatusOK, map[string]string{"access_token": resp.GetToken(), "token_type": "Bearer"})
 }
 
@@ -381,8 +456,12 @@ func (o *OAuth) consentEmailCode(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, ok := o.pendingRequest(r.Context(), r.PathValue("id")); !ok {
+	req, ok := o.pendingRequest(r.Context(), r.PathValue("id"))
+	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "request_expired"})
+		return
+	}
+	if o.refuseMCPRequest(w, r, req, "consent factor") {
 		return
 	}
 	if _, err := o.Handler.Identity.SendEmailOtp(r.Context(), &identityv1.SendEmailOtpRequest{UserId: sess.UserID, Purpose: mfaLoginPurpose}); err != nil {
@@ -397,8 +476,12 @@ func (o *OAuth) consentPasskeyBegin(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, ok := o.pendingRequest(r.Context(), r.PathValue("id")); !ok {
+	req, ok := o.pendingRequest(r.Context(), r.PathValue("id"))
+	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "request_expired"})
+		return
+	}
+	if o.refuseMCPRequest(w, r, req, "consent factor") {
 		return
 	}
 	resp, err := o.Handler.Identity.WebauthnAssertBegin(r.Context(), &identityv1.WebauthnAssertBeginRequest{UserId: sess.UserID})

@@ -78,8 +78,8 @@ SSO is off unless `POLIS_PUBLIC_URL` is set. Setup's SSO provisioning is off unl
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OAUTH_PUBLIC_URL` | (none) | The public URL of the UI. When set (and `AUTH_MODE=real`), the gateway serves the OAuth authorization server for native clients under `/oauth2/` and `/.well-known/oauth-authorization-server`. The machine API also uses it to build links. |
-| `MCP_ENABLED` | on | `false` or `0` (any case, spaces trimmed) turns the MCP off: the OAuth routes and every MCP agent token on the machine API answer `MCP_DISABLED` (see [api.md](api.md), "OAuth for native clients"). Anything else, or unset, is on. |
+| `OAUTH_PUBLIC_URL` | (none) | The public URL of the UI. When set (and `AUTH_MODE=real`), the gateway serves the OAuth authorization server for native clients (the MCP server and the CLIs) under `/oauth2/` and `/.well-known/oauth-authorization-server`, whether the MCP is on or off. Set it even with the MCP off, or `sneakers-put login` and `sneakers-run login` can't sign in. The machine API also uses it to build links. |
+| `MCP_ENABLED` | on | `false` or `0` (any case, spaces trimmed) turns the MCP off: the OAuth routes refuse MCP clients and every MCP agent token on the machine API with `MCP_DISABLED`, while CLI clients still sign in (see [api.md](api.md), "OAuth for native clients"). Anything else, or unset, is on. |
 | `MACHINE_API_ENABLED` | on | `false` or `0` turns the machine API off: `/machine/graphql` refuses `cli` personal tokens and service-account API tokens with `MACHINE_API_DISABLED`, so `sneakers-run` and `sneakers-put` stop. MCP agent tokens follow `MCP_ENABLED` instead. Anything else, or unset, is on. |
 | `APPROVAL_RUN_LINKS` | `false` | `true` points a pending secret use's `approvalUrl` at its run's page, `<OAUTH_PUBLIC_URL>/approvals/run/<runId>`, when it has a run id. Turn it on once the web serves that page; until then every link is `<OAUTH_PUBLIC_URL>/approvals`. A value that isn't a boolean stops the gateway at boot. |
 
