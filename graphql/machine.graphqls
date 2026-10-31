@@ -397,11 +397,12 @@ type Mutation {
   # Create a folder as the calling principal. With parentId, a subfolder:
   # requires RACI-Author (R) on the parent's chain, never inside a personal
   # folder, and the folder inherits its parent's scope and access rules. With
-  # no parentId, a top-level folder: the vault allows it only for a personal
-  # token whose owner is a site admin, while the agentsMayCreateTopLevelFolders
-  # security setting is on, and refuses anything else with PERMISSION_DENIED
-  # (TOP_LEVEL_FOLDERS_DISABLED or NOT_SITE_ADMIN). No sibling with the same
-  # name either way (case-insensitive).
+  # no parentId, a top-level folder: the vault allows it for a personal token
+  # unless the restrictTopLevelFolders security setting is on, when the token's
+  # owner must be a site admin or root and anyone else is refused with
+  # PERMISSION_DENIED (TOP_LEVEL_FOLDERS_RESTRICTED). A service account is
+  # refused with INVALID_ARGUMENT. No sibling with the same name either way
+  # (case-insensitive).
   createFolderForPrincipal(parentId: ID, name: String!): PrincipalFolder!
 
   # Rename a folder as the calling principal. Requires RACI-Author (R) on the

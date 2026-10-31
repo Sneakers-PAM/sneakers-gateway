@@ -562,7 +562,7 @@ type SecuritySettings struct {
 	SessionTTLSeconds              *int    `json:"sessionTtlSeconds,omitempty"`
 	RequireMfaForReveal            bool    `json:"requireMfaForReveal"`
 	MfaMaxAgeSeconds               int     `json:"mfaMaxAgeSeconds"`
-	AgentsMayCreateTopLevelFolders bool    `json:"agentsMayCreateTopLevelFolders"`
+	RestrictTopLevelFolders        bool    `json:"restrictTopLevelFolders"`
 }
 
 type SecuritySettingsInput struct {
@@ -572,7 +572,7 @@ type SecuritySettingsInput struct {
 	RequestHistoryRetentionDays    *int    `json:"requestHistoryRetentionDays,omitempty"`
 	SessionTTLSeconds              *int    `json:"sessionTtlSeconds,omitempty"`
 	RequireMfaForReveal            *bool   `json:"requireMfaForReveal,omitempty"`
-	AgentsMayCreateTopLevelFolders *bool   `json:"agentsMayCreateTopLevelFolders,omitempty"`
+	RestrictTopLevelFolders        *bool   `json:"restrictTopLevelFolders,omitempty"`
 }
 
 type ServiceAccount struct {

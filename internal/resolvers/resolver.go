@@ -247,8 +247,9 @@ func WithUserTokenActor(ctx context.Context, userID, tokenID string, groupNames 
 
 // WithTokenOwnerSiteAdmin marks the personal-token actor on ctx as owned by a
 // site admin or root. It grants nothing here: the vault reads it for one
-// decision and otherwise treats the token as any other. Without a personal
-// token actor on ctx it changes nothing, so no other caller can carry the mark.
+// decision, a top-level folder while they're restricted to admins, and
+// otherwise treats the token as any other. Without a personal token actor on
+// ctx it changes nothing, so no other caller can carry the mark.
 func WithTokenOwnerSiteAdmin(ctx context.Context) context.Context {
 	m, ok := machineActorFrom(ctx)
 	if !ok || m.tokenID == "" {
