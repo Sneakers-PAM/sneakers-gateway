@@ -100,6 +100,7 @@ func (r *mutationResolver) UpdateSecuritySettings(ctx context.Context, input Sec
 	req.RequestHistoryRetentionDays = intToI32Ptr(input.RequestHistoryRetentionDays)
 	req.SessionTtlSeconds = intToI32Ptr(input.SessionTTLSeconds)
 	req.RequireMfaForReveal = input.RequireMfaForReveal
+	req.RestrictTopLevelFolders = input.RestrictTopLevelFolders
 	resp, err := r.Vault.UpdateSecuritySettings(ctx, req)
 	if err != nil {
 		return nil, err

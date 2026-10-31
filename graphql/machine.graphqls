@@ -394,11 +394,16 @@ type Mutation {
   # "description" may change. Returns the changed keys, never values.
   updateSecretFieldsForPrincipal(id: ID!, fields: [SecretFieldInput!]!): UpdatedSecretFields!
 
-  # Create a subfolder as the calling principal. Requires RACI-Author (R) on
-  # the parent's chain; never top level, never inside a personal folder, and
-  # no sibling with the same name (case-insensitive). The folder inherits its
-  # parent's scope and access rules.
-  createFolderForPrincipal(parentId: ID!, name: String!): PrincipalFolder!
+  # Create a folder as the calling principal. With parentId, a subfolder:
+  # requires RACI-Author (R) on the parent's chain, never inside a personal
+  # folder, and the folder inherits its parent's scope and access rules. With
+  # no parentId, a top-level folder: the vault allows it for a personal token
+  # unless the restrictTopLevelFolders security setting is on, when the token's
+  # owner must be a site admin or root and anyone else is refused with
+  # PERMISSION_DENIED (TOP_LEVEL_FOLDERS_RESTRICTED). A service account is
+  # refused with INVALID_ARGUMENT. No sibling with the same name either way
+  # (case-insensitive).
+  createFolderForPrincipal(parentId: ID, name: String!): PrincipalFolder!
 
   # Rename a folder as the calling principal. Requires RACI-Author (R) on the
   # folder's chain. A sibling with the same name is refused.

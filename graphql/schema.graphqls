@@ -499,6 +499,12 @@ type SecuritySettings {
   # gateway enforces it: 1800 (30m) when unset, 0 when every sensitive action
   # asks. Read-only; set where the services run.
   mfaMaxAgeSeconds: Int!
+  # "Restrict top-level folders to admins". Off by default, when anyone signed
+  # in or a personal token can create a folder with no parent. While on, only a
+  # site admin or root can, through createFolder or a token whose owner is one
+  # through the machine API's createFolderForPrincipal. Changing it needs a site
+  # admin, and the vault audits the change.
+  restrictTopLevelFolders: Boolean!
 }
 # Partial update: only the fields provided are changed.
 input SecuritySettingsInput {
@@ -508,6 +514,7 @@ input SecuritySettingsInput {
   requestHistoryRetentionDays: Int
   sessionTtlSeconds: Int
   requireMfaForReveal: Boolean
+  restrictTopLevelFolders: Boolean
 }
 
 # A platform user. `roles` are elevated roles on top of the baseline; `isRoot`
@@ -1214,6 +1221,10 @@ type Mutation {
   # Generates a new asymmetric key pair in the given format (e.g. rsa2048|rsa4096|ec256|ec384).
   generateKeyPair(format: String!): KeyPair!
 
+  # With no parentId, a shared top-level folder. Open to anyone unless the
+  # restrictTopLevelFolders security setting is on; then the vault refuses
+  # anyone but a site admin or root with PERMISSION_DENIED
+  # (TOP_LEVEL_FOLDERS_RESTRICTED).
   createFolder(parentId: String, name: String!): Folder!
   renameFolder(id: ID!, name: String!): Folder!
   moveFolder(id: ID!, newParentId: String): Folder!

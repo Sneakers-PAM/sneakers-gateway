@@ -73,7 +73,7 @@ type ComplexityRoot struct {
 	Mutation struct {
 		AttachSecretTargetForPrincipal   func(childComplexity int, secretID string, targetID string) int
 		ChangeSecretTypeForPrincipal     func(childComplexity int, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*SecretFieldInput) int
-		CreateFolderForPrincipal         func(childComplexity int, parentID string, name string) int
+		CreateFolderForPrincipal         func(childComplexity int, parentID *string, name string) int
 		CreateSecretForPrincipal         func(childComplexity int, folderID string, typeID string, name string, fields []*SecretFieldInput, targetID *string, disableRotation *bool, disableHeartbeat *bool, keepFolder *bool) int
 		DetachSecretTargetForPrincipal   func(childComplexity int, secretID string, targetID string) int
 		GenerateSecretForPrincipal       func(childComplexity int, folderID string, typeID string, name string, fields []*SecretFieldInput, policyID *string, targetID *string, returnValue *bool, disableRotation *bool, disableHeartbeat *bool, keepFolder *bool) int
@@ -216,7 +216,7 @@ type MutationResolver interface {
 	ChangeSecretTypeForPrincipal(ctx context.Context, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*SecretFieldInput) (*TypeChangedSecret, error)
 	RenameSecretForPrincipal(ctx context.Context, id string, name string) (*SecretSummary, error)
 	UpdateSecretFieldsForPrincipal(ctx context.Context, id string, fields []*SecretFieldInput) (*UpdatedSecretFields, error)
-	CreateFolderForPrincipal(ctx context.Context, parentID string, name string) (*PrincipalFolder, error)
+	CreateFolderForPrincipal(ctx context.Context, parentID *string, name string) (*PrincipalFolder, error)
 	RenameFolderForPrincipal(ctx context.Context, id string, name string) (*PrincipalFolder, error)
 	RequestSecretCheck(ctx context.Context, secretID string) (int, error)
 	SaveTargetForPrincipal(ctx context.Context, input MachineTargetInput) (*MachineTarget, error)
@@ -428,7 +428,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.CreateFolderForPrincipal(childComplexity, args["parentId"].(string), args["name"].(string)), true
+		return e.ComplexityRoot.Mutation.CreateFolderForPrincipal(childComplexity, args["parentId"].(*string), args["name"].(string)), true
 	case "Mutation.createSecretForPrincipal":
 		if e.ComplexityRoot.Mutation.CreateSecretForPrincipal == nil {
 			break
@@ -1593,11 +1593,16 @@ type Mutation {
   # "description" may change. Returns the changed keys, never values.
   updateSecretFieldsForPrincipal(id: ID!, fields: [SecretFieldInput!]!): UpdatedSecretFields!
 
-  # Create a subfolder as the calling principal. Requires RACI-Author (R) on
-  # the parent's chain; never top level, never inside a personal folder, and
-  # no sibling with the same name (case-insensitive). The folder inherits its
-  # parent's scope and access rules.
-  createFolderForPrincipal(parentId: ID!, name: String!): PrincipalFolder!
+  # Create a folder as the calling principal. With parentId, a subfolder:
+  # requires RACI-Author (R) on the parent's chain, never inside a personal
+  # folder, and the folder inherits its parent's scope and access rules. With
+  # no parentId, a top-level folder: the vault allows it for a personal token
+  # unless the restrictTopLevelFolders security setting is on, when the token's
+  # owner must be a site admin or root and anyone else is refused with
+  # PERMISSION_DENIED (TOP_LEVEL_FOLDERS_RESTRICTED). A service account is
+  # refused with INVALID_ARGUMENT. No sibling with the same name either way
+  # (case-insensitive).
+  createFolderForPrincipal(parentId: ID, name: String!): PrincipalFolder!
 
   # Rename a folder as the calling principal. Requires RACI-Author (R) on the
   # folder's chain. A sibling with the same name is refused.
@@ -2111,8 +2116,8 @@ func (ec *executionContext) field_Mutation_createFolderForPrincipal_args(ctx con
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "parentId",
-		func(ctx context.Context, v any) (string, error) {
-			return ec.unmarshalNID2string(ctx, v)
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOID2ᚖstring(ctx, v)
 		})
 	if err != nil {
 		return nil, err
@@ -3666,7 +3671,7 @@ func (ec *executionContext) _Mutation_createFolderForPrincipal(ctx context.Conte
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateFolderForPrincipal(ctx, fc.Args["parentId"].(string), fc.Args["name"].(string))
+			return ec.Resolvers.Mutation().CreateFolderForPrincipal(ctx, fc.Args["parentId"].(*string), fc.Args["name"].(string))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *PrincipalFolder) graphql.Marshaler {

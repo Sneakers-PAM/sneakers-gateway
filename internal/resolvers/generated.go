@@ -647,6 +647,7 @@ type ComplexityRoot struct {
 		RequestHistoryRetentionDays    func(childComplexity int) int
 		RequireMfaForReveal            func(childComplexity int) int
 		RequireMfaForSensitiveCheckout func(childComplexity int) int
+		RestrictTopLevelFolders        func(childComplexity int) int
 		SessionTTLSeconds              func(childComplexity int) int
 	}
 
@@ -4265,6 +4266,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecuritySettings.RequireMfaForSensitiveCheckout(childComplexity), true
+	case "SecuritySettings.restrictTopLevelFolders":
+		if e.ComplexityRoot.SecuritySettings.RestrictTopLevelFolders == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecuritySettings.RestrictTopLevelFolders(childComplexity), true
 	case "SecuritySettings.sessionTtlSeconds":
 		if e.ComplexityRoot.SecuritySettings.SessionTTLSeconds == nil {
 			break
@@ -5283,6 +5290,12 @@ type SecuritySettings {
   # gateway enforces it: 1800 (30m) when unset, 0 when every sensitive action
   # asks. Read-only; set where the services run.
   mfaMaxAgeSeconds: Int!
+  # "Restrict top-level folders to admins". Off by default, when anyone signed
+  # in or a personal token can create a folder with no parent. While on, only a
+  # site admin or root can, through createFolder or a token whose owner is one
+  # through the machine API's createFolderForPrincipal. Changing it needs a site
+  # admin, and the vault audits the change.
+  restrictTopLevelFolders: Boolean!
 }
 # Partial update: only the fields provided are changed.
 input SecuritySettingsInput {
@@ -5292,6 +5305,7 @@ input SecuritySettingsInput {
   requestHistoryRetentionDays: Int
   sessionTtlSeconds: Int
   requireMfaForReveal: Boolean
+  restrictTopLevelFolders: Boolean
 }
 
 # A platform user. ` + "`" + `roles` + "`" + ` are elevated roles on top of the baseline; ` + "`" + `isRoot` + "`" + `
@@ -5998,6 +6012,10 @@ type Mutation {
   # Generates a new asymmetric key pair in the given format (e.g. rsa2048|rsa4096|ec256|ec384).
   generateKeyPair(format: String!): KeyPair!
 
+  # With no parentId, a shared top-level folder. Open to anyone unless the
+  # restrictTopLevelFolders security setting is on; then the vault refuses
+  # anyone but a site admin or root with PERMISSION_DENIED
+  # (TOP_LEVEL_FOLDERS_RESTRICTED).
   createFolder(parentId: String, name: String!): Folder!
   renameFolder(id: ID!, name: String!): Folder!
   moveFolder(id: ID!, newParentId: String): Folder!
@@ -7117,6 +7135,8 @@ func (ec *executionContext) childFields_SecuritySettings(ctx context.Context, fi
 		return ec.fieldContext_SecuritySettings_requireMfaForReveal(ctx, field)
 	case "mfaMaxAgeSeconds":
 		return ec.fieldContext_SecuritySettings_mfaMaxAgeSeconds(ctx, field)
+	case "restrictTopLevelFolders":
+		return ec.fieldContext_SecuritySettings_restrictTopLevelFolders(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecuritySettings", field.Name)
 }
@@ -23195,6 +23215,29 @@ func (ec *executionContext) fieldContext_SecuritySettings_mfaMaxAgeSeconds(_ con
 	return graphql.NewScalarFieldContext("SecuritySettings", field, false, false, errors.New("field of type Int does not have child fields"))
 }
 
+func (ec *executionContext) _SecuritySettings_restrictTopLevelFolders(ctx context.Context, field graphql.CollectedField, obj *SecuritySettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecuritySettings_restrictTopLevelFolders(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RestrictTopLevelFolders, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecuritySettings_restrictTopLevelFolders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecuritySettings", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
 func (ec *executionContext) _ServiceAccount_id(ctx context.Context, field graphql.CollectedField, obj *ServiceAccount) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -26349,7 +26392,7 @@ func (ec *executionContext) unmarshalInputSecuritySettingsInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"defaultPasswordPolicyId", "requireMfaForSensitiveCheckout", "allowApiForSensitive", "requestHistoryRetentionDays", "sessionTtlSeconds", "requireMfaForReveal"}
+	fieldsInOrder := [...]string{"defaultPasswordPolicyId", "requireMfaForSensitiveCheckout", "allowApiForSensitive", "requestHistoryRetentionDays", "sessionTtlSeconds", "requireMfaForReveal", "restrictTopLevelFolders"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -26398,6 +26441,13 @@ func (ec *executionContext) unmarshalInputSecuritySettingsInput(ctx context.Cont
 				return it, err
 			}
 			it.RequireMfaForReveal = data
+		case "restrictTopLevelFolders":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("restrictTopLevelFolders"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RestrictTopLevelFolders = data
 		}
 	}
 	return it, nil
@@ -31651,6 +31701,11 @@ func (ec *executionContext) _SecuritySettings(ctx context.Context, sel ast.Selec
 			}
 		case "mfaMaxAgeSeconds":
 			out.Values[i] = ec._SecuritySettings_mfaMaxAgeSeconds(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "restrictTopLevelFolders":
+			out.Values[i] = ec._SecuritySettings_restrictTopLevelFolders(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

@@ -8,11 +8,12 @@
 |---|---|---|
 | `renameSecretForPrincipal(id, name)` | Author on the secret | `SecretSummary` |
 | `updateSecretFieldsForPrincipal(id, fields)` | Author on the secret | `UpdatedSecretFields { secret, changedFieldKeys }` |
-| `createFolderForPrincipal(parentId, name)` | Author on the parent | `PrincipalFolder` |
+| `createFolderForPrincipal(parentId, name)` | Author on the parent; with no `parentId`, a personal token, whose owner must be a site admin or root while `restrictTopLevelFolders` is on | `PrincipalFolder` |
 | `renameFolderForPrincipal(id, name)` | Author on the folder | `PrincipalFolder` |
 
 - `updateSecretFieldsForPrincipal` changes only the listed keys. An empty value clears an optional field. A repeated key is rejected before vault is called. The result names the changed keys (sorted), never values; a call that changes nothing returns `[]`. On types vault manages (rotation, heartbeat, checkout, certificate) only `notes` and `description` may change.
-- There is no machine delete, and a machine cannot create a top-level folder or a folder inside a personal folder.
+- There is no machine delete, and a machine cannot create a folder inside a personal folder.
+- A top-level folder (`parentId` left out) is the vault's decision: any personal token, unless the `restrictTopLevelFolders` security setting is on. Then the token's owner must be a site admin or root, and anyone else gets `PERMISSION_DENIED` with reason `TOP_LEVEL_FOLDERS_RESTRICTED`. A service account gets `INVALID_ARGUMENT`.
 - `PrincipalFolder.canAuthor` comes from vault. It is true on the results of both folder mutations, since each needs Author.
 - `PrincipalFolder` on those results is the folder's entry from `foldersForPrincipal`, so `path` is the full path the principal can see (`Infrastructure/AD`). The gateway reads it with a second vault call, the principal folder listing, which vault audits as `folder.list.principal`. If that listing fails or does not include the folder, `path` falls back to the folder's own name.
 - The listing is a separate read after the mutation, so a change made in between (such as another rename) shows in the result.

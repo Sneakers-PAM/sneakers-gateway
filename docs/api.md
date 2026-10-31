@@ -85,6 +85,7 @@ Other vault reasons a client may see (domain `sneakers.vault`):
 | `PERMISSION_DENIED` | `NO_ACCESS` | The user can't read the secret: a reveal, copy, version reveal or `secretFields`. |
 | `FAILED_PRECONDITION` | `RETIRED` | The secret is retired, so it can't be revealed or copied. |
 | `PERMISSION_DENIED` | `NOT_SITE_ADMIN` | The call needs a site admin: settings, password policies, secret types, connections, key rotation. |
+| `PERMISSION_DENIED` | `TOP_LEVEL_FOLDERS_RESTRICTED` | `restrictTopLevelFolders` is on, and the caller of a top-level `createFolder`, or the owner of the token calling a top-level `createFolderForPrincipal`, isn't a site admin or root. |
 | `PERMISSION_DENIED` | `NOT_FOLDER_OWNER` | The call needs the folder's owner or a site admin: folder rules, renaming or reordering. |
 | `PERMISSION_DENIED` | `API_SENSITIVE_DISABLED` | A token may not reveal super-sensitive fields while `allowApiForSensitive` is off. |
 | `FAILED_PRECONDITION` | `ROTATION_NOT_SUPPORTED` | The secret's type can't rotate. |
@@ -176,6 +177,28 @@ copying it by hand:
 - Both are for a person who is a site admin or root, the same people the vault lets change a
   target's pins. The gateway refuses anyone else (`HOST_KEY_PIN_NOT_ADMIN`) before it calls the
   broker, so the broker can't be used to probe hosts on someone else's behalf.
+
+### Top-level folders
+
+A folder with no parent is open to anyone by default: a signed-in person through `createFolder`, or
+a personal token through `createFolderForPrincipal` on `/machine/graphql`, whose `parentId` is
+optional. The folder is a shared top-level folder owned by that user. With no parent, the gateway
+sends the vault an empty parent and the vault decides; the gateway has no folder rule of its own.
+
+The "Restrict top-level folders to admins" setting, `SecuritySettings.restrictTopLevelFolders`,
+limits both paths to a site admin or root, or a token whose owner is one. Anyone else gets
+`PERMISSION_DENIED`, reason `TOP_LEVEL_FOLDERS_RESTRICTED`, domain `sneakers.vault`, as the vault
+sent it. A service account is refused with `INVALID_ARGUMENT` either way, since it has no user to
+own the folder.
+
+The gateway tells the vault about a token's owner in `ActorContext.token_owner_is_site_admin`. It
+sets that from the roles and root flag identity returns when it verifies the token, on every
+request, and never from anything the client sends. No other kind of actor can carry it, and it
+gives the token no admin authority: `is_site_admin` and `is_root` stay false.
+
+`restrictTopLevelFolders` is off by default, and is read and written through `securitySettings` and
+`updateSecuritySettings` on `/graphql`. Writing it needs a site admin; the vault enforces that and
+audits each change.
 
 ### Target connections
 
