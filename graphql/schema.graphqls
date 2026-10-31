@@ -12,8 +12,10 @@ enum FolderScope { personal group role }
 enum FolderRole { read write delete bulk owner }
 enum SubjectKind { group user everyone }
 # hostKeyNotPinned: an SSH target without host-key pins (the connector doesn't
-# connect); hostKeyMismatch: the host offered a key that isn't pinned.
-enum HeartbeatResult { ok failed unreachable unknown hostKeyNotPinned hostKeyMismatch }
+# connect); hostKeyMismatch: the host offered a key that isn't pinned;
+# untrustedCertificate: the target answered, but its TLS certificate failed
+# verification, so the credential was never sent.
+enum HeartbeatResult { ok failed unreachable unknown hostKeyNotPinned hostKeyMismatch untrustedCertificate }
 enum RotationState { ok failed degraded rotating unknown }
 
 type SecretFieldDef {
@@ -197,6 +199,8 @@ type Secret {
   targetIds: [String!]!
   expiresAt: String
   lastHeartbeatResult: HeartbeatResult
+  # The connector's reason for lastHeartbeatResult, never a value.
+  lastHeartbeatDetail: String
   verifiedAt: String
   masked: Boolean
   viewCount: Int

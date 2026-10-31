@@ -50,7 +50,7 @@ type SecretSummary {
   # RFC3339 of the last successful rotation and of the next scheduled one.
   rotatedAt: String
   nextRotationAt: String
-  # Last heartbeat outcome (OK, FAILED, UNREACHABLE, UNKNOWN); null = never checked.
+  # Last heartbeat outcome (OK, FAILED, UNREACHABLE, UNTRUSTED_CERTIFICATE, UNKNOWN); null = never checked.
   lastHeartbeatResult: String
   # Where createSecretForPrincipal / generateSecretForPrincipal stored the
   # secret and why; null on every other result.
@@ -282,8 +282,8 @@ input MachineTargetInput {
 }
 
 # The last credential check of a secret against its target. result is OK,
-# FAILED, UNREACHABLE or UNKNOWN; detail is the connector's reason, never a
-# value. pending: a check is due or running.
+# FAILED, UNREACHABLE, UNTRUSTED_CERTIFICATE or UNKNOWN; detail is the
+# connector's reason, never a value. pending: a check is due or running.
 type SecretCheckStatus {
   result: String!
   checkedAtUnix: Int!
