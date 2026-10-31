@@ -157,6 +157,8 @@ func heartbeatGQL(h vaultv1.HeartbeatResult) *HeartbeatResult {
 		v = HeartbeatResultHostKeyNotPinned
 	case vaultv1.HeartbeatResult_HEARTBEAT_RESULT_HOST_KEY_MISMATCH:
 		v = HeartbeatResultHostKeyMismatch
+	case vaultv1.HeartbeatResult_HEARTBEAT_RESULT_UNTRUSTED_CERTIFICATE:
+		v = HeartbeatResultUntrustedCertificate
 	default:
 		return nil
 	}
@@ -327,7 +329,7 @@ func gqlSecret(s *vaultv1.Secret) *Secret {
 		ID: s.GetId(), Name: s.GetName(), FolderID: s.GetFolderId(), TypeID: s.GetTypeId(),
 		TargetID: strPtr(s.GetTargetId()), CreatorPrincipalID: emptyToNil(s.GetCreatorPrincipalId()),
 		TargetIds: append([]string{}, s.GetTargetIds()...),
-		ExpiresAt: strPtr(s.GetExpiresAt()), LastHeartbeatResult: heartbeatGQL(s.GetLastHeartbeatResult()),
+		ExpiresAt: strPtr(s.GetExpiresAt()), LastHeartbeatResult: heartbeatGQL(s.GetLastHeartbeatResult()), LastHeartbeatDetail: strPtr(s.GetLastHeartbeatDetail()),
 		VerifiedAt: strPtr(s.GetVerifiedAt()),
 		Masked:     boolPtr(true), ViewCount: intPtr(int(s.GetViewCount())), LastAccessedAt: strPtr(s.GetLastAccessedAt()),
 		Retired: s.GetRetired(), RetiredAt: s.GetRetiredAt(),

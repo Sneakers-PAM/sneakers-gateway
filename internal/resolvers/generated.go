@@ -536,6 +536,7 @@ type ComplexityRoot struct {
 		HeartbeatOptOut        func(childComplexity int) int
 		ID                     func(childComplexity int) int
 		LastAccessedAt         func(childComplexity int) int
+		LastHeartbeatDetail    func(childComplexity int) int
 		LastHeartbeatResult    func(childComplexity int) int
 		LastRotationResult     func(childComplexity int) int
 		Masked                 func(childComplexity int) int
@@ -3816,6 +3817,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Secret.LastAccessedAt(childComplexity), true
+	case "Secret.lastHeartbeatDetail":
+		if e.ComplexityRoot.Secret.LastHeartbeatDetail == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Secret.LastHeartbeatDetail(childComplexity), true
 	case "Secret.lastHeartbeatResult":
 		if e.ComplexityRoot.Secret.LastHeartbeatResult == nil {
 			break
@@ -5003,8 +5010,10 @@ enum FolderScope { personal group role }
 enum FolderRole { read write delete bulk owner }
 enum SubjectKind { group user everyone }
 # hostKeyNotPinned: an SSH target without host-key pins (the connector doesn't
-# connect); hostKeyMismatch: the host offered a key that isn't pinned.
-enum HeartbeatResult { ok failed unreachable unknown hostKeyNotPinned hostKeyMismatch }
+# connect); hostKeyMismatch: the host offered a key that isn't pinned;
+# untrustedCertificate: the target answered, but its TLS certificate failed
+# verification, so the credential was never sent.
+enum HeartbeatResult { ok failed unreachable unknown hostKeyNotPinned hostKeyMismatch untrustedCertificate }
 enum RotationState { ok failed degraded rotating unknown }
 
 type SecretFieldDef {
@@ -5188,6 +5197,8 @@ type Secret {
   targetIds: [String!]!
   expiresAt: String
   lastHeartbeatResult: HeartbeatResult
+  # The connector's reason for lastHeartbeatResult, never a value.
+  lastHeartbeatDetail: String
   verifiedAt: String
   masked: Boolean
   viewCount: Int
@@ -7179,6 +7190,8 @@ func (ec *executionContext) childFields_Secret(ctx context.Context, field graphq
 		return ec.fieldContext_Secret_expiresAt(ctx, field)
 	case "lastHeartbeatResult":
 		return ec.fieldContext_Secret_lastHeartbeatResult(ctx, field)
+	case "lastHeartbeatDetail":
+		return ec.fieldContext_Secret_lastHeartbeatDetail(ctx, field)
 	case "verifiedAt":
 		return ec.fieldContext_Secret_verifiedAt(ctx, field)
 	case "masked":
@@ -21754,6 +21767,29 @@ func (ec *executionContext) fieldContext_Secret_lastHeartbeatResult(_ context.Co
 	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type HeartbeatResult does not have child fields"))
 }
 
+func (ec *executionContext) _Secret_lastHeartbeatDetail(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Secret_lastHeartbeatDetail(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LastHeartbeatDetail, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Secret_lastHeartbeatDetail(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Secret", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _Secret_verifiedAt(ctx context.Context, field graphql.CollectedField, obj *Secret) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -32151,6 +32187,8 @@ func (ec *executionContext) _Secret(ctx context.Context, sel ast.SelectionSet, o
 			out.Values[i] = ec._Secret_expiresAt(ctx, field, obj)
 		case "lastHeartbeatResult":
 			out.Values[i] = ec._Secret_lastHeartbeatResult(ctx, field, obj)
+		case "lastHeartbeatDetail":
+			out.Values[i] = ec._Secret_lastHeartbeatDetail(ctx, field, obj)
 		case "verifiedAt":
 			out.Values[i] = ec._Secret_verifiedAt(ctx, field, obj)
 		case "masked":

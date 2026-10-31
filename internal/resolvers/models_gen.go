@@ -430,6 +430,7 @@ type Secret struct {
 	TargetIds              []string         `json:"targetIds"`
 	ExpiresAt              *string          `json:"expiresAt,omitempty"`
 	LastHeartbeatResult    *HeartbeatResult `json:"lastHeartbeatResult,omitempty"`
+	LastHeartbeatDetail    *string          `json:"lastHeartbeatDetail,omitempty"`
 	VerifiedAt             *string          `json:"verifiedAt,omitempty"`
 	Masked                 *bool            `json:"masked,omitempty"`
 	ViewCount              *int             `json:"viewCount,omitempty"`
@@ -1108,12 +1109,13 @@ func (e FolderScope) MarshalJSON() ([]byte, error) {
 type HeartbeatResult string
 
 const (
-	HeartbeatResultOk               HeartbeatResult = "ok"
-	HeartbeatResultFailed           HeartbeatResult = "failed"
-	HeartbeatResultUnreachable      HeartbeatResult = "unreachable"
-	HeartbeatResultUnknown          HeartbeatResult = "unknown"
-	HeartbeatResultHostKeyNotPinned HeartbeatResult = "hostKeyNotPinned"
-	HeartbeatResultHostKeyMismatch  HeartbeatResult = "hostKeyMismatch"
+	HeartbeatResultOk                   HeartbeatResult = "ok"
+	HeartbeatResultFailed               HeartbeatResult = "failed"
+	HeartbeatResultUnreachable          HeartbeatResult = "unreachable"
+	HeartbeatResultUnknown              HeartbeatResult = "unknown"
+	HeartbeatResultHostKeyNotPinned     HeartbeatResult = "hostKeyNotPinned"
+	HeartbeatResultHostKeyMismatch      HeartbeatResult = "hostKeyMismatch"
+	HeartbeatResultUntrustedCertificate HeartbeatResult = "untrustedCertificate"
 )
 
 var AllHeartbeatResult = []HeartbeatResult{
@@ -1123,11 +1125,12 @@ var AllHeartbeatResult = []HeartbeatResult{
 	HeartbeatResultUnknown,
 	HeartbeatResultHostKeyNotPinned,
 	HeartbeatResultHostKeyMismatch,
+	HeartbeatResultUntrustedCertificate,
 }
 
 func (e HeartbeatResult) IsValid() bool {
 	switch e {
-	case HeartbeatResultOk, HeartbeatResultFailed, HeartbeatResultUnreachable, HeartbeatResultUnknown, HeartbeatResultHostKeyNotPinned, HeartbeatResultHostKeyMismatch:
+	case HeartbeatResultOk, HeartbeatResultFailed, HeartbeatResultUnreachable, HeartbeatResultUnknown, HeartbeatResultHostKeyNotPinned, HeartbeatResultHostKeyMismatch, HeartbeatResultUntrustedCertificate:
 		return true
 	}
 	return false
