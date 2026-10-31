@@ -1292,6 +1292,9 @@ type Mutation {
   # Site-admin: disable or re-enable a user. Refused for the caller's own account.
   setUserDisabled(userId: String!, disabled: Boolean!): User!
   revokeMyToken(id: ID!): UserToken!
+  # Delete one of your own revoked tokens. Identity refuses an active token with
+  # FAILED_PRECONDITION and answers NOT_FOUND for any token that isn't yours.
+  deleteMyToken(id: ID!): Boolean!
   # Decide someone else's pending use as an owner or approver. Approving needs
   # a session factor within MFA_MAX_AGE or a factor here; denying does not.
   # You may deny (withdraw) your own use but never approve it.

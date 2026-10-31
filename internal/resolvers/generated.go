@@ -344,6 +344,7 @@ type ComplexityRoot struct {
 		DecideSecretUses         func(childComplexity int, ids []string, decision SecretUseDecision, factor *FactorInput) int
 		DeleteConnection         func(childComplexity int, id string) int
 		DeleteFolder             func(childComplexity int, id string, reassignToID *string) int
+		DeleteMyToken            func(childComplexity int, id string) int
 		DeletePasswordPolicy     func(childComplexity int, id string) int
 		DeleteSecret             func(childComplexity int, id string) int
 		DeleteSecretType         func(childComplexity int, id string) int
@@ -810,6 +811,7 @@ type MutationResolver interface {
 	SetUserRoles(ctx context.Context, userID string, roles []string) (*User, error)
 	SetUserDisabled(ctx context.Context, userID string, disabled bool) (*User, error)
 	RevokeMyToken(ctx context.Context, id string) (*UserToken, error)
+	DeleteMyToken(ctx context.Context, id string) (bool, error)
 	DecideSecretUse(ctx context.Context, id string, approve bool, factor *FactorInput) (*SecretUse, error)
 	DecideSecretUses(ctx context.Context, ids []string, decision SecretUseDecision, factor *FactorInput) (*DecideSecretUsesResult, error)
 	ConfirmSecretUses(ctx context.Context, ids []string, factor *FactorInput) (*DecideSecretUsesResult, error)
@@ -2315,6 +2317,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteFolder(childComplexity, args["id"].(string), args["reassignToId"].(*string)), true
+	case "Mutation.deleteMyToken":
+		if e.ComplexityRoot.Mutation.DeleteMyToken == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteMyToken_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteMyToken(childComplexity, args["id"].(string)), true
 	case "Mutation.deletePasswordPolicy":
 		if e.ComplexityRoot.Mutation.DeletePasswordPolicy == nil {
 			break
@@ -6063,6 +6076,9 @@ type Mutation {
   # Site-admin: disable or re-enable a user. Refused for the caller's own account.
   setUserDisabled(userId: String!, disabled: Boolean!): User!
   revokeMyToken(id: ID!): UserToken!
+  # Delete one of your own revoked tokens. Identity refuses an active token with
+  # FAILED_PRECONDITION and answers NOT_FOUND for any token that isn't yours.
+  deleteMyToken(id: ID!): Boolean!
   # Decide someone else's pending use as an owner or approver. Approving needs
   # a session factor within MFA_MAX_AGE or a factor here; denying does not.
   # You may deny (withdraw) your own use but never approve it.
@@ -8032,6 +8048,20 @@ func (ec *executionContext) field_Mutation_deleteFolder_args(ctx context.Context
 		return nil, err
 	}
 	args["reassignToId"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteMyToken_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -16815,6 +16845,50 @@ func (ec *executionContext) fieldContext_Mutation_revokeMyToken(ctx context.Cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_revokeMyToken_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteMyToken(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_deleteMyToken(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteMyToken(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_deleteMyToken(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteMyToken_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -28995,6 +29069,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "revokeMyToken":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_revokeMyToken(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteMyToken":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteMyToken(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
