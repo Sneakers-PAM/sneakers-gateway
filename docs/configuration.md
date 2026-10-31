@@ -138,7 +138,7 @@ without it, or without the mounted ServiceAccount files, the gateway logs a warn
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset (no export) | The OTLP collector for traces and metrics. Unset or empty disables export cleanly; set it to opt in. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset (no export) | OTLP gRPC collector for traces and metrics, as a URL: `http://collector:4317` for plaintext, `https://collector:4317` for TLS. A bare `host:port` still connects as plaintext, but the OpenTelemetry SDK, which reads this variable too, logs `parse url` errors at start. Any other scheme stops the service at start. Unset or empty disables export cleanly; set it to opt in. |
 | `LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn` or `error` (go-log). |
 | `LOG_FORMAT` | `json` | `json`, or `console` for local reading (go-log). |
 
