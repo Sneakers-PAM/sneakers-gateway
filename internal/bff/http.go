@@ -445,7 +445,7 @@ func (h *Handler) resolveSessionActor(ctx context.Context, sid string) (context.
 
 	// Sliding session: renew the Redis TTL on every authenticated request.
 	_ = h.Store.Save(ctx, sid, sess)
-	actorCtx, aerr := h.actorContext(ctx, sess.Subject)
+	actorCtx, aerr := h.actorContext(ctx, sess)
 	if errors.Is(aerr, errAccountDisabled) {
 		_ = h.Store.Delete(ctx, sid)
 		return nil, Session{}, errAccountDisabled
@@ -474,13 +474,22 @@ func (h *Handler) refreshSession(ctx context.Context, sid string, sess Session) 
 	return sess, nil
 }
 
-// actorContext resolves the login subject to the identity-backed actor and
+// actorRequest keys the identity lookup for a session: its login subject, or
+// its user id for an SSO user who has no subject.
+func actorRequest(sess Session) *identityv1.ResolveUserContextRequest {
+	if sess.Subject != "" {
+		return &identityv1.ResolveUserContextRequest{Subject: sess.Subject}
+	}
+	return &identityv1.ResolveUserContextRequest{UserId: sess.UserID}
+}
+
+// actorContext resolves the session's user to the identity-backed actor and
 // attaches it to the request context: the real Sneakers user id plus the authz
 // attributes (site-admin / root / effective group names) that drive vault
 // firewall-RACI. Returns an error if identity is unreachable or the subject
 // maps to no user (fail-closed).
-func (h *Handler) actorContext(ctx context.Context, subject string) (context.Context, error) {
-	resp, err := h.Identity.ResolveUserContext(ctx, &identityv1.ResolveUserContextRequest{Subject: subject})
+func (h *Handler) actorContext(ctx context.Context, sess Session) (context.Context, error) {
+	resp, err := h.Identity.ResolveUserContext(ctx, actorRequest(sess))
 	if err != nil {
 		return nil, err
 	}
