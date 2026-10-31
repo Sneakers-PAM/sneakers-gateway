@@ -239,6 +239,18 @@ actor-scoped calls the rest of the schema uses (`GetSecret`, `ListFolders`, `Lis
 `ListServiceAccounts`, `ResolveUserLabels`), so access and visibility follow the caller exactly as
 they do everywhere else.
 
+### Your tokens
+
+`myTokens` lists the caller's personal tokens, and `revokeMyToken(id: ID!): UserToken!` revokes one.
+`deleteMyToken(id: ID!): Boolean!` then removes a revoked token from the list for good, and answers
+`true`. Both mutations take the user id from the session, so neither can reach another user's
+token, and both exist only on `/graphql`, behind its session, CSRF and second-factor checks.
+
+| `code` | Message after `desc =` | Meaning |
+|---|---|---|
+| `FAILED_PRECONDITION` | `token is not revoked` | The token hasn't been revoked, even if it has expired; revoke it first. |
+| `NOT_FOUND` | `token not found` | No such token among the caller's own, including one that belongs to someone else. |
+
 ### Step-up
 
 The session remembers when it last proved a second factor: at sign-in, at enrollment, or through

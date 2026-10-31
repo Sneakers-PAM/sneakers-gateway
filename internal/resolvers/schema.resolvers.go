@@ -790,6 +790,18 @@ func (r *mutationResolver) RevokeMyToken(ctx context.Context, id string) (*UserT
 	return gqlUserToken(resp.GetMeta()), nil
 }
 
+// DeleteMyToken is the resolver for the deleteMyToken field.
+func (r *mutationResolver) DeleteMyToken(ctx context.Context, id string) (bool, error) {
+	me := actorFrom(ctx)
+	if me == "" {
+		return false, errors.New("not signed in")
+	}
+	if _, err := r.Identity.DeleteUserToken(ctx, &identityv1.DeleteUserTokenRequest{Id: id, UserId: me, ActingUserId: me}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // DecideSecretUse is the resolver for the decideSecretUse field.
 func (r *mutationResolver) DecideSecretUse(ctx context.Context, id string, approve bool, factor *FactorInput) (*SecretUse, error) {
 	me, err := signedIn(ctx)
