@@ -102,13 +102,10 @@ func (h *Handler) SSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A pre-provisioned SSO-only user has no Kratos subject: the session then
+	// leaves it empty and resolves by user id (actorRequest).
 	userID := user.GetId()
 	subject := user.GetSubject()
-	if subject == "" {
-		// A pre-provisioned SSO-only user may have no Kratos subject;
-		// the platform user id is the stable actor key.
-		subject = userID
-	}
 
 	// MFA-always: a SAML assertion alone never mints a session.
 	mfa, serr := h.Identity.GetMfaStatus(r.Context(), &identityv1.GetMfaStatusRequest{UserId: userID})

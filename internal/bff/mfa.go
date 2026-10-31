@@ -469,9 +469,7 @@ func (h *Handler) requireAdminSession(w http.ResponseWriter, r *http.Request, ch
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "csrf"})
 		return "", false
 	}
-	resolved, err := h.Identity.ResolveUserContext(r.Context(), &identityv1.ResolveUserContextRequest{
-		Subject: sess.Subject,
-	})
+	resolved, err := h.Identity.ResolveUserContext(r.Context(), actorRequest(sess))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "identity_unreachable"})
 		return "", false

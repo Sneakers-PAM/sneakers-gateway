@@ -294,3 +294,56 @@ func TestSSOCallback_BadState_Rejected(t *testing.T) {
 		t.Fatalf("expected state-mismatch reject, got %s", rec.Header().Get("Location"))
 	}
 }
+
+// A pre-provisioned SSO user has no login subject. The session must carry their
+// user id, and the next request must resolve them by it, not send the id as a
+// subject identity can never match.
+func TestSSOCallback_UserWithNoSubject_NextRequestResolvesByUserID(t *testing.T) {
+	srv := ssoTestServer(t, "code-1", "at-1", "ada@example.org")
+	id := &fakeIdentity{
+		resolveByEmailResp: &identityv1.User{Id: "usr-1", Email: "ada@example.org"},
+		resolveRes:         &identityv1.ResolveUserContextResponse{User: &identityv1.User{Id: "usr-1"}},
+	}
+	h := ssoHandler(t, srv.URL, id)
+
+	rec := callbackWithState(t, h, "code-1", "st-1")
+	var sid string
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == CookieName {
+			sid = c.Value
+		}
+	}
+	if sid == "" {
+		t.Fatalf("no session cookie, redirect %s", rec.Header().Get("Location"))
+	}
+	if _, _, err := h.resolveSessionActor(context.Background(), sid); err != nil {
+		t.Fatalf("resolveSessionActor: %v", err)
+	}
+	if id.resolveReq.GetUserId() != "usr-1" || id.resolveReq.GetSubject() != "" {
+		t.Fatalf("resolve request = %+v, want user_id usr-1 and no subject", id.resolveReq)
+	}
+}
+
+// A user who has a login subject keeps resolving by it.
+func TestSSOCallback_UserWithSubject_NextRequestResolvesBySubject(t *testing.T) {
+	srv := ssoTestServer(t, "code-1", "at-1", "ada@example.org")
+	id := &fakeIdentity{
+		resolveByEmailResp: &identityv1.User{Id: "usr-1", Email: "ada@example.org", Subject: "sub-1"},
+		resolveRes:         &identityv1.ResolveUserContextResponse{User: &identityv1.User{Id: "usr-1"}},
+	}
+	h := ssoHandler(t, srv.URL, id)
+
+	rec := callbackWithState(t, h, "code-1", "st-1")
+	var sid string
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == CookieName {
+			sid = c.Value
+		}
+	}
+	if _, _, err := h.resolveSessionActor(context.Background(), sid); err != nil {
+		t.Fatalf("resolveSessionActor: %v", err)
+	}
+	if id.resolveReq.GetSubject() != "sub-1" || id.resolveReq.GetUserId() != "" {
+		t.Fatalf("resolve request = %+v, want subject sub-1 and no user_id", id.resolveReq)
+	}
+}
