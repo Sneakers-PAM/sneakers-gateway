@@ -428,12 +428,12 @@ func TestActorAttrs_MapsRolesAndGroups(t *testing.T) {
 func TestActorContext_FailsClosed(t *testing.T) {
 	// identity error
 	h := &Handler{Identity: &fakeIdentity{resolveErr: errors.New("down")}}
-	if _, err := h.actorContext(context.Background(), "sub-abc-123"); err == nil {
+	if _, err := h.actorContext(context.Background(), Session{Subject: "sub-abc-123"}); err == nil {
 		t.Fatal("expected error when identity unreachable")
 	}
 	// unknown subject → nil user
 	h = &Handler{Identity: &fakeIdentity{resolveRes: &identityv1.ResolveUserContextResponse{}}}
-	if _, err := h.actorContext(context.Background(), "sub-unknown"); err == nil {
+	if _, err := h.actorContext(context.Background(), Session{Subject: "sub-unknown"}); err == nil {
 		t.Fatal("expected error when subject maps to no user")
 	}
 }
