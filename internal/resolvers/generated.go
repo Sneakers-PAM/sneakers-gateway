@@ -323,6 +323,7 @@ type ComplexityRoot struct {
 		AttachSecretTarget       func(childComplexity int, secretID string, targetID string) int
 		BeginMfaPasskey          func(childComplexity int) int
 		BreakGlassSecret         func(childComplexity int, secretID string, reason string, code string, sessionID *string) int
+		ChangeSecretType         func(childComplexity int, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*KeyValueInput, unmappedFields *UnmappedFieldPolicy) int
 		CheckinSecret            func(childComplexity int, secretID string) int
 		CheckoutSecret           func(childComplexity int, secretID string, hours *int) int
 		CloneSecretType          func(childComplexity int, id string) int
@@ -466,6 +467,7 @@ type ComplexityRoot struct {
 		MyUnreadNotificationCount func(childComplexity int) int
 		PasswordPolicies          func(childComplexity int) int
 		PendingSecretUses         func(childComplexity int) int
+		PreviewSecretTypeChange   func(childComplexity int, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*KeyValueInput, unmappedFields *UnmappedFieldPolicy) int
 		ResolveUserLabels         func(childComplexity int, ids []string) int
 		ScanTargetHostKey         func(childComplexity int, targetID string) int
 		SearchUsers               func(childComplexity int, query string, limit *int) int
@@ -600,6 +602,29 @@ type ComplexityRoot struct {
 		Vendor    func(childComplexity int) int
 	}
 
+	SecretTypeChangeField struct {
+		FromKey func(childComplexity int) int
+		Outcome func(childComplexity int) int
+		Reason  func(childComplexity int) int
+		ToKey   func(childComplexity int) int
+	}
+
+	SecretTypeChangePreview struct {
+		Allowed             func(childComplexity int) int
+		ChangeLabel         func(childComplexity int) int
+		FieldChanges        func(childComplexity int) int
+		FieldKeys           func(childComplexity int) int
+		FromTargetID        func(childComplexity int) int
+		Heartbeat           func(childComplexity int) int
+		MissingRequiredKeys func(childComplexity int) int
+		NotesFieldKey       func(childComplexity int) int
+		RefusalMessage      func(childComplexity int) int
+		RefusalReason       func(childComplexity int) int
+		Rotation            func(childComplexity int) int
+		Target              func(childComplexity int) int
+		TargetID            func(childComplexity int) int
+	}
+
 	SecretUse struct {
 		Argv          func(childComplexity int) int
 		ClientLabel   func(childComplexity int) int
@@ -702,6 +727,14 @@ type ComplexityRoot struct {
 		TargetID    func(childComplexity int) int
 	}
 
+	TypeChangedSecret struct {
+		ChangeLabel      func(childComplexity int) int
+		FieldKeys        func(childComplexity int) int
+		MovedToNotesKeys func(childComplexity int) int
+		NotesFieldKey    func(childComplexity int) int
+		Secret           func(childComplexity int) int
+	}
+
 	UseGrant struct {
 		AllowReveal   func(childComplexity int) int
 		ExpiresAtUnix func(childComplexity int) int
@@ -766,6 +799,7 @@ type MutationResolver interface {
 	ImportExtensionFromJSON(ctx context.Context, json string) (*SecretType, error)
 	CreateSecret(ctx context.Context, input CreateSecretInput) (*Secret, error)
 	UpdateSecret(ctx context.Context, id string, input UpdateSecretInput) (*Secret, error)
+	ChangeSecretType(ctx context.Context, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*KeyValueInput, unmappedFields *UnmappedFieldPolicy) (*TypeChangedSecret, error)
 	AttachSecretTarget(ctx context.Context, secretID string, targetID string) (*Secret, error)
 	DetachSecretTarget(ctx context.Context, secretID string, targetID string) (*Secret, error)
 	RevealSecretField(ctx context.Context, id string, fieldKey string) (string, error)
@@ -854,6 +888,7 @@ type QueryResolver interface {
 	PasswordPolicies(ctx context.Context) ([]*PasswordPolicy, error)
 	SecuritySettings(ctx context.Context) (*SecuritySettings, error)
 	SecretTypes(ctx context.Context) ([]*SecretType, error)
+	PreviewSecretTypeChange(ctx context.Context, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*KeyValueInput, unmappedFields *UnmappedFieldPolicy) (*SecretTypeChangePreview, error)
 	AvailableExtensions(ctx context.Context) ([]*SecretType, error)
 	Folders(ctx context.Context) ([]*Folder, error)
 	BreakGlassSession(ctx context.Context) (*BreakGlassSession, error)
@@ -2087,6 +2122,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.BreakGlassSecret(childComplexity, args["secretId"].(string), args["reason"].(string), args["code"].(string), args["sessionId"].(*string)), true
+	case "Mutation.changeSecretType":
+		if e.ComplexityRoot.Mutation.ChangeSecretType == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_changeSecretType_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ChangeSecretType(childComplexity, args["id"].(string), args["newTypeId"].(string), args["fieldMapping"].([]*FieldMappingInput), args["fields"].([]*KeyValueInput), args["unmappedFields"].(*UnmappedFieldPolicy)), true
 	case "Mutation.checkinSecret":
 		if e.ComplexityRoot.Mutation.CheckinSecret == nil {
 			break
@@ -3323,6 +3369,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.PendingSecretUses(childComplexity), true
+	case "Query.previewSecretTypeChange":
+		if e.ComplexityRoot.Query.PreviewSecretTypeChange == nil {
+			break
+		}
+
+		args, err := ec.field_Query_previewSecretTypeChange_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.PreviewSecretTypeChange(childComplexity, args["id"].(string), args["newTypeId"].(string), args["fieldMapping"].([]*FieldMappingInput), args["fields"].([]*KeyValueInput), args["unmappedFields"].(*UnmappedFieldPolicy)), true
 	case "Query.resolveUserLabels":
 		if e.ComplexityRoot.Query.ResolveUserLabels == nil {
 			break
@@ -4058,6 +4115,110 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SecretType.Vendor(childComplexity), true
 
+	case "SecretTypeChangeField.fromKey":
+		if e.ComplexityRoot.SecretTypeChangeField.FromKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangeField.FromKey(childComplexity), true
+	case "SecretTypeChangeField.outcome":
+		if e.ComplexityRoot.SecretTypeChangeField.Outcome == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangeField.Outcome(childComplexity), true
+	case "SecretTypeChangeField.reason":
+		if e.ComplexityRoot.SecretTypeChangeField.Reason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangeField.Reason(childComplexity), true
+	case "SecretTypeChangeField.toKey":
+		if e.ComplexityRoot.SecretTypeChangeField.ToKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangeField.ToKey(childComplexity), true
+
+	case "SecretTypeChangePreview.allowed":
+		if e.ComplexityRoot.SecretTypeChangePreview.Allowed == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.Allowed(childComplexity), true
+	case "SecretTypeChangePreview.changeLabel":
+		if e.ComplexityRoot.SecretTypeChangePreview.ChangeLabel == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.ChangeLabel(childComplexity), true
+	case "SecretTypeChangePreview.fieldChanges":
+		if e.ComplexityRoot.SecretTypeChangePreview.FieldChanges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.FieldChanges(childComplexity), true
+	case "SecretTypeChangePreview.fieldKeys":
+		if e.ComplexityRoot.SecretTypeChangePreview.FieldKeys == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.FieldKeys(childComplexity), true
+	case "SecretTypeChangePreview.fromTargetId":
+		if e.ComplexityRoot.SecretTypeChangePreview.FromTargetID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.FromTargetID(childComplexity), true
+	case "SecretTypeChangePreview.heartbeat":
+		if e.ComplexityRoot.SecretTypeChangePreview.Heartbeat == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.Heartbeat(childComplexity), true
+	case "SecretTypeChangePreview.missingRequiredKeys":
+		if e.ComplexityRoot.SecretTypeChangePreview.MissingRequiredKeys == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.MissingRequiredKeys(childComplexity), true
+	case "SecretTypeChangePreview.notesFieldKey":
+		if e.ComplexityRoot.SecretTypeChangePreview.NotesFieldKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.NotesFieldKey(childComplexity), true
+	case "SecretTypeChangePreview.refusalMessage":
+		if e.ComplexityRoot.SecretTypeChangePreview.RefusalMessage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.RefusalMessage(childComplexity), true
+	case "SecretTypeChangePreview.refusalReason":
+		if e.ComplexityRoot.SecretTypeChangePreview.RefusalReason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.RefusalReason(childComplexity), true
+	case "SecretTypeChangePreview.rotation":
+		if e.ComplexityRoot.SecretTypeChangePreview.Rotation == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.Rotation(childComplexity), true
+	case "SecretTypeChangePreview.target":
+		if e.ComplexityRoot.SecretTypeChangePreview.Target == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.Target(childComplexity), true
+	case "SecretTypeChangePreview.targetId":
+		if e.ComplexityRoot.SecretTypeChangePreview.TargetID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecretTypeChangePreview.TargetID(childComplexity), true
+
 	case "SecretUse.argv":
 		if e.ComplexityRoot.SecretUse.Argv == nil {
 			break
@@ -4483,6 +4644,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.TargetHostKeyScan.TargetID(childComplexity), true
 
+	case "TypeChangedSecret.changeLabel":
+		if e.ComplexityRoot.TypeChangedSecret.ChangeLabel == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TypeChangedSecret.ChangeLabel(childComplexity), true
+	case "TypeChangedSecret.fieldKeys":
+		if e.ComplexityRoot.TypeChangedSecret.FieldKeys == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TypeChangedSecret.FieldKeys(childComplexity), true
+	case "TypeChangedSecret.movedToNotesKeys":
+		if e.ComplexityRoot.TypeChangedSecret.MovedToNotesKeys == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TypeChangedSecret.MovedToNotesKeys(childComplexity), true
+	case "TypeChangedSecret.notesFieldKey":
+		if e.ComplexityRoot.TypeChangedSecret.NotesFieldKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TypeChangedSecret.NotesFieldKey(childComplexity), true
+	case "TypeChangedSecret.secret":
+		if e.ComplexityRoot.TypeChangedSecret.Secret == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TypeChangedSecret.Secret(childComplexity), true
+
 	case "UseGrant.allowReveal":
 		if e.ComplexityRoot.UseGrant.AllowReveal == nil {
 			break
@@ -4685,6 +4877,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputConnectionInput,
 		ec.unmarshalInputCreateSecretInput,
 		ec.unmarshalInputFactorInput,
+		ec.unmarshalInputFieldMappingInput,
 		ec.unmarshalInputKeyValueInput,
 		ec.unmarshalInputPasswordPolicyInput,
 		ec.unmarshalInputRaciRuleGrantInput,
@@ -5117,6 +5310,69 @@ type KeyPair {
 input KeyValueInput {
   key: String!
   value: String!
+}
+
+# One old-key -> new-key rename for a type change, e.g.
+# { from: "password", to: "note" }.
+input FieldMappingInput {
+  from: String!
+  to: String!
+}
+
+# What a type change does with a value that has no field under the new type.
+# notes (the default) moves it to the notes field; refuse fails the change
+# naming the keys. Nothing is dropped under either.
+enum UnmappedFieldPolicy { notes refuse }
+
+# Result of changeSecretType: the secret under its new type, the field KEYS now
+# populated (never values), the old field KEYS whose values moved to the notes
+# field (never values), that notes field when any moved, and the label the new
+# version records for the change itself.
+type TypeChangedSecret {
+  secret: Secret!
+  fieldKeys: [String!]!
+  movedToNotesKeys: [String!]!
+  notesFieldKey: String
+  changeLabel: String
+}
+
+enum SecretTypeChangeOutcome { carried renamed movedToNotes blocked }
+
+# Where one stored non-empty value would go. Keys only, never values.
+type SecretTypeChangeField {
+  fromKey: String!
+  # The new type's field or the notes field. Null when it's blocked with no
+  # place to go.
+  toKey: String
+  outcome: SecretTypeChangeOutcome!
+  # The refusal reason for this field, when it's blocked.
+  reason: String
+}
+
+# What changeSecretType would do with the same inputs. Nothing is written. A
+# change the rules refuse is a normal answer with allowed false; refusalReason
+# and refusalMessage are what changeSecretType would refuse with.
+type SecretTypeChangePreview {
+  allowed: Boolean!
+  refusalReason: String
+  refusalMessage: String
+  # One entry per stored non-empty field, in key order, also when refused.
+  fieldChanges: [SecretTypeChangeField!]!
+  # Required fields of the new type that nothing fills yet; ask for them
+  # through fields.
+  missingRequiredKeys: [String!]!
+  # The notes field values would move into, when any would.
+  notesFieldKey: String
+  # When allowed: the keys the new type would hold, and the change label.
+  fieldKeys: [String!]!
+  changeLabel: String
+  # What automation would do. rotation: none or off. heartbeat: none,
+  # scheduled, no_target or opted_out. target: none, kept or detached.
+  rotation: String!
+  heartbeat: String!
+  target: String!
+  fromTargetId: String
+  targetId: String
 }
 
 input SecretFieldDefInput {
@@ -5715,6 +5971,9 @@ type Query {
   passwordPolicies: [PasswordPolicy!]!
   securitySettings: SecuritySettings!
   secretTypes: [SecretType!]!
+  # What changeSecretType would do with these inputs, without writing anything.
+  # Same access as the change; returns keys, never values.
+  previewSecretTypeChange(id: ID!, newTypeId: ID!, fieldMapping: [FieldMappingInput!], fields: [KeyValueInput!], unmappedFields: UnmappedFieldPolicy): SecretTypeChangePreview!
   # Extension packs available to install (not yet installed).
   availableExtensions: [SecretType!]!
   folders: [Folder!]!
@@ -5956,6 +6215,9 @@ type Mutation {
 
   createSecret(input: CreateSecretInput!): Secret!
   updateSecret(id: ID!, input: UpdateSecretInput!): Secret!
+  # Changes a secret's type as a new version. Needs Author on the secret or
+  # ownership of its folder; a person only, and never drops a stored value.
+  changeSecretType(id: ID!, newTypeId: ID!, fieldMapping: [FieldMappingInput!], fields: [KeyValueInput!], unmappedFields: UnmappedFieldPolicy): TypeChangedSecret!
   # Attach/detach one target on a secret's list, never touching the others
   # (#168) — unlike updateSecret's targetId, which replaces the whole list
   # with just the one it names.
@@ -7039,6 +7301,52 @@ func (ec *executionContext) childFields_SecretType(ctx context.Context, field gr
 	return nil, fmt.Errorf("no field named %q was found under type SecretType", field.Name)
 }
 
+func (ec *executionContext) childFields_SecretTypeChangeField(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "fromKey":
+		return ec.fieldContext_SecretTypeChangeField_fromKey(ctx, field)
+	case "toKey":
+		return ec.fieldContext_SecretTypeChangeField_toKey(ctx, field)
+	case "outcome":
+		return ec.fieldContext_SecretTypeChangeField_outcome(ctx, field)
+	case "reason":
+		return ec.fieldContext_SecretTypeChangeField_reason(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SecretTypeChangeField", field.Name)
+}
+
+func (ec *executionContext) childFields_SecretTypeChangePreview(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "allowed":
+		return ec.fieldContext_SecretTypeChangePreview_allowed(ctx, field)
+	case "refusalReason":
+		return ec.fieldContext_SecretTypeChangePreview_refusalReason(ctx, field)
+	case "refusalMessage":
+		return ec.fieldContext_SecretTypeChangePreview_refusalMessage(ctx, field)
+	case "fieldChanges":
+		return ec.fieldContext_SecretTypeChangePreview_fieldChanges(ctx, field)
+	case "missingRequiredKeys":
+		return ec.fieldContext_SecretTypeChangePreview_missingRequiredKeys(ctx, field)
+	case "notesFieldKey":
+		return ec.fieldContext_SecretTypeChangePreview_notesFieldKey(ctx, field)
+	case "fieldKeys":
+		return ec.fieldContext_SecretTypeChangePreview_fieldKeys(ctx, field)
+	case "changeLabel":
+		return ec.fieldContext_SecretTypeChangePreview_changeLabel(ctx, field)
+	case "rotation":
+		return ec.fieldContext_SecretTypeChangePreview_rotation(ctx, field)
+	case "heartbeat":
+		return ec.fieldContext_SecretTypeChangePreview_heartbeat(ctx, field)
+	case "target":
+		return ec.fieldContext_SecretTypeChangePreview_target(ctx, field)
+	case "fromTargetId":
+		return ec.fieldContext_SecretTypeChangePreview_fromTargetId(ctx, field)
+	case "targetId":
+		return ec.fieldContext_SecretTypeChangePreview_targetId(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SecretTypeChangePreview", field.Name)
+}
+
 func (ec *executionContext) childFields_SecretUse(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "id":
@@ -7233,6 +7541,22 @@ func (ec *executionContext) childFields_TargetHostKeyScan(ctx context.Context, f
 		return ec.fieldContext_TargetHostKeyScan_pinned(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type TargetHostKeyScan", field.Name)
+}
+
+func (ec *executionContext) childFields_TypeChangedSecret(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "secret":
+		return ec.fieldContext_TypeChangedSecret_secret(ctx, field)
+	case "fieldKeys":
+		return ec.fieldContext_TypeChangedSecret_fieldKeys(ctx, field)
+	case "movedToNotesKeys":
+		return ec.fieldContext_TypeChangedSecret_movedToNotesKeys(ctx, field)
+	case "notesFieldKey":
+		return ec.fieldContext_TypeChangedSecret_notesFieldKey(ctx, field)
+	case "changeLabel":
+		return ec.fieldContext_TypeChangedSecret_changeLabel(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type TypeChangedSecret", field.Name)
 }
 
 func (ec *executionContext) childFields_UseGrant(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -7582,6 +7906,52 @@ func (ec *executionContext) field_Mutation_breakGlassSecret_args(ctx context.Con
 		return nil, err
 	}
 	args["sessionId"] = arg3
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_changeSecretType_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "newTypeId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["newTypeId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "fieldMapping",
+		func(ctx context.Context, v any) ([]*FieldMappingInput, error) {
+			return ec.unmarshalOFieldMappingInput2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFieldMappingInputᚄ(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["fieldMapping"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "fields",
+		func(ctx context.Context, v any) ([]*KeyValueInput, error) {
+			return ec.unmarshalOKeyValueInput2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐKeyValueInputᚄ(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["fields"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "unmappedFields",
+		func(ctx context.Context, v any) (*UnmappedFieldPolicy, error) {
+			return ec.unmarshalOUnmappedFieldPolicy2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐUnmappedFieldPolicy(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["unmappedFields"] = arg4
 	return args, nil
 }
 
@@ -9442,6 +9812,52 @@ func (ec *executionContext) field_Query_mySecretAccess_args(ctx context.Context,
 		return nil, err
 	}
 	args["secretId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_previewSecretTypeChange_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "newTypeId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["newTypeId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "fieldMapping",
+		func(ctx context.Context, v any) ([]*FieldMappingInput, error) {
+			return ec.unmarshalOFieldMappingInput2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFieldMappingInputᚄ(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["fieldMapping"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "fields",
+		func(ctx context.Context, v any) ([]*KeyValueInput, error) {
+			return ec.unmarshalOKeyValueInput2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐKeyValueInputᚄ(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["fields"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "unmappedFields",
+		func(ctx context.Context, v any) (*UnmappedFieldPolicy, error) {
+			return ec.unmarshalOUnmappedFieldPolicy2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐUnmappedFieldPolicy(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["unmappedFields"] = arg4
 	return args, nil
 }
 
@@ -14847,6 +15263,50 @@ func (ec *executionContext) fieldContext_Mutation_updateSecret(ctx context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_changeSecretType(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_changeSecretType(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ChangeSecretType(ctx, fc.Args["id"].(string), fc.Args["newTypeId"].(string), fc.Args["fieldMapping"].([]*FieldMappingInput), fc.Args["fields"].([]*KeyValueInput), fc.Args["unmappedFields"].(*UnmappedFieldPolicy))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *TypeChangedSecret) graphql.Marshaler {
+			return ec.marshalNTypeChangedSecret2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTypeChangedSecret(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_changeSecretType(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TypeChangedSecret(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_changeSecretType_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_attachSecretTarget(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19056,6 +19516,50 @@ func (ec *executionContext) fieldContext_Query_secretTypes(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_previewSecretTypeChange(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_previewSecretTypeChange(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().PreviewSecretTypeChange(ctx, fc.Args["id"].(string), fc.Args["newTypeId"].(string), fc.Args["fieldMapping"].([]*FieldMappingInput), fc.Args["fields"].([]*KeyValueInput), fc.Args["unmappedFields"].(*UnmappedFieldPolicy))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *SecretTypeChangePreview) graphql.Marshaler {
+			return ec.marshalNSecretTypeChangePreview2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretTypeChangePreview(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_previewSecretTypeChange(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretTypeChangePreview(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_previewSecretTypeChange_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_availableExtensions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22392,6 +22896,406 @@ func (ec *executionContext) fieldContext_SecretType_rotation(_ context.Context, 
 	return graphql.NewScalarFieldContext("SecretType", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _SecretTypeChangeField_fromKey(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangeField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangeField_fromKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FromKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangeField_fromKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangeField", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangeField_toKey(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangeField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangeField_toKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ToKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangeField_toKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangeField", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangeField_outcome(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangeField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangeField_outcome(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Outcome, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v SecretTypeChangeOutcome) graphql.Marshaler {
+			return ec.marshalNSecretTypeChangeOutcome2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretTypeChangeOutcome(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangeField_outcome(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangeField", field, false, false, errors.New("field of type SecretTypeChangeOutcome does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangeField_reason(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangeField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangeField_reason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Reason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangeField_reason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangeField", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_allowed(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_allowed(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Allowed, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_allowed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_refusalReason(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_refusalReason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RefusalReason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_refusalReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_refusalMessage(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_refusalMessage(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RefusalMessage, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_refusalMessage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_fieldChanges(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_fieldChanges(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FieldChanges, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*SecretTypeChangeField) graphql.Marshaler {
+			return ec.marshalNSecretTypeChangeField2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretTypeChangeFieldᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_fieldChanges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SecretTypeChangePreview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecretTypeChangeField(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_missingRequiredKeys(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_missingRequiredKeys(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MissingRequiredKeys, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_missingRequiredKeys(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_notesFieldKey(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_notesFieldKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotesFieldKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_notesFieldKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_fieldKeys(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_fieldKeys(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FieldKeys, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_fieldKeys(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_changeLabel(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_changeLabel(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ChangeLabel, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_changeLabel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_rotation(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_rotation(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Rotation, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_rotation(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_heartbeat(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_heartbeat(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Heartbeat, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_heartbeat(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_target(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_target(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Target, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_target(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_fromTargetId(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_fromTargetId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FromTargetID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_fromTargetId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SecretTypeChangePreview_targetId(ctx context.Context, field graphql.CollectedField, obj *SecretTypeChangePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecretTypeChangePreview_targetId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TargetID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecretTypeChangePreview_targetId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecretTypeChangePreview", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _SecretUse_id(ctx context.Context, field graphql.CollectedField, obj *SecretUse) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -24013,6 +24917,130 @@ func (ec *executionContext) _TargetHostKeyScan_pinned(ctx context.Context, field
 }
 func (ec *executionContext) fieldContext_TargetHostKeyScan_pinned(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("TargetHostKeyScan", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _TypeChangedSecret_secret(ctx context.Context, field graphql.CollectedField, obj *TypeChangedSecret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TypeChangedSecret_secret(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Secret, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Secret) graphql.Marshaler {
+			return ec.marshalNSecret2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecret(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TypeChangedSecret_secret(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TypeChangedSecret",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Secret(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TypeChangedSecret_fieldKeys(ctx context.Context, field graphql.CollectedField, obj *TypeChangedSecret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TypeChangedSecret_fieldKeys(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FieldKeys, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TypeChangedSecret_fieldKeys(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TypeChangedSecret", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TypeChangedSecret_movedToNotesKeys(ctx context.Context, field graphql.CollectedField, obj *TypeChangedSecret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TypeChangedSecret_movedToNotesKeys(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MovedToNotesKeys, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TypeChangedSecret_movedToNotesKeys(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TypeChangedSecret", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TypeChangedSecret_notesFieldKey(ctx context.Context, field graphql.CollectedField, obj *TypeChangedSecret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TypeChangedSecret_notesFieldKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotesFieldKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TypeChangedSecret_notesFieldKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TypeChangedSecret", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TypeChangedSecret_changeLabel(ctx context.Context, field graphql.CollectedField, obj *TypeChangedSecret) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TypeChangedSecret_changeLabel(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ChangeLabel, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TypeChangedSecret_changeLabel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TypeChangedSecret", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _UseGrant_id(ctx context.Context, field graphql.CollectedField, obj *UseGrant) (ret graphql.Marshaler) {
@@ -25972,6 +27000,43 @@ func (ec *executionContext) unmarshalInputFactorInput(ctx context.Context, obj a
 				return it, err
 			}
 			it.WebauthnSessionID = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputFieldMappingInput(ctx context.Context, obj any) (FieldMappingInput, error) {
+	var it FieldMappingInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"from", "to"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "from":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("from"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.From = data
+		case "to":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("to"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.To = data
 		}
 	}
 	return it, nil
@@ -28804,6 +29869,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "changeSecretType":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_changeSecretType(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "attachSecretTarget":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_attachSecretTarget(ctx, field)
@@ -29924,6 +30996,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_secretTypes(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "previewSecretTypeChange":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_previewSecretTypeChange(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -31403,6 +32497,135 @@ func (ec *executionContext) _SecretType(ctx context.Context, sel ast.SelectionSe
 	return out
 }
 
+var secretTypeChangeFieldImplementors = []string{"SecretTypeChangeField"}
+
+func (ec *executionContext) _SecretTypeChangeField(ctx context.Context, sel ast.SelectionSet, obj *SecretTypeChangeField) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, secretTypeChangeFieldImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SecretTypeChangeField")
+		case "fromKey":
+			out.Values[i] = ec._SecretTypeChangeField_fromKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "toKey":
+			out.Values[i] = ec._SecretTypeChangeField_toKey(ctx, field, obj)
+		case "outcome":
+			out.Values[i] = ec._SecretTypeChangeField_outcome(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reason":
+			out.Values[i] = ec._SecretTypeChangeField_reason(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var secretTypeChangePreviewImplementors = []string{"SecretTypeChangePreview"}
+
+func (ec *executionContext) _SecretTypeChangePreview(ctx context.Context, sel ast.SelectionSet, obj *SecretTypeChangePreview) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, secretTypeChangePreviewImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SecretTypeChangePreview")
+		case "allowed":
+			out.Values[i] = ec._SecretTypeChangePreview_allowed(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "refusalReason":
+			out.Values[i] = ec._SecretTypeChangePreview_refusalReason(ctx, field, obj)
+		case "refusalMessage":
+			out.Values[i] = ec._SecretTypeChangePreview_refusalMessage(ctx, field, obj)
+		case "fieldChanges":
+			out.Values[i] = ec._SecretTypeChangePreview_fieldChanges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "missingRequiredKeys":
+			out.Values[i] = ec._SecretTypeChangePreview_missingRequiredKeys(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notesFieldKey":
+			out.Values[i] = ec._SecretTypeChangePreview_notesFieldKey(ctx, field, obj)
+		case "fieldKeys":
+			out.Values[i] = ec._SecretTypeChangePreview_fieldKeys(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "changeLabel":
+			out.Values[i] = ec._SecretTypeChangePreview_changeLabel(ctx, field, obj)
+		case "rotation":
+			out.Values[i] = ec._SecretTypeChangePreview_rotation(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "heartbeat":
+			out.Values[i] = ec._SecretTypeChangePreview_heartbeat(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "target":
+			out.Values[i] = ec._SecretTypeChangePreview_target(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fromTargetId":
+			out.Values[i] = ec._SecretTypeChangePreview_fromTargetId(ctx, field, obj)
+		case "targetId":
+			out.Values[i] = ec._SecretTypeChangePreview_targetId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var secretUseImplementors = []string{"SecretUse"}
 
 func (ec *executionContext) _SecretUse(ctx context.Context, sel ast.SelectionSet, obj *SecretUse) graphql.Marshaler {
@@ -32038,6 +33261,59 @@ func (ec *executionContext) _TargetHostKeyScan(ctx context.Context, sel ast.Sele
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var typeChangedSecretImplementors = []string{"TypeChangedSecret"}
+
+func (ec *executionContext) _TypeChangedSecret(ctx context.Context, sel ast.SelectionSet, obj *TypeChangedSecret) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, typeChangedSecretImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TypeChangedSecret")
+		case "secret":
+			out.Values[i] = ec._TypeChangedSecret_secret(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fieldKeys":
+			out.Values[i] = ec._TypeChangedSecret_fieldKeys(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "movedToNotesKeys":
+			out.Values[i] = ec._TypeChangedSecret_movedToNotesKeys(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notesFieldKey":
+			out.Values[i] = ec._TypeChangedSecret_notesFieldKey(ctx, field, obj)
+		case "changeLabel":
+			out.Values[i] = ec._TypeChangedSecret_changeLabel(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -33143,6 +34419,11 @@ func (ec *executionContext) marshalNFieldKind2githubᚗcomᚋSneakersᚑPAMᚋsn
 	return v
 }
 
+func (ec *executionContext) unmarshalNFieldMappingInput2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFieldMappingInput(ctx context.Context, v any) (*FieldMappingInput, error) {
+	res, err := ec.unmarshalInputFieldMappingInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNFolder2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFolder(ctx context.Context, sel ast.SelectionSet, v Folder) graphql.Marshaler {
 	return ec._Folder(ctx, sel, &v)
 }
@@ -33924,6 +35205,56 @@ func (ec *executionContext) marshalNSecretType2ᚖgithubᚗcomᚋSneakersᚑPAM�
 	return ec._SecretType(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNSecretTypeChangeField2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretTypeChangeFieldᚄ(ctx context.Context, sel ast.SelectionSet, v []*SecretTypeChangeField) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNSecretTypeChangeField2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretTypeChangeField(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNSecretTypeChangeField2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretTypeChangeField(ctx context.Context, sel ast.SelectionSet, v *SecretTypeChangeField) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SecretTypeChangeField(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNSecretTypeChangeOutcome2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretTypeChangeOutcome(ctx context.Context, v any) (SecretTypeChangeOutcome, error) {
+	var res SecretTypeChangeOutcome
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSecretTypeChangeOutcome2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretTypeChangeOutcome(ctx context.Context, sel ast.SelectionSet, v SecretTypeChangeOutcome) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNSecretTypeChangePreview2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretTypeChangePreview(ctx context.Context, sel ast.SelectionSet, v SecretTypeChangePreview) graphql.Marshaler {
+	return ec._SecretTypeChangePreview(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSecretTypeChangePreview2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretTypeChangePreview(ctx context.Context, sel ast.SelectionSet, v *SecretTypeChangePreview) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SecretTypeChangePreview(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNSecretTypeInput2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretTypeInput(ctx context.Context, v any) (SecretTypeInput, error) {
 	res, err := ec.unmarshalInputSecretTypeInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -34242,6 +35573,20 @@ func (ec *executionContext) marshalNTargetHostKeyScan2ᚖgithubᚗcomᚋSneakers
 func (ec *executionContext) unmarshalNTargetInput2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetInput(ctx context.Context, v any) (TargetInput, error) {
 	res, err := ec.unmarshalInputTargetInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTypeChangedSecret2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTypeChangedSecret(ctx context.Context, sel ast.SelectionSet, v TypeChangedSecret) graphql.Marshaler {
+	return ec._TypeChangedSecret(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTypeChangedSecret2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTypeChangedSecret(ctx context.Context, sel ast.SelectionSet, v *TypeChangedSecret) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TypeChangedSecret(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNTypeOrigin2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTypeOrigin(ctx context.Context, v any) (TypeOrigin, error) {
@@ -34645,6 +35990,24 @@ func (ec *executionContext) unmarshalOFactorInput2ᚖgithubᚗcomᚋSneakersᚑP
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalOFieldMappingInput2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFieldMappingInputᚄ(ctx context.Context, v any) ([]*FieldMappingInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*FieldMappingInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNFieldMappingInput2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐFieldMappingInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
 func (ec *executionContext) unmarshalOHeartbeatResult2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐHeartbeatResult(ctx context.Context, v any) (*HeartbeatResult, error) {
 	if v == nil {
 		return nil, nil
@@ -34906,6 +36269,22 @@ func (ec *executionContext) unmarshalOTargetConnectionInput2ᚕᚖgithubᚗcom�
 		}
 	}
 	return res, nil
+}
+
+func (ec *executionContext) unmarshalOUnmappedFieldPolicy2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐUnmappedFieldPolicy(ctx context.Context, v any) (*UnmappedFieldPolicy, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(UnmappedFieldPolicy)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOUnmappedFieldPolicy2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐUnmappedFieldPolicy(ctx context.Context, sel ast.SelectionSet, v *UnmappedFieldPolicy) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) marshalOUser2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐUser(ctx context.Context, sel ast.SelectionSet, v *User) graphql.Marshaler {

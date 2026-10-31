@@ -214,6 +214,11 @@ type FactorInput struct {
 	WebauthnSessionID *string `json:"webauthnSessionId,omitempty"`
 }
 
+type FieldMappingInput struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
 type Folder struct {
 	ID                 string      `json:"id"`
 	Name               string      `json:"name"`
@@ -506,6 +511,29 @@ type SecretType struct {
 	Rotation  *bool             `json:"rotation,omitempty"`
 }
 
+type SecretTypeChangeField struct {
+	FromKey string                  `json:"fromKey"`
+	ToKey   *string                 `json:"toKey,omitempty"`
+	Outcome SecretTypeChangeOutcome `json:"outcome"`
+	Reason  *string                 `json:"reason,omitempty"`
+}
+
+type SecretTypeChangePreview struct {
+	Allowed             bool                     `json:"allowed"`
+	RefusalReason       *string                  `json:"refusalReason,omitempty"`
+	RefusalMessage      *string                  `json:"refusalMessage,omitempty"`
+	FieldChanges        []*SecretTypeChangeField `json:"fieldChanges"`
+	MissingRequiredKeys []string                 `json:"missingRequiredKeys"`
+	NotesFieldKey       *string                  `json:"notesFieldKey,omitempty"`
+	FieldKeys           []string                 `json:"fieldKeys"`
+	ChangeLabel         *string                  `json:"changeLabel,omitempty"`
+	Rotation            string                   `json:"rotation"`
+	Heartbeat           string                   `json:"heartbeat"`
+	Target              string                   `json:"target"`
+	FromTargetID        *string                  `json:"fromTargetId,omitempty"`
+	TargetID            *string                  `json:"targetId,omitempty"`
+}
+
 type SecretTypeInput struct {
 	Name      string                 `json:"name"`
 	Fields    []*SecretFieldDefInput `json:"fields"`
@@ -641,6 +669,14 @@ type TargetInput struct {
 	Connections  []*TargetConnectionInput `json:"connections,omitempty"`
 	Description  *string                  `json:"description,omitempty"`
 	SSHHostKeys  []string                 `json:"sshHostKeys,omitempty"`
+}
+
+type TypeChangedSecret struct {
+	Secret           *Secret  `json:"secret"`
+	FieldKeys        []string `json:"fieldKeys"`
+	MovedToNotesKeys []string `json:"movedToNotesKeys"`
+	NotesFieldKey    *string  `json:"notesFieldKey,omitempty"`
+	ChangeLabel      *string  `json:"changeLabel,omitempty"`
 }
 
 type UpdateSecretInput struct {
@@ -1478,6 +1514,65 @@ func (e RotationState) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+type SecretTypeChangeOutcome string
+
+const (
+	SecretTypeChangeOutcomeCarried      SecretTypeChangeOutcome = "carried"
+	SecretTypeChangeOutcomeRenamed      SecretTypeChangeOutcome = "renamed"
+	SecretTypeChangeOutcomeMovedToNotes SecretTypeChangeOutcome = "movedToNotes"
+	SecretTypeChangeOutcomeBlocked      SecretTypeChangeOutcome = "blocked"
+)
+
+var AllSecretTypeChangeOutcome = []SecretTypeChangeOutcome{
+	SecretTypeChangeOutcomeCarried,
+	SecretTypeChangeOutcomeRenamed,
+	SecretTypeChangeOutcomeMovedToNotes,
+	SecretTypeChangeOutcomeBlocked,
+}
+
+func (e SecretTypeChangeOutcome) IsValid() bool {
+	switch e {
+	case SecretTypeChangeOutcomeCarried, SecretTypeChangeOutcomeRenamed, SecretTypeChangeOutcomeMovedToNotes, SecretTypeChangeOutcomeBlocked:
+		return true
+	}
+	return false
+}
+
+func (e SecretTypeChangeOutcome) String() string {
+	return string(e)
+}
+
+func (e *SecretTypeChangeOutcome) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SecretTypeChangeOutcome(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SecretTypeChangeOutcome", str)
+	}
+	return nil
+}
+
+func (e SecretTypeChangeOutcome) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SecretTypeChangeOutcome) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SecretTypeChangeOutcome) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type SecretUseDecision string
 
 const (
@@ -1766,6 +1861,61 @@ func (e *TypeOrigin) UnmarshalJSON(b []byte) error {
 }
 
 func (e TypeOrigin) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type UnmappedFieldPolicy string
+
+const (
+	UnmappedFieldPolicyNotes  UnmappedFieldPolicy = "notes"
+	UnmappedFieldPolicyRefuse UnmappedFieldPolicy = "refuse"
+)
+
+var AllUnmappedFieldPolicy = []UnmappedFieldPolicy{
+	UnmappedFieldPolicyNotes,
+	UnmappedFieldPolicyRefuse,
+}
+
+func (e UnmappedFieldPolicy) IsValid() bool {
+	switch e {
+	case UnmappedFieldPolicyNotes, UnmappedFieldPolicyRefuse:
+		return true
+	}
+	return false
+}
+
+func (e UnmappedFieldPolicy) String() string {
+	return string(e)
+}
+
+func (e *UnmappedFieldPolicy) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = UnmappedFieldPolicy(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid UnmappedFieldPolicy", str)
+	}
+	return nil
+}
+
+func (e UnmappedFieldPolicy) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *UnmappedFieldPolicy) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e UnmappedFieldPolicy) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
