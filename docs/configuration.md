@@ -105,7 +105,7 @@ above, plus Kratos (`KRATOS_ADMIN_URL`, real mode), Hydra (when `HYDRA_ENABLED`)
 |---|---|---|
 | `MCP_HEALTH_URL` | (none) | Where the diagnostics read the MCP server's build, its liveness route: for example `http://sneakers-mcp:9101/livez`. Unset shows mcp as not configured. |
 | `HYDRA_ADMIN_URL` | (the origin of `HYDRA_JWKS_URL`) | Where Hydra's `/version` (diagnostics) and `/health/ready` (readiness) are read. |
-| `SNEAKERS_PRODUCT_VERSION` | (none) | The product release this install runs, shown once at the top of About and diagnostics. The appliance bundle sets it. |
+| `SNEAKERS_PRODUCT_VERSION` | (none) | The product release this install runs, shown once at the top of About and diagnostics. The Helm charts set it to the version they deploy; the appliance bundle sets the release's version. |
 | `SNEAKERS_APPLIANCE_VERSION` | (none) | Set by the appliance bundle to the box's Base OS version; unset means not on the appliance. |
 | `SNEAKERS_APPLIANCE_WEB_VERSION` | (none) | Set by the appliance bundle to the box's Base Web version. |
 | `SNEAKERS_APPLIANCE_FQDN` | (none) | Set by the appliance bundle to the box's FQDN. |
