@@ -434,6 +434,8 @@ type Connection {
   protocol: String!
   port: Int
   useTls: Boolean
+  # The KDC port for validating a rotated password over Kerberos; 0 means 88.
+  kdcPort: Int
   description: String
   # Output-only: number of targets binding to this connection (server-computed).
   targetCount: Int!
@@ -444,6 +446,7 @@ input ConnectionInput {
   protocol: String!
   port: Int
   useTls: Boolean
+  kdcPort: Int
   description: String
 }
 

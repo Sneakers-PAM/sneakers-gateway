@@ -367,7 +367,7 @@ func ideref(i *int) int32 {
 func gqlConnection(c *vaultv1.Connection) *Connection {
 	return &Connection{
 		ID: c.GetId(), Name: c.GetName(), Protocol: c.GetProtocol(),
-		Port: intPtr(int(c.GetPort())), UseTLS: boolPtr(c.GetUseTls()), Description: strPtr(c.GetDescription()),
+		Port: intPtr(int(c.GetPort())), UseTLS: boolPtr(c.GetUseTls()), KdcPort: intPtr(int(c.GetKdcPort())), Description: strPtr(c.GetDescription()),
 		TargetCount: int(c.GetTargetCount()),
 	}
 }
@@ -390,7 +390,7 @@ func gqlTargetConnection(c *vaultv1.TargetConnection) *TargetConnection {
 func protoConnInput(in ConnectionInput) *vaultv1.Connection {
 	return &vaultv1.Connection{
 		Id: deref(in.ID), Name: in.Name, Protocol: in.Protocol,
-		Port: ideref(in.Port), UseTls: bderef(in.UseTLS), Description: deref(in.Description),
+		Port: ideref(in.Port), UseTls: bderef(in.UseTLS), KdcPort: ideref(in.KdcPort), Description: deref(in.Description),
 	}
 }
 func protoTargetInput(in TargetInput) *vaultv1.Target {

@@ -148,6 +148,7 @@ type Connection struct {
 	Protocol    string  `json:"protocol"`
 	Port        *int    `json:"port,omitempty"`
 	UseTLS      *bool   `json:"useTls,omitempty"`
+	KdcPort     *int    `json:"kdcPort,omitempty"`
 	Description *string `json:"description,omitempty"`
 	TargetCount int     `json:"targetCount"`
 }
@@ -158,6 +159,7 @@ type ConnectionInput struct {
 	Protocol    string  `json:"protocol"`
 	Port        *int    `json:"port,omitempty"`
 	UseTLS      *bool   `json:"useTls,omitempty"`
+	KdcPort     *int    `json:"kdcPort,omitempty"`
 	Description *string `json:"description,omitempty"`
 }
 

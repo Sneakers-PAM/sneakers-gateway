@@ -173,6 +173,7 @@ type ComplexityRoot struct {
 	Connection struct {
 		Description func(childComplexity int) int
 		ID          func(childComplexity int) int
+		KdcPort     func(childComplexity int) int
 		Name        func(childComplexity int) int
 		Port        func(childComplexity int) int
 		Protocol    func(childComplexity int) int
@@ -1538,6 +1539,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Connection.ID(childComplexity), true
+	case "Connection.kdcPort":
+		if e.ComplexityRoot.Connection.KdcPort == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.KdcPort(childComplexity), true
 	case "Connection.name":
 		if e.ComplexityRoot.Connection.Name == nil {
 			break
@@ -5425,6 +5432,8 @@ type Connection {
   protocol: String!
   port: Int
   useTls: Boolean
+  # The KDC port for validating a rotated password over Kerberos; 0 means 88.
+  kdcPort: Int
   description: String
   # Output-only: number of targets binding to this connection (server-computed).
   targetCount: Int!
@@ -5435,6 +5444,7 @@ input ConnectionInput {
   protocol: String!
   port: Int
   useTls: Boolean
+  kdcPort: Int
   description: String
 }
 
@@ -6754,6 +6764,8 @@ func (ec *executionContext) childFields_Connection(ctx context.Context, field gr
 		return ec.fieldContext_Connection_port(ctx, field)
 	case "useTls":
 		return ec.fieldContext_Connection_useTls(ctx, field)
+	case "kdcPort":
+		return ec.fieldContext_Connection_kdcPort(ctx, field)
 	case "description":
 		return ec.fieldContext_Connection_description(ctx, field)
 	case "targetCount":
@@ -12581,6 +12593,29 @@ func (ec *executionContext) _Connection_useTls(ctx context.Context, field graphq
 }
 func (ec *executionContext) fieldContext_Connection_useTls(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Connection", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Connection_kdcPort(ctx context.Context, field graphql.CollectedField, obj *Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_kdcPort(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.KdcPort, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *int) graphql.Marshaler {
+			return ec.marshalOInt2ᚖint(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_kdcPort(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, errors.New("field of type Int does not have child fields"))
 }
 
 func (ec *executionContext) _Connection_description(ctx context.Context, field graphql.CollectedField, obj *Connection) (ret graphql.Marshaler) {
@@ -26871,7 +26906,7 @@ func (ec *executionContext) unmarshalInputConnectionInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id", "name", "protocol", "port", "useTls", "description"}
+	fieldsInOrder := [...]string{"id", "name", "protocol", "port", "useTls", "kdcPort", "description"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -26913,6 +26948,13 @@ func (ec *executionContext) unmarshalInputConnectionInput(ctx context.Context, o
 				return it, err
 			}
 			it.UseTLS = data
+		case "kdcPort":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("kdcPort"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.KdcPort = data
 		case "description":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -28754,6 +28796,8 @@ func (ec *executionContext) _Connection(ctx context.Context, sel ast.SelectionSe
 			out.Values[i] = ec._Connection_port(ctx, field, obj)
 		case "useTls":
 			out.Values[i] = ec._Connection_useTls(ctx, field, obj)
+		case "kdcPort":
+			out.Values[i] = ec._Connection_kdcPort(ctx, field, obj)
 		case "description":
 			out.Values[i] = ec._Connection_description(ctx, field, obj)
 		case "targetCount":
