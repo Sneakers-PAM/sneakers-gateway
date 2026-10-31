@@ -328,6 +328,69 @@ input KeyValueInput {
   value: String!
 }
 
+# One old-key -> new-key rename for a type change, e.g.
+# { from: "password", to: "note" }.
+input FieldMappingInput {
+  from: String!
+  to: String!
+}
+
+# What a type change does with a value that has no field under the new type.
+# notes (the default) moves it to the notes field; refuse fails the change
+# naming the keys. Nothing is dropped under either.
+enum UnmappedFieldPolicy { notes refuse }
+
+# Result of changeSecretType: the secret under its new type, the field KEYS now
+# populated (never values), the old field KEYS whose values moved to the notes
+# field (never values), that notes field when any moved, and the label the new
+# version records for the change itself.
+type TypeChangedSecret {
+  secret: Secret!
+  fieldKeys: [String!]!
+  movedToNotesKeys: [String!]!
+  notesFieldKey: String
+  changeLabel: String
+}
+
+enum SecretTypeChangeOutcome { carried renamed movedToNotes blocked }
+
+# Where one stored non-empty value would go. Keys only, never values.
+type SecretTypeChangeField {
+  fromKey: String!
+  # The new type's field or the notes field. Null when it's blocked with no
+  # place to go.
+  toKey: String
+  outcome: SecretTypeChangeOutcome!
+  # The refusal reason for this field, when it's blocked.
+  reason: String
+}
+
+# What changeSecretType would do with the same inputs. Nothing is written. A
+# change the rules refuse is a normal answer with allowed false; refusalReason
+# and refusalMessage are what changeSecretType would refuse with.
+type SecretTypeChangePreview {
+  allowed: Boolean!
+  refusalReason: String
+  refusalMessage: String
+  # One entry per stored non-empty field, in key order, also when refused.
+  fieldChanges: [SecretTypeChangeField!]!
+  # Required fields of the new type that nothing fills yet; ask for them
+  # through fields.
+  missingRequiredKeys: [String!]!
+  # The notes field values would move into, when any would.
+  notesFieldKey: String
+  # When allowed: the keys the new type would hold, and the change label.
+  fieldKeys: [String!]!
+  changeLabel: String
+  # What automation would do. rotation: none or off. heartbeat: none,
+  # scheduled, no_target or opted_out. target: none, kept or detached.
+  rotation: String!
+  heartbeat: String!
+  target: String!
+  fromTargetId: String
+  targetId: String
+}
+
 input SecretFieldDefInput {
   key: String!
   label: String!
@@ -924,6 +987,9 @@ type Query {
   passwordPolicies: [PasswordPolicy!]!
   securitySettings: SecuritySettings!
   secretTypes: [SecretType!]!
+  # What changeSecretType would do with these inputs, without writing anything.
+  # Same access as the change; returns keys, never values.
+  previewSecretTypeChange(id: ID!, newTypeId: ID!, fieldMapping: [FieldMappingInput!], fields: [KeyValueInput!], unmappedFields: UnmappedFieldPolicy): SecretTypeChangePreview!
   # Extension packs available to install (not yet installed).
   availableExtensions: [SecretType!]!
   folders: [Folder!]!
@@ -1165,6 +1231,9 @@ type Mutation {
 
   createSecret(input: CreateSecretInput!): Secret!
   updateSecret(id: ID!, input: UpdateSecretInput!): Secret!
+  # Changes a secret's type as a new version. Needs Author on the secret or
+  # ownership of its folder; a person only, and never drops a stored value.
+  changeSecretType(id: ID!, newTypeId: ID!, fieldMapping: [FieldMappingInput!], fields: [KeyValueInput!], unmappedFields: UnmappedFieldPolicy): TypeChangedSecret!
   # Attach/detach one target on a secret's list, never touching the others
   # (#168) — unlike updateSecret's targetId, which replaces the whole list
   # with just the one it names.

@@ -195,6 +195,22 @@ func (r *mutationResolver) UpdateSecret(ctx context.Context, id string, input Up
 	return gqlSecret(resp.GetSecret()), nil
 }
 
+// ChangeSecretType is the resolver for the changeSecretType field.
+func (r *mutationResolver) ChangeSecretType(ctx context.Context, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*KeyValueInput, unmappedFields *UnmappedFieldPolicy) (*TypeChangedSecret, error) {
+	mapping, values, err := typeChangeInputs(fieldMapping, fields)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.Vault.ChangeSecretType(ctx, &vaultv1.ChangeSecretTypeRequest{
+		Actor: actorOf(ctx), Id: id, NewTypeId: newTypeID, FieldMapping: mapping, Fields: values,
+		UnmappedFields: unmappedFieldPolicy(unmappedFields),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return gqlTypeChangedSecret(resp), nil
+}
+
 // AttachSecretTarget is the resolver for the attachSecretTarget field.
 func (r *mutationResolver) AttachSecretTarget(ctx context.Context, secretID string, targetID string) (*Secret, error) {
 	resp, err := r.Vault.AttachSecretTarget(ctx, &vaultv1.AttachSecretTargetRequest{
@@ -1384,6 +1400,22 @@ func (r *queryResolver) SecretTypes(ctx context.Context) ([]*SecretType, error) 
 		out = append(out, gqlType(t))
 	}
 	return out, nil
+}
+
+// PreviewSecretTypeChange is the resolver for the previewSecretTypeChange field.
+func (r *queryResolver) PreviewSecretTypeChange(ctx context.Context, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*KeyValueInput, unmappedFields *UnmappedFieldPolicy) (*SecretTypeChangePreview, error) {
+	mapping, values, err := typeChangeInputs(fieldMapping, fields)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.Vault.PreviewSecretTypeChange(ctx, &vaultv1.PreviewSecretTypeChangeRequest{
+		Actor: actorOf(ctx), Id: id, NewTypeId: newTypeID, FieldMapping: mapping, Fields: values,
+		UnmappedFields: unmappedFieldPolicy(unmappedFields),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return gqlSecretTypeChangePreview(resp), nil
 }
 
 // AvailableExtensions is the resolver for the availableExtensions field.

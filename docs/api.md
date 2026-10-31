@@ -109,6 +109,62 @@ subscription. The machine schema is a smaller, principal-scoped surface:
 [machine-graphql.md](machine-graphql.md) and [machine-automation.md](machine-automation.md)
 describe it.
 
+### Changing a secret's type
+
+`changeSecretType` changes a secret's type as a new version, and `previewSecretTypeChange` says what
+the same inputs would do without writing anything. Both take `id`, `newTypeId`, `fieldMapping`
+(`[{from, to}]`, old key to new key), `fields` (`[{key, value}]`, values for fields the mapping
+leaves empty) and `unmappedFields`. Both need Author on the secret or ownership of its folder, and
+the vault refuses anyone but a signed-in person. A repeated `from` or `key` is refused with
+`INVALID_ARGUMENT` before the vault is called.
+
+`unmappedFields` says what happens to a value with no field under the new type: `notes`, the
+default, moves it to the notes field, and `refuse` fails the change naming the keys. Nothing is
+dropped under either.
+
+```graphql
+query Preview($id: ID!, $newTypeId: ID!, $fieldMapping: [FieldMappingInput!], $fields: [KeyValueInput!], $unmappedFields: UnmappedFieldPolicy) {
+  previewSecretTypeChange(id: $id, newTypeId: $newTypeId, fieldMapping: $fieldMapping, fields: $fields, unmappedFields: $unmappedFields) {
+    allowed refusalReason refusalMessage
+    fieldChanges { fromKey toKey outcome reason }
+    missingRequiredKeys notesFieldKey fieldKeys changeLabel
+    rotation heartbeat target fromTargetId targetId
+  }
+}
+
+mutation Change($id: ID!, $newTypeId: ID!, $fieldMapping: [FieldMappingInput!], $fields: [KeyValueInput!], $unmappedFields: UnmappedFieldPolicy) {
+  changeSecretType(id: $id, newTypeId: $newTypeId, fieldMapping: $fieldMapping, fields: $fields, unmappedFields: $unmappedFields) {
+    secret { id typeId targetIds rotationOptOut }
+    fieldKeys movedToNotesKeys notesFieldKey changeLabel
+  }
+}
+```
+
+The preview returns keys, never values. `outcome` is `carried`, `renamed`, `movedToNotes` or
+`blocked`, with `reason` set when it's blocked. A change the rules refuse is a normal answer with
+`allowed` false and `refusalReason` and `refusalMessage` set to what `changeSecretType` would refuse
+with. No access, a retired secret, a missing secret or type and the type the secret already has are
+GraphQL errors, as they are for the change. `rotation` is `none` or `off`, `heartbeat` is `none`,
+`scheduled`, `no_target` or `opted_out`, and `target` is `none`, `kept` or `detached`.
+
+Because the preview is a query it keeps working during maintenance; `changeSecretType` is refused
+like any other mutation.
+
+`changeSecretType` passes these vault refusals through unchanged (domain `sneakers.vault`).
+`metadata.fields` lists the keys involved, joined by commas, unless the table says otherwise:
+
+| `code` | `reason` | Meaning |
+|---|---|---|
+| `FAILED_PRECONDITION` | `TYPE_CHANGE_UNMAPPED_FIELDS` | A value has no field, under `refuse` or because the new type has no notes field. |
+| `FAILED_PRECONDITION` | `TYPE_CHANGE_LOWERS_PROTECTION` | A value would land in a less protected field, the notes field included. |
+| `FAILED_PRECONDITION` | `TYPE_CHANGE_NOTES_TOO_LONG` | Moving values to notes would pass its max length. |
+| `INVALID_ARGUMENT` | `TYPE_CHANGE_INVALID_FIELD` | A mapping or value doesn't fit the new type. A key pair that doesn't match names no fields. |
+| `INVALID_ARGUMENT` | `TYPE_CHANGE_CERTIFICATE_INVALID` | The material doesn't validate as a certificate, or a stored value differs from the one derived from it. |
+| `INVALID_ARGUMENT` | `FIELD_VALUE_REQUIRED` | The new type requires a field nothing fills. Metadata `field`. |
+| `INVALID_ARGUMENT` | `FIELD_VALUE_NOT_ALLOWED` | A select value isn't one of the options. Metadata `field` and `allowed`. |
+| `FAILED_PRECONDITION` | `ROTATION_IN_PROGRESS` | A rotation of the secret is claimed; retry once it finishes. No metadata. |
+| `FAILED_PRECONDITION` | `RETIRED` | The secret is retired. No metadata. |
+
 ### Secret order
 
 `Secret.position` is the secret's manual place in its folder, 1-based among the folder's active
