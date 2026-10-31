@@ -474,6 +474,7 @@ func gqlSettings(s *vaultv1.SecuritySettings, mfaMaxAge time.Duration) *Security
 		SessionTTLSeconds:              intPtr(int(s.GetSessionTtlSeconds())),
 		RequireMfaForReveal:            s.GetRequireMfaForReveal(),
 		MfaMaxAgeSeconds:               int(mfaMaxAge / time.Second),
+		AgentsMayCreateTopLevelFolders: s.GetAgentsMayCreateTopLevelFolders(),
 	}
 }
 

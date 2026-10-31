@@ -16,6 +16,7 @@ package bff
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
@@ -114,5 +115,16 @@ func (h *Handler) serveUserToken(w http.ResponseWriter, r *http.Request, next ht
 	ctx := resolvers.WithUserTokenActor(r.Context(), resp.GetUser().GetId(), resp.GetTokenId(), resp.GetGroupNames())
 	ctx = resolvers.WithMachineGroupIDs(ctx, resp.GetGroupIds())
 	ctx = resolvers.WithCallerIdentity(ctx, resp.GetUser().GetUsername(), resp.GetUser().GetEmail())
+	if userIsSiteAdmin(resp.GetUser()) {
+		ctx = resolvers.WithTokenOwnerSiteAdmin(ctx)
+	}
 	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// userIsSiteAdmin reads the roles identity reported, the same ones a session's
+// site-admin flag comes from.
+func userIsSiteAdmin(u *identityv1.User) bool {
+	return u.GetIsRoot() || slices.ContainsFunc(u.GetRoles(), func(role string) bool {
+		return role == roleSiteAdmin || role == roleAdmin
+	})
 }

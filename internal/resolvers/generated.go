@@ -640,6 +640,7 @@ type ComplexityRoot struct {
 	}
 
 	SecuritySettings struct {
+		AgentsMayCreateTopLevelFolders func(childComplexity int) int
 		AllowAPIForSensitive           func(childComplexity int) int
 		DefaultPasswordPolicyID        func(childComplexity int) int
 		MfaMaxAgeSeconds               func(childComplexity int) int
@@ -4216,6 +4217,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SecretVersion.VersionNo(childComplexity), true
 
+	case "SecuritySettings.agentsMayCreateTopLevelFolders":
+		if e.ComplexityRoot.SecuritySettings.AgentsMayCreateTopLevelFolders == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecuritySettings.AgentsMayCreateTopLevelFolders(childComplexity), true
 	case "SecuritySettings.allowApiForSensitive":
 		if e.ComplexityRoot.SecuritySettings.AllowAPIForSensitive == nil {
 			break
@@ -5270,6 +5277,11 @@ type SecuritySettings {
   # gateway enforces it: 1800 (30m) when unset, 0 when every sensitive action
   # asks. Read-only; set where the services run.
   mfaMaxAgeSeconds: Int!
+  # "Agents may create top-level folders". Off by default. While on, a personal
+  # token whose owner is a site admin may create a folder with no parent,
+  # through the machine API's createFolderForPrincipal. Changing it needs a site
+  # admin, and the vault audits the change.
+  agentsMayCreateTopLevelFolders: Boolean!
 }
 # Partial update: only the fields provided are changed.
 input SecuritySettingsInput {
@@ -5279,6 +5291,7 @@ input SecuritySettingsInput {
   requestHistoryRetentionDays: Int
   sessionTtlSeconds: Int
   requireMfaForReveal: Boolean
+  agentsMayCreateTopLevelFolders: Boolean
 }
 
 # A platform user. ` + "`" + `roles` + "`" + ` are elevated roles on top of the baseline; ` + "`" + `isRoot` + "`" + `
@@ -7101,6 +7114,8 @@ func (ec *executionContext) childFields_SecuritySettings(ctx context.Context, fi
 		return ec.fieldContext_SecuritySettings_requireMfaForReveal(ctx, field)
 	case "mfaMaxAgeSeconds":
 		return ec.fieldContext_SecuritySettings_mfaMaxAgeSeconds(ctx, field)
+	case "agentsMayCreateTopLevelFolders":
+		return ec.fieldContext_SecuritySettings_agentsMayCreateTopLevelFolders(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecuritySettings", field.Name)
 }
@@ -23121,6 +23136,29 @@ func (ec *executionContext) fieldContext_SecuritySettings_mfaMaxAgeSeconds(_ con
 	return graphql.NewScalarFieldContext("SecuritySettings", field, false, false, errors.New("field of type Int does not have child fields"))
 }
 
+func (ec *executionContext) _SecuritySettings_agentsMayCreateTopLevelFolders(ctx context.Context, field graphql.CollectedField, obj *SecuritySettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecuritySettings_agentsMayCreateTopLevelFolders(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AgentsMayCreateTopLevelFolders, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecuritySettings_agentsMayCreateTopLevelFolders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecuritySettings", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
 func (ec *executionContext) _ServiceAccount_id(ctx context.Context, field graphql.CollectedField, obj *ServiceAccount) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -26275,7 +26313,7 @@ func (ec *executionContext) unmarshalInputSecuritySettingsInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"defaultPasswordPolicyId", "requireMfaForSensitiveCheckout", "allowApiForSensitive", "requestHistoryRetentionDays", "sessionTtlSeconds", "requireMfaForReveal"}
+	fieldsInOrder := [...]string{"defaultPasswordPolicyId", "requireMfaForSensitiveCheckout", "allowApiForSensitive", "requestHistoryRetentionDays", "sessionTtlSeconds", "requireMfaForReveal", "agentsMayCreateTopLevelFolders"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -26324,6 +26362,13 @@ func (ec *executionContext) unmarshalInputSecuritySettingsInput(ctx context.Cont
 				return it, err
 			}
 			it.RequireMfaForReveal = data
+		case "agentsMayCreateTopLevelFolders":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("agentsMayCreateTopLevelFolders"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AgentsMayCreateTopLevelFolders = data
 		}
 	}
 	return it, nil
@@ -31570,6 +31615,11 @@ func (ec *executionContext) _SecuritySettings(ctx context.Context, sel ast.Selec
 			}
 		case "mfaMaxAgeSeconds":
 			out.Values[i] = ec._SecuritySettings_mfaMaxAgeSeconds(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "agentsMayCreateTopLevelFolders":
+			out.Values[i] = ec._SecuritySettings_agentsMayCreateTopLevelFolders(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

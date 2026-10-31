@@ -499,6 +499,11 @@ type SecuritySettings {
   # gateway enforces it: 1800 (30m) when unset, 0 when every sensitive action
   # asks. Read-only; set where the services run.
   mfaMaxAgeSeconds: Int!
+  # "Agents may create top-level folders". Off by default. While on, a personal
+  # token whose owner is a site admin may create a folder with no parent,
+  # through the machine API's createFolderForPrincipal. Changing it needs a site
+  # admin, and the vault audits the change.
+  agentsMayCreateTopLevelFolders: Boolean!
 }
 # Partial update: only the fields provided are changed.
 input SecuritySettingsInput {
@@ -508,6 +513,7 @@ input SecuritySettingsInput {
   requestHistoryRetentionDays: Int
   sessionTtlSeconds: Int
   requireMfaForReveal: Boolean
+  agentsMayCreateTopLevelFolders: Boolean
 }
 
 # A platform user. `roles` are elevated roles on top of the baseline; `isRoot`

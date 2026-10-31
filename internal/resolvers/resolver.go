@@ -191,6 +191,9 @@ type machineActor struct {
 	userID      string
 	tokenID     string
 	groupIDs    []string
+	// tokenOwnerIsSiteAdmin is set only by WithTokenOwnerSiteAdmin, from what
+	// identity reported for a verified personal token.
+	tokenOwnerIsSiteAdmin bool
 }
 
 type machineActorKey struct{}
@@ -219,11 +222,12 @@ func MachineActorOf(ctx context.Context) *vaultv1.ActorContext {
 	m, _ := machineActorFrom(ctx)
 	if m.tokenID != "" {
 		return &vaultv1.ActorContext{
-			PrincipalKind: vaultv1.PrincipalKind_PRINCIPAL_KIND_USER_TOKEN,
-			UserId:        m.userID,
-			TokenId:       m.tokenID,
-			GroupNames:    append([]string(nil), m.groupNames...),
-			GroupIds:      append([]string(nil), m.groupIDs...),
+			PrincipalKind:         vaultv1.PrincipalKind_PRINCIPAL_KIND_USER_TOKEN,
+			UserId:                m.userID,
+			TokenId:               m.tokenID,
+			GroupNames:            append([]string(nil), m.groupNames...),
+			GroupIds:              append([]string(nil), m.groupIDs...),
+			TokenOwnerIsSiteAdmin: m.tokenOwnerIsSiteAdmin,
 		}
 	}
 	return &vaultv1.ActorContext{
@@ -239,6 +243,19 @@ func MachineActorOf(ctx context.Context) *vaultv1.ActorContext {
 // roles; vault enforces the remaining personal-token limits.
 func WithUserTokenActor(ctx context.Context, userID, tokenID string, groupNames []string) context.Context {
 	return context.WithValue(ctx, machineActorKey{}, machineActor{userID: userID, tokenID: tokenID, groupNames: groupNames})
+}
+
+// WithTokenOwnerSiteAdmin marks the personal-token actor on ctx as owned by a
+// site admin or root. It grants nothing here: the vault reads it for one
+// decision and otherwise treats the token as any other. Without a personal
+// token actor on ctx it changes nothing, so no other caller can carry the mark.
+func WithTokenOwnerSiteAdmin(ctx context.Context) context.Context {
+	m, ok := machineActorFrom(ctx)
+	if !ok || m.tokenID == "" {
+		return ctx
+	}
+	m.tokenOwnerIsSiteAdmin = true
+	return context.WithValue(ctx, machineActorKey{}, m)
 }
 
 type callerIdentityKey struct{}

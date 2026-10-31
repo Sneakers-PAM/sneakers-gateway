@@ -166,9 +166,9 @@ func (r *mutationResolver) UpdateSecretFieldsForPrincipal(ctx context.Context, i
 }
 
 // CreateFolderForPrincipal is the resolver for the createFolderForPrincipal field.
-func (r *mutationResolver) CreateFolderForPrincipal(ctx context.Context, parentID string, name string) (*PrincipalFolder, error) {
+func (r *mutationResolver) CreateFolderForPrincipal(ctx context.Context, parentID *string, name string) (*PrincipalFolder, error) {
 	resp, err := r.Vault.CreateFolderForPrincipal(ctx, &vaultv1.CreateFolderForPrincipalRequest{
-		Actor: resolvers.MachineActorOf(ctx), ParentId: parentID, Name: name,
+		Actor: resolvers.MachineActorOf(ctx), ParentId: deref(parentID), Name: name,
 	})
 	if err != nil {
 		return nil, err
