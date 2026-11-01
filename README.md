@@ -15,7 +15,7 @@ context.
 - 🛡️ **Self-service factors:** `GET /auth/mfa/factors` lists the signed-in user's own factors, and adding or removing one needs a second factor within `MFA_MAX_AGE`.
 - 🍪 **Server-side sessions:** session and pending-login records live in Redis; the browser only holds an opaque, `HttpOnly` session id.
 - 🛠️ **First-run setup:** `/setup/*` creates the first admin and seeds the vault's built-in types, guarded by `SETUP_TOKEN`.
-- 📈 **Observable:** OpenTelemetry traces and metrics, and one JSON log line per request and per GraphQL error.
+- 📈 **Observable:** OpenTelemetry traces and metrics, opt-in filtered log export, and one JSON log line per request and per GraphQL error.
 
 ## ⚠️ Before production
 

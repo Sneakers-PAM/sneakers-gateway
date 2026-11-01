@@ -672,7 +672,7 @@ These are outside the session gate, like `/livez` and `/readyz`.
 
 ## Health
 
-Two unauthenticated endpoints served by go-buildinfo, plus the smoke route below (`github.com/Bugs5382/go-buildinfo`):
+Two unauthenticated endpoints served by go-buildinfo, plus the smoke and telemetry status routes below (`github.com/Bugs5382/go-buildinfo`):
 
 - `GET /livez`: liveness. Always `200 {"status":"ok"}` while the process answers; it checks no
   dependency, so an outage never restarts the gateway.
@@ -681,8 +681,8 @@ Two unauthenticated endpoints served by go-buildinfo, plus the smoke route below
   `{"status":"ok|degraded|down","ready":true,"build":{"version":"v0.1.0","commit":"...","goVersion":"...","modified":false},"dependencies":[{"name":"valkey","state":"ok","required":true,"checkedAt":"2026-10-05T12:00:00Z"}]}`,
   with `error` (one of the classes above) on a failing one. Required: Valkey and Kratos in
   `AUTH_MODE=real`, and identity in every mode. Vault, workflow, audit, notify, the SSH broker,
-  Hydra (when enabled) and Polis (when configured) are optional: one failing makes the status
-  `degraded`, still `200`. The gateway checks every dependency in the background, every 5 seconds
+  Hydra (when enabled), Polis (when configured) and `otlp` (when a collector is configured) are
+  optional: one failing makes the status `degraded`, still `200`. The gateway checks every dependency in the background, every 5 seconds
   with a 1-second timeout, and `/readyz` only reads the last results: it answers at once however
   slow a dependency is, so a hanging one shows as `timeout` instead of failing the probe that asked.
   Until the first pass finishes, each dependency reads `pending` (a required one makes the gateway
@@ -699,6 +699,28 @@ passes and `503` otherwise:
 `{"ok":false,"checks":[{"name":"identity","ok":true},{"name":"vault","ok":false,"error":"unavailable"}]}`.
 A failure carries its class only, never the error text; each check has 3 seconds. Nothing in it
 writes.
+
+`GET /telemetry-status` says which workloads are exporting telemetry, for the box's telemetry card:
+unauthenticated and outside the product routes like `/smoke`. It always answers `200`, in a fixed
+order:
+`{"services":[{"name":"identity","state":"sending","checkedAt":"2026-10-05T12:00:00Z"},{"name":"vault","state":"issue","checkedAt":"2026-10-05T12:00:00Z"}]}`.
+The workloads are identity, vault, workflow, audit, notify, connector, sshbroker, gateway and mcp,
+and `checkedAt` is the last check, missing until the first one. The states:
+
+| State | Meaning |
+|---|---|
+| `sending` | The workload's `otlp` dependency reads `ok`. |
+| `issue` | Its `otlp` dependency reads `degraded` or `down`: its last export of a signal failed. |
+| `off` | No `otlp` dependency in its report, so no collector is set, or the build is too old to have one. mcp is also `off` with `MCP_HEALTH_URL` unset. |
+| `unknown` | The gateway couldn't read the workload's report. |
+
+The services are read from their gRPC health check's `sneakers-depstate-otlp` header, mcp from the
+`Sneakers-Depstate-otlp` header of `/readyz` on the host in `MCP_HEALTH_URL`, and the gateway from
+its own checker. The connector is read at `CONNECTOR_ADDR`; it answers `unknown` while that's unset
+or the connector refuses the gateway. `sending` means no failed export is outstanding, which is also
+true just after start, before the first export. Like `/readyz`, the gateway checks in the background, every 5
+seconds with a 1-second timeout, and the route only reads the last results, so a peer that's down
+or hanging never holds it. A check's error text is never in the answer.
 
 The running build is also in the `diagnostics` query; the image build stamps it from its
 `VERSION` and `COMMIT` build arguments into go-buildinfo's `Version` and `Commit`

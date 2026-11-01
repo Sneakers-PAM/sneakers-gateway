@@ -39,6 +39,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/maintenance"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/setup"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/telemetry"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -202,7 +203,7 @@ func (p *sessionTTLProvider) refresh(ctx context.Context) (time.Duration, error)
 // already-clamped session lifetime (admin-configured via vault SecuritySettings)
 // and is evaluated on every session write and cookie refresh, so the store
 // expiry and the sliding renewal always track the live setting.
-func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityServiceClient, ttlFn func() time.Duration, secure bool, sessionCutoff func() time.Time) (*bff.Handler, *bredis.Client, error) {
+func newRealAuthHandler(ctx context.Context, lg log.Logger, identity identityv1.IdentityServiceClient, ttlFn func() time.Duration, secure bool, sessionCutoff func() time.Time) (*bff.Handler, *bredis.Client, error) {
 	rc, err := bff.ParseRedisURL(ctx, env("REDIS_URL", "redis://localhost:26379/0"))
 	if err != nil {
 		return nil, nil, err
@@ -220,7 +221,7 @@ func newRealAuthHandler(ctx context.Context, identity identityv1.IdentityService
 	}
 	h := &bff.Handler{
 		MFAMaxAge:  mfaMaxAge,
-		Store:      bff.EndSessionsBefore(bff.NewRedisStore(rc, ttlFn), sessionCutoff, log.NewLogger(serviceName)),
+		Store:      bff.EndSessionsBefore(bff.NewRedisStore(rc, ttlFn), sessionCutoff, lg),
 		Identity:   identity,
 		Pending:    bff.NewRedisPendingStore(rc, pendingTTL),
 		OAuthStore: bff.NewRedisOAuthStore(rc),
@@ -255,7 +256,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	logger := log.New(serviceName)
+	tel := telemetry.FromEnv(os.Getenv)
+	// reqLog is the neutral logger for request-scoped lines: its Ctx method
+	// adds the active span's trace and span ids.
+	reqLog := log.NewLoggerWithOptions(serviceName, log.WithOutput(tel.LogOutput()))
+	// logger is the same logger in zerolog's API, for the start-up lines:
+	// go-log's zerolog constructor takes no output, and Ctx hands back the
+	// base logger when ctx has no span.
+	logger := log.Ctx(ctx) //nolint:staticcheck // the only way to the configured zerolog logger
+	telemetry.SetErrorHandler(reqLog)
 	// Dependencies that log through the standard library's "log" package
 	// (gqlgen's WebSocket transport, on an upgrade it can't finish) write
 	// bare text to stderr outside go-log's JSON. Our own call sites already
@@ -263,9 +272,6 @@ func main() {
 	// an upgrade is refused wsUpgradeError already logs one structured warn
 	// line, and this discards the dependency's duplicate plain-text one.
 	stdlog.SetOutput(io.Discard)
-	// reqLog is the neutral logger for request-scoped lines: its Ctx method
-	// adds the active span's trace and span ids.
-	reqLog := log.NewLogger(serviceName)
 	vaultAddr := env("VAULT_ADDR", "localhost:9091")
 	identityAddr := env("IDENTITY_ADDR", "localhost:9092")
 	workflowAddr := env("WORKFLOW_ADDR", "localhost:9093")
@@ -282,7 +288,7 @@ func main() {
 
 	// Observability from day one: traces + metrics via go-otel, structured logs
 	// via go-log (trace-correlated through the logger's Ctx method).
-	otelShutdown, err := otel.Init(ctx, serviceName, otlp)
+	otelShutdown, err := otel.InitWithOptions(ctx, serviceName, otlp, tel.Options()...)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("otel init")
 	}
@@ -346,6 +352,20 @@ func main() {
 	}
 	defer func() { _ = sshbrokerConn.Close() }()
 	sshbrokerClient := sshbrokerv1.NewSSHBrokerServiceClient(sshbrokerConn)
+
+	// The connector answers only the telemetry rollup's health check, and
+	// only where its chart lets the gateway call it, so a bad address stays a
+	// warning: the rollup reads unknown.
+	var connectorConn grpc.ClientConnInterface
+	if addr := os.Getenv("CONNECTOR_ADDR"); addr != "" {
+		cc, cerr := grpc.NewClient(addr, backendOpts...)
+		if cerr != nil {
+			logger.Warn().Err(cerr).Msg("dial connector: the telemetry status shows it as unknown")
+		} else {
+			defer func() { _ = cc.Close() }()
+			connectorConn = cc
+		}
+	}
 
 	mfaMaxAge, err := bff.ParseMFAMaxAge(os.Getenv)
 	if err != nil {
@@ -448,7 +468,7 @@ func main() {
 				}
 			}
 		}()
-		bffH, valkey, err := newRealAuthHandler(ctx, identityClient, ttlProvider.get, secureCookies, watcher.SessionsEndedAt)
+		bffH, valkey, err := newRealAuthHandler(ctx, reqLog, identityClient, ttlProvider.get, secureCookies, watcher.SessionsEndedAt)
 		if err != nil {
 			logger.Fatal().Err(err).Msg("auth setup")
 		}
@@ -564,6 +584,15 @@ func main() {
 	// The appliance's post-upgrade check: real reads through the core
 	// backends, uncached, outside auth like /readyz.
 	mux.Handle("/smoke", smokeHandler(smokeChecks(identityClient, vaultClient, conns, valkeyPing), reqLog))
+	// Each workload's OTLP export state for the box's telemetry card, outside
+	// auth like /smoke. It reads states only.
+	telemetryStatus, err := startTelemetryStatus(ctx, reqLog, telemetrySources{
+		services: conns, connector: connectorConn, gateway: checker, mcpHealthURL: os.Getenv("MCP_HEALTH_URL"),
+	})
+	if err != nil {
+		logger.Fatal().Err(err).Msg("telemetry status")
+	}
+	mux.Handle("/telemetry-status", telemetryStatusHandler(telemetryStatus, reqLog))
 	gqlResolver.Diag = newDiagnostics(os.Getenv, authMode, conns, vaultClient, valkeyInfo, reqLog)
 	gqlResolver.Diag.GatewayDependencies = gatewayDependencies(checker)
 

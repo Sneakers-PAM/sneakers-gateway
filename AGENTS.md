@@ -31,6 +31,10 @@ human and machine schemas share no generated code or resolver.
 - `internal/safeconv/` - bounds-checked integer conversions.
 - `internal/maintenance/` - read-only maintenance: the mode and the gqlgen guard that refuses
   mutations with `MAINTENANCE_READONLY`; its allow-lists name the mutations that stay open.
+- `internal/telemetry/` - the OTLP switches, the exported-log allow-list, the optional `otlp`
+  health dependency and the export error handler. A new log field exports nothing until it's on
+  the list; keep the list to ids, counts, durations, classes and short enums, and keep
+  `docs/logging.md` in step.
 - `internal/appliance/` - reads the appliance's `sneakers-appliance` ConfigMap from the
   Kubernetes API on a timer.
 - Service-to-service workload authentication (the token sent to the backends) comes from

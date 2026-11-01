@@ -28,6 +28,7 @@ workload identity (see [api.md](api.md), "Service-to-service authentication").
 | `AUDIT_ADDR` | `localhost:9194` | audit |
 | `NOTIFY_ADDR` | `localhost:9195` | notify |
 | `SSHBROKER_ADDR` | `localhost:9096` | SSH broker |
+| `CONNECTOR_ADDR` | (none) | Connector health (`GRPC_PORT`), read only for `GET /telemetry-status`. Unset shows the connector as `unknown`. The gateway doesn't otherwise call the connector, and start-up never depends on it. |
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -103,7 +104,7 @@ above, plus Kratos (`KRATOS_ADMIN_URL`, real mode), Hydra (when `HYDRA_ENABLED`)
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MCP_HEALTH_URL` | (none) | Where the diagnostics read the MCP server's build, its liveness route: for example `http://sneakers-mcp:9101/livez`. Unset shows mcp as not configured. |
+| `MCP_HEALTH_URL` | (none) | Where the diagnostics read the MCP server's build, its liveness route: for example `http://sneakers-mcp:9101/livez`. Unset shows mcp as not configured, and `off` on `GET /telemetry-status`, which reads `/readyz` on the same host. |
 | `HYDRA_ADMIN_URL` | (the origin of `HYDRA_JWKS_URL`) | Where Hydra's `/version` (diagnostics) and `/health/ready` (readiness) are read. |
 | `SNEAKERS_PRODUCT_VERSION` | (none) | The product release this install runs, shown once at the top of About and diagnostics. The Helm charts set it to the version they deploy; the appliance bundle sets the release's version. |
 | `SNEAKERS_APPLIANCE_VERSION` | (none) | Set by the appliance bundle to the box's Base OS version; unset means not on the appliance. |
@@ -138,7 +139,9 @@ without it, or without the mounted ServiceAccount files, the gateway logs a warn
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset (no export) | OTLP gRPC collector for traces and metrics, as a URL: `http://collector:4317` for plaintext, `https://collector:4317` for TLS. A bare `host:port` still connects as plaintext, but the OpenTelemetry SDK, which reads this variable too, logs `parse url` errors at start. Any other scheme stops the service at start. Unset or empty disables export cleanly; set it to opt in. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset (no export) | OTLP gRPC collector for traces and metrics, as a URL: `http://collector:4317` for plaintext, `https://collector:4317` for TLS. A bare `host:port` still connects as plaintext, but the OpenTelemetry SDK, which reads this variable too, logs `parse url` errors at start. Any other scheme stops the service at start. Unset or empty disables export cleanly; set it to opt in. Setting it adds the optional `otlp` dependency to `/readyz`: `degraded` while the last export of a signal failed, which never makes the gateway not ready. |
+| `OTLP_INSECURE_SKIP_VERIFY` | `false` | `true` skips the check of an `https` collector's certificate. Only the exact value `true` turns it on. The connection stays encrypted but the collector isn't authenticated, so logs stay off while it's on; traces and metrics keep flowing. |
+| `OTLP_LOGS_ENABLED` | `false` | `true` also exports logs to the collector. Only the exact value `true` turns it on. Stdout doesn't change. See [logging.md](logging.md), "Log export". |
 | `LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn` or `error` (go-log). |
 | `LOG_FORMAT` | `json` | `json`, or `console` for local reading (go-log). |
 
