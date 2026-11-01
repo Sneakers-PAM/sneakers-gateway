@@ -45,10 +45,10 @@ The list holds ids, counts, durations, classes, states and short enums:
 | Ids | `actor`, `actor_user_id`, `caller`, `client_id`, `connection_id`, `run_id`, `secret_id`, `session_id`, `target_id`, `token_id`, `use_id`, `user_id` |
 | Counts | `confirmed`, `count`, `decided`, `folders`, `host_keys`, `refused`, `secrets` |
 | Durations | `age_ms`, `current`, `dur`, `duration`, `duration_ms`, `fallback`, `ms`, `session_ttl` |
-| Classes, states, enums | `action`, `auth_mode`, `check`, `class`, `client_kind`, `code`, `decision`, `dependency`, `error_class`, `from`, `method`, `ok`, `outcome`, `required`, `route`, `rule`, `sso_reason`, `state`, `status`, `step`, `to`, `workload` |
+| Classes, states, enums | `action`, `auth_mode`, `check`, `class`, `client_kind`, `code`, `decision`, `dependency`, `error_class`, `from`, `ok`, `required`, `route`, `rule`, `sso_reason`, `state`, `status`, `step`, `to`, `workload` |
 | Switches | `appliance_configmap`, `approval_run_links`, `cookie_secure`, `hydra_enabled`, `machine_api_enabled`, `maintenance_readonly`, `mcp_clients`, `mcp_enabled` |
 
-Free text, addresses and names stay off it, so these never leave: `error`, `reason`, `host`, `port`, `path`, `target`, `operation` (a client chooses it), `issuer`, `oauth_public_url`, `allowed_origins`, the backend address fields, `folder`, `requested_folder`, `matched`, `identity`, the fingerprints and the time fields.
+Free text, addresses and names stay off it, so these never leave: `error`, `reason`, `host`, `port`, `path`, `target`, `operation` and `method` (a client chooses both), `outcome` (a library can put error text in it), `issuer`, `oauth_public_url`, `allowed_origins`, the backend address fields, `folder`, `requested_folder`, `matched`, `identity`, the fingerprints and the time fields.
 
 ## SSH sessions
 

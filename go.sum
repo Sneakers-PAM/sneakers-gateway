@@ -6,8 +6,8 @@ github.com/Bugs5382/go-buildinfo v1.1.0 h1:Iw0TfvDFwZVvuIlKe7/0bYcmZTp+4GoG2gpuY
 github.com/Bugs5382/go-buildinfo v1.1.0/go.mod h1:1YrfFNUmwTv+/+nH1AAWQagO1QWsNc5KzKHgOV7JR9k=
 github.com/Bugs5382/go-log v1.3.0 h1:lJv2iv6yL9l1Eqii62ArcJ1eoKbpLFdrY7L9gPNSqcI=
 github.com/Bugs5382/go-log v1.3.0/go.mod h1:OGgIWWKKNg2AXVJlbVJZb/s8dnqqsrKwWznYXik547E=
-github.com/Bugs5382/go-otel v1.5.0 h1:bI+jR3HbT6SO58SiDg2CfbavMgFNiv437ZBUDauc/Kg=
-github.com/Bugs5382/go-otel v1.5.0/go.mod h1:KiN6H/LzIrumq7MgAqwUVBYYYHf0r7CbU2bf64RNUa0=
+github.com/Bugs5382/go-otel v1.6.0 h1:cjptZM4h5jXzU6d3hLz2tGgPmN9blhxLVc81PmoWdNw=
+github.com/Bugs5382/go-otel v1.6.0/go.mod h1:dY2m4IIVbcK87lrMzPC92JJtGpgd2W3A6NBeCEidEKs=
 github.com/Bugs5382/go-redis v1.3.0 h1:cdIpifmEPI4V/VwcQuu4qmIZtjeT/zCln40xo6/8hsI=
 github.com/Bugs5382/go-redis v1.3.0/go.mod h1:yyz0EuremryinY7TqW49ViZZX/Vbdvjvri1w1n9vthY=
 github.com/Bugs5382/go-workload-identity v1.0.1 h1:QRYOTohudQXO2AS3nU/FFyaq8LaIBCtVYNj9WGfrAdA=

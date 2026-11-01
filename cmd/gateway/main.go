@@ -264,7 +264,6 @@ func main() {
 	// go-log's zerolog constructor takes no output, and Ctx hands back the
 	// base logger when ctx has no span.
 	logger := log.Ctx(ctx) //nolint:staticcheck // the only way to the configured zerolog logger
-	telemetry.SetErrorHandler(reqLog)
 	// Dependencies that log through the standard library's "log" package
 	// (gqlgen's WebSocket transport, on an upgrade it can't finish) write
 	// bare text to stderr outside go-log's JSON. Our own call sites already
@@ -292,6 +291,7 @@ func main() {
 	if err != nil {
 		logger.Fatal().Err(err).Msg("otel init")
 	}
+	telemetry.SetErrorHandler(reqLog)
 	defer func() {
 		if err := otelShutdown(context.Background()); err != nil {
 			logger.Warn().Err(err).Msg("otel shutdown")
@@ -640,22 +640,7 @@ func main() {
 	mux.Handle("/setup/seed", cors(setupH.SeedHandler()))
 	logSetupToken(logger, setupToken)
 
-	// otelhttp (server spans) → request logging → HTTP metrics → mux.
-	instrumented := otelhttp.NewHandler(withLogging(reqLog, otel.Metrics(mux)), "gateway")
-	// WebSocket upgrades (GraphQL subscriptions) need a ResponseWriter that
-	// implements http.Hijacker. The otel/logging/metrics wrappers wrap the writer
-	// without forwarding Hijack (gorilla then fails the upgrade with 500), so route
-	// upgrades straight to the mux with the raw writer; everything else stays fully
-	// instrumented. A long-lived subscription socket isn't meaningfully captured by
-	// per-request spans/metrics anyway.
-	rootHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isWebSocketUpgrade(r) {
-			mux.ServeHTTP(w, r)
-			return
-		}
-		instrumented.ServeHTTP(w, r)
-	})
-	srv := &http.Server{Addr: ":" + httpPort, Handler: rootHandler, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Addr: ":" + httpPort, Handler: instrument(reqLog, mux), ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {
 		<-ctx.Done()
@@ -782,6 +767,26 @@ type statusRecorder struct {
 func (s *statusRecorder) WriteHeader(c int) {
 	s.code = c
 	s.ResponseWriter.WriteHeader(c)
+}
+
+// instrument wraps mux in otelhttp (server spans), request logging and HTTP
+// metrics. This is the public edge, so a caller's traceparent becomes a link on
+// a new trace rather than the parent of ours. WebSocket upgrades (GraphQL
+// subscriptions) need a ResponseWriter that implements http.Hijacker, and these
+// wrappers don't forward Hijack (gorilla then fails the upgrade with 500), so
+// upgrades go straight to the mux with the raw writer. A long-lived
+// subscription socket isn't meaningfully captured by per-request spans or
+// metrics anyway.
+func instrument(l log.Logger, mux http.Handler) http.Handler {
+	public := func(*http.Request) bool { return true }
+	instrumented := otelhttp.NewHandler(withLogging(l, otel.Metrics(mux)), "gateway", otelhttp.WithPublicEndpointFn(public))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isWebSocketUpgrade(r) {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		instrumented.ServeHTTP(w, r)
+	})
 }
 
 // withLogging logs one trace-correlated line per request (l.Ctx picks up the

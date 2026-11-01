@@ -53,7 +53,8 @@ func FromEnv(getenv func(string) string) Config {
 // AllowedLogFields are the log fields that may leave the process. Each holds
 // an id, a count, a duration, a class, a state or a short enum. Free text,
 // addresses and names stay off it: error, reason, host, port, path, target,
-// operation (a client chooses it), issuer, the *_url and *_origins fields, the
+// operation and method (a client chooses both), outcome (go-workload-identity
+// puts error text in it), issuer, the *_url and *_origins fields, the
 // backend address fields, folder, requested_folder, matched, identity, the
 // fingerprints and the time fields. A new log field exports nothing until
 // it's added here.
@@ -67,8 +68,8 @@ var AllowedLogFields = []string{
 	"age_ms", "current", "dur", "duration", "duration_ms", "fallback", "ms", "session_ttl",
 	// classes, states and short enums
 	"action", "auth_mode", "check", "class", "client_kind", "code", "decision",
-	"dependency", "error_class", "from", "method", "ok", "outcome", "required",
-	"route", "rule", "sso_reason", "state", "status", "step", "to", "workload",
+	"dependency", "error_class", "from", "ok", "required", "route",
+	"rule", "sso_reason", "state", "status", "step", "to", "workload",
 	// switches
 	"appliance_configmap", "approval_run_links", "cookie_secure", "hydra_enabled",
 	"machine_api_enabled", "maintenance_readonly", "mcp_clients", "mcp_enabled",
@@ -77,6 +78,25 @@ var AllowedLogFields = []string{
 // tokenPattern is the shape of a Sneakers token.
 var tokenPattern = regexp.MustCompile(`\bsnk_[A-Za-z0-9_\-]+`)
 
+// rpcMethod is the shape of a Sneakers gRPC method.
+var rpcMethod = regexp.MustCompile(`^sneakers\.[a-z]+\.v1\.[A-Za-z]+/[A-Za-z]+$`)
+
+// httpSpanName is otelhttp's server span name: the method and mux pattern.
+var httpSpanName = regexp.MustCompile(`^(GET|POST|OPTIONS) /`)
+
+// Attributes that may leave. Resource attributes stay at go-otel's
+// service.name, so OTEL_RESOURCE_ATTRIBUTES exports nothing.
+var (
+	AllowedTraceAttributes = []string{
+		"http.request.method", "http.response.status_code",
+		"rpc.method", "rpc.response.status_code",
+	}
+	AllowedMetricAttributes = []string{
+		"http.request.method", "http.response.status_code", "http.route",
+		"rpc.method", "rpc.response.status_code",
+	}
+)
+
 // Options are the go-otel options for this configuration.
 func (c Config) Options() []otel.Option {
 	return []otel.Option{
@@ -84,6 +104,13 @@ func (c Config) Options() []otel.Option {
 		otel.WithLogs(c.Logs),
 		otel.WithLogAllowFields(AllowedLogFields...),
 		otel.WithLogRedactPatterns(tokenPattern),
+		otel.WithTelemetryFilter(true),
+		otel.WithTraceAllowSpanNames(httpSpanName, rpcMethod),
+		otel.WithTraceAllowAttributes(AllowedTraceAttributes...),
+		otel.WithMetricAllowAttributes(AllowedMetricAttributes...),
+		otel.WithResourceAllowAttributes(),
+		otel.WithAttributeValuePattern("rpc.method", rpcMethod),
+		otel.WithBaggage(false),
 	}
 }
 
@@ -120,7 +147,9 @@ func failing(s otel.SignalStatus) bool { return s.LastErrorAt.After(s.LastSucces
 
 // SetErrorHandler sends OpenTelemetry's errors through lg instead of stderr.
 // An export error's text names the endpoint and can carry its headers, so
-// only the gRPC code is logged, at most once per errorLogWindow.
+// only the gRPC code is logged, at most once per errorLogWindow. Call it after
+// Init: go-otel's filter installs its own handler, which writes to the standard
+// log package, and main discards that.
 func SetErrorHandler(lg log.Logger) {
 	var last atomic.Int64
 	otelapi.SetErrorHandler(otelapi.ErrorHandlerFunc(func(err error) {

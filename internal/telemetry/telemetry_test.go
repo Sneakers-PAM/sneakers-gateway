@@ -198,8 +198,26 @@ func TestExportedLogs_OnlyTheAllowedFieldsLeave(t *testing.T) {
 	}
 }
 
+func TestErrorHandler_AfterInitReplacesTheFilters(t *testing.T) {
+	var buf bytes.Buffer
+	lg := log.NewLoggerWithOptions("gateway", log.WithOutput(&buf))
+	cfg := telemetry.Config{}
+	shutdown, err := otel.InitWithOptions(context.Background(), "gateway", "", cfg.Options()...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = shutdown(context.Background()) }()
+	telemetry.SetErrorHandler(lg)
+	t.Cleanup(func() { otelapi.SetErrorHandler(otelapi.ErrorHandlerFunc(func(error) {})) })
+
+	otelapi.Handle(status.Error(codes.Unavailable, "dial collector.example.org"))
+	if got := buf.String(); !strings.Contains(got, "telemetry export failed") || strings.Contains(got, "collector.example.org") {
+		t.Fatalf("log = %q", got)
+	}
+}
+
 func TestAllowedLogFields_HoldNoFreeText(t *testing.T) {
-	for _, f := range []string{"error", "host", "port", "path", "target", "reason", "operation", "issuer", "otlp", "oauth_public_url", "allowed_origins", "folder", "requested_folder", "identity", "matched"} {
+	for _, f := range []string{"error", "host", "port", "path", "target", "reason", "operation", "method", "outcome", "issuer", "otlp", "oauth_public_url", "allowed_origins", "folder", "requested_folder", "identity", "matched"} {
 		if slices.Contains(telemetry.AllowedLogFields, f) {
 			t.Fatalf("%q can hold free text or an address and is on the list", f)
 		}

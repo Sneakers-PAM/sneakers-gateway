@@ -142,7 +142,10 @@ without it, or without the mounted ServiceAccount files, the gateway logs a warn
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset (no export) | OTLP gRPC collector for traces and metrics, as a URL: `http://collector:4317` for plaintext, `https://collector:4317` for TLS. A bare `host:port` still connects as plaintext, but the OpenTelemetry SDK, which reads this variable too, logs `parse url` errors at start. Any other scheme stops the service at start. Unset or empty disables export cleanly; set it to opt in. Setting it adds the optional `otlp` dependency to `/readyz`: `degraded` while the last export of a signal failed, which never makes the gateway not ready. |
 | `OTLP_INSECURE_SKIP_VERIFY` | `false` | `true` skips the check of an `https` collector's certificate. Only the exact value `true` turns it on. The connection stays encrypted but the collector isn't authenticated, so logs stay off while it's on; traces and metrics keep flowing. |
 | `OTLP_LOGS_ENABLED` | `false` | `true` also exports logs to the collector. Only the exact value `true` turns it on. Stdout doesn't change. See [logging.md](logging.md), "Log export". |
+| `OTEL_RESOURCE_ATTRIBUTES` | unset | Not exported. Only `service.name` leaves as a resource attribute. |
 | `LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn` or `error` (go-log). |
 | `LOG_FORMAT` | `json` | `json`, or `console` for local reading (go-log). |
+
+Traces and metrics are default-deny, through go-otel's telemetry filter. Span names leave only as `GET`, `POST` or `OPTIONS` plus a route, or as a `sneakers.*.v1` gRPC method; any other span stays in the trace, named `[span]`. Status text, exception events, tracestate and baggage never leave. Spans carry `http.request.method`, `http.response.status_code`, `rpc.method` and `rpc.response.status_code`, and metrics also carry `http.route`. A caller's `traceparent` starts a new trace, and its ids stay on the span as a link.
 
 See [logging.md](logging.md) for what is logged.
