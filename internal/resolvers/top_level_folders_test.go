@@ -160,3 +160,21 @@ func TestSecuritySettingsPartialUpdateLeavesTheTopLevelFolderSettingUnset(t *tes
 		t.Fatalf("request = %+v, resp = %+v", fv.lastUpdate, m)
 	}
 }
+
+func TestWithTokenClientKind_OnlyAUserTokenActorCarriesIt(t *testing.T) {
+	bg := context.Background()
+	for name, tc := range map[string]struct {
+		ctx  context.Context
+		want string
+	}{
+		"user token":       {WithTokenClientKind(WithUserTokenActor(bg, "u-ada", "utok-1", nil), "mcp"), "mcp"},
+		"service account":  {WithTokenClientKind(WithMachineActor(bg, "sa-1", nil), "mcp"), ""},
+		"no machine actor": {WithTokenClientKind(bg, "mcp"), ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := MachineActorOf(tc.ctx).GetTokenClientKind(); got != tc.want {
+				t.Fatalf("token_client_kind = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

@@ -38,3 +38,17 @@ func TestMachineActor_MarksATokenWhoseOwnerIsASiteAdmin(t *testing.T) {
 		})
 	}
 }
+
+// The kind comes from what identity recorded for the token; nothing the
+// client sends can set it.
+func TestMachineActor_CarriesTheTokensClientKind(t *testing.T) {
+	for _, kind := range []string{ClientKindMCP, "cli", ""} {
+		fid := &fakeIdentity{verifyUserTokenResp: &identityv1.VerifyUserTokenResponse{
+			Valid: true, TokenId: "utok-1", ClientKind: kind, User: &identityv1.User{Id: "u-ada"},
+		}}
+		actor, ran, _ := serveMachine(&Handler{Identity: fid}, "snk_u_abc")
+		if !ran || actor.GetTokenClientKind() != kind {
+			t.Fatalf("kind %q: ran=%v actor=%+v", kind, ran, actor)
+		}
+	}
+}

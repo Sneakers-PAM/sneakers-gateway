@@ -329,6 +329,10 @@ type Query {
   # extensions). The catalog holds no secret material.
   secretTypes: [SecretTypeSummary!]!
 
+  # List the catalogued extension packs that aren't installed yet, each ready
+  # for importExtension. Packs hold no secret material, so any caller may list.
+  availableExtensions: [SecretTypeSummary!]!
+
   # Poll a use this token prepared.
   secretUse(id: ID!): SecretUse!
 
@@ -408,6 +412,12 @@ type Mutation {
   # Rename a folder as the calling principal. Requires RACI-Author (R) on the
   # folder's chain. A sibling with the same name is refused.
   renameFolderForPrincipal(id: ID!, name: String!): PrincipalFolder!
+
+  # Activate a catalogued extension pack by id, as importExtension does in the
+  # web. Only a personal token whose owner is a site admin or root may: anyone
+  # else is refused with PERMISSION_DENIED (NOT_SITE_ADMIN), and the vault
+  # audits both outcomes. There's no pasted-JSON equivalent on this API.
+  importExtension(id: ID!): SecretTypeSummary!
 
   # Check the stored credential against its target now, through the connector.
   # At most once a minute per secret; returns the request time (unix). Poll

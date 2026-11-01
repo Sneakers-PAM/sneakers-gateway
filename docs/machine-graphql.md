@@ -18,6 +18,16 @@
 - `PrincipalFolder` on those results is the folder's entry from `foldersForPrincipal`, so `path` is the full path the principal can see (`Infrastructure/AD`). The gateway reads it with a second vault call, the principal folder listing, which vault audits as `folder.list.principal`. If that listing fails or does not include the folder, `path` falls back to the folder's own name.
 - The listing is a separate read after the mutation, so a change made in between (such as another rename) shows in the result.
 
+## Extension packs
+
+`availableExtensions` lists the catalogued packs that aren't installed yet, as `SecretTypeSummary`, for any caller. `importExtension(id)` activates one and returns its `SecretTypeSummary`.
+
+- Only a personal token whose owner is a site admin or root may activate a pack. A service account or any other token gets `PERMISSION_DENIED` with reason `NOT_SITE_ADMIN`. The owner's role comes from identity on every request.
+- The vault audits the refusal as `authz.denied` and each activation as `extension.import.principal`, in the audit tier, with the person, the pack and `source` (`mcp` for an MCP agent token, `machine_api` for any other). If the activation can't be recorded, the pack isn't installed.
+- A pack that isn't catalogued is `NOT_FOUND`, and one already installed is `ALREADY_EXISTS`.
+- `importExtension` isn't on `MachineAllowed`, so read-only maintenance refuses it. `availableExtensions` is a read and stays open.
+- Only catalogued packs: `importExtensionFromJson` stays on `/graphql`.
+
 ## Targets
 
 `targetsForPrincipal(query, connectionId)` lists the targets the caller can see, each with `sshHostKeys` (the pinned SSH host keys; `[]` when not pinned). `saveTargetForPrincipal(input)` creates or updates one; `sshHostKeys` in the input is the whole pin list, left out to keep the current pins. Changing the pins needs a human site admin, so a token gets `PermissionDenied` if it sends a different list. See [api.md](api.md#targets-and-ssh-host-keys).

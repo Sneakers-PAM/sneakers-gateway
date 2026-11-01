@@ -194,6 +194,9 @@ type machineActor struct {
 	// tokenOwnerIsSiteAdmin is set only by WithTokenOwnerSiteAdmin, from what
 	// identity reported for a verified personal token.
 	tokenOwnerIsSiteAdmin bool
+	// tokenClientKind is set only by WithTokenClientKind, from what identity
+	// recorded for a verified personal token.
+	tokenClientKind string
 }
 
 type machineActorKey struct{}
@@ -228,6 +231,7 @@ func MachineActorOf(ctx context.Context) *vaultv1.ActorContext {
 			GroupNames:            append([]string(nil), m.groupNames...),
 			GroupIds:              append([]string(nil), m.groupIDs...),
 			TokenOwnerIsSiteAdmin: m.tokenOwnerIsSiteAdmin,
+			TokenClientKind:       m.tokenClientKind,
 		}
 	}
 	return &vaultv1.ActorContext{
@@ -246,9 +250,10 @@ func WithUserTokenActor(ctx context.Context, userID, tokenID string, groupNames 
 }
 
 // WithTokenOwnerSiteAdmin marks the personal-token actor on ctx as owned by a
-// site admin or root. It grants nothing here: the vault reads it for one
-// decision, a top-level folder while they're restricted to admins, and
-// otherwise treats the token as any other. Without a personal token actor on
+// site admin or root. It grants nothing here: the vault reads it for two
+// decisions, a top-level folder while they're restricted to admins and
+// activating an extension pack, and otherwise treats the token as any other.
+// Without a personal token actor on
 // ctx it changes nothing, so no other caller can carry the mark.
 func WithTokenOwnerSiteAdmin(ctx context.Context) context.Context {
 	m, ok := machineActorFrom(ctx)
@@ -256,6 +261,18 @@ func WithTokenOwnerSiteAdmin(ctx context.Context) context.Context {
 		return ctx
 	}
 	m.tokenOwnerIsSiteAdmin = true
+	return context.WithValue(ctx, machineActorKey{}, m)
+}
+
+// WithTokenClientKind records the client kind identity holds for the personal
+// token on ctx, so the vault can say where a change came from in its audit
+// log. It grants nothing, and without a personal token actor it changes nothing.
+func WithTokenClientKind(ctx context.Context, kind string) context.Context {
+	m, ok := machineActorFrom(ctx)
+	if !ok || m.tokenID == "" {
+		return ctx
+	}
+	m.tokenClientKind = kind
 	return context.WithValue(ctx, machineActorKey{}, m)
 }
 
