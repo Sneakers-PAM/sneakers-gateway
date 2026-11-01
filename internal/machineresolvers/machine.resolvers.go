@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Bugs5382/go-log"
 	vaultv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/vault/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/safeconv"
+	"google.golang.org/grpc/status"
 )
 
 // RevealSecretFieldForPrincipal is the resolver for the revealSecretFieldForPrincipal field.
@@ -185,6 +187,20 @@ func (r *mutationResolver) RenameFolderForPrincipal(ctx context.Context, id stri
 		return nil, err
 	}
 	return r.visiblePrincipalFolder(ctx, resp.GetFolder()), nil
+}
+
+// ImportExtension is the resolver for the importExtension field.
+func (r *mutationResolver) ImportExtension(ctx context.Context, id string) (*SecretTypeSummary, error) {
+	l := r.logger().Ctx(ctx)
+	l.Debug("machine extension import", log.F("extension_id", id), log.F("caller", resolvers.CallerID(ctx)))
+	resp, err := r.Vault.ImportExtensionForPrincipal(ctx, &vaultv1.ImportExtensionForPrincipalRequest{
+		Actor: resolvers.MachineActorOf(ctx), Id: id,
+	})
+	if err != nil {
+		l.Debug("machine extension import refused", log.F("extension_id", id), log.F("caller", resolvers.CallerID(ctx)), log.F("code", status.Code(err).String()))
+		return nil, err
+	}
+	return secretTypesOf([]*vaultv1.SecretType{resp.GetType()})[0], nil
 }
 
 // RequestSecretCheck is the resolver for the requestSecretCheck field.
@@ -411,6 +427,15 @@ func (r *queryResolver) SecretTypes(ctx context.Context) ([]*SecretTypeSummary, 
 		return nil, err
 	}
 	return secretTypesOf(resp.GetTypes()), nil
+}
+
+// AvailableExtensions is the resolver for the availableExtensions field.
+func (r *queryResolver) AvailableExtensions(ctx context.Context) ([]*SecretTypeSummary, error) {
+	resp, err := r.Vault.ListAvailableExtensions(ctx, &vaultv1.ListAvailableExtensionsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return secretTypesOf(resp.GetExtensions()), nil
 }
 
 // SecretUse is the resolver for the secretUse field.

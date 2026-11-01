@@ -84,7 +84,7 @@ Other vault reasons a client may see (domain `sneakers.vault`):
 |---|---|---|
 | `PERMISSION_DENIED` | `NO_ACCESS` | The user can't read the secret: a reveal, copy, version reveal or `secretFields`. |
 | `FAILED_PRECONDITION` | `RETIRED` | The secret is retired, so it can't be revealed or copied. |
-| `PERMISSION_DENIED` | `NOT_SITE_ADMIN` | The call needs a site admin: settings, password policies, secret types, connections, key rotation. |
+| `PERMISSION_DENIED` | `NOT_SITE_ADMIN` | The call needs a site admin: settings, password policies, secret types, connections, key rotation. On `/machine/graphql`, `importExtension` needs a personal token whose owner is one. |
 | `PERMISSION_DENIED` | `TOP_LEVEL_FOLDERS_RESTRICTED` | `restrictTopLevelFolders` is on, and the caller of a top-level `createFolder`, or the owner of the token calling a top-level `createFolderForPrincipal`, isn't a site admin or root. |
 | `PERMISSION_DENIED` | `NOT_FOLDER_OWNER` | The call needs the folder's owner or a site admin: folder rules, renaming or reordering. |
 | `PERMISSION_DENIED` | `API_SENSITIVE_DISABLED` | A token may not reveal super-sensitive fields while `allowApiForSensitive` is off. |
@@ -250,7 +250,12 @@ own the folder.
 The gateway tells the vault about a token's owner in `ActorContext.token_owner_is_site_admin`. It
 sets that from the roles and root flag identity returns when it verifies the token, on every
 request, and never from anything the client sends. No other kind of actor can carry it, and it
-gives the token no admin authority: `is_site_admin` and `is_root` stay false.
+gives the token no admin authority: `is_site_admin` and `is_root` stay false. The vault reads it
+for one other thing, `importExtension` on `/machine/graphql`.
+
+`ActorContext.token_client_kind` carries the kind identity recorded for the token (`mcp` for an MCP
+agent token) the same way. It grants nothing; the vault uses it for the `source` of an extension
+activation in the audit log.
 
 `restrictTopLevelFolders` is off by default, and is read and written through `securitySettings` and
 `updateSecuritySettings` on `/graphql`. Writing it needs a site admin; the vault enforces that and
