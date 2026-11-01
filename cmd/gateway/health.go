@@ -16,6 +16,7 @@ import (
 	"github.com/Bugs5382/go-buildinfo/httpbuildinfo"
 	log "github.com/Bugs5382/go-log"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/diag"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/telemetry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -36,7 +37,8 @@ const (
 // healthDeps lists the gateway's readiness dependencies. Required: in real
 // mode Valkey (sessions) and Kratos (login), and in every mode identity, which
 // resolves the actor of every request. The other services, Polis and Hydra
-// only degrade it: each backs some operations, not all of them. valkeyPing is
+// only degrade it: each backs some operations, not all of them. So does otlp,
+// present only with a collector configured. valkeyPing is
 // nil in noauth mode, which has no session store.
 func healthDeps(getenv func(string) string, authMode string, s diagServices, valkeyPing func(context.Context) error) []health.Dependency {
 	httpc := &http.Client{Timeout: checkTimeout}
@@ -69,6 +71,9 @@ func healthDeps(getenv func(string) string, authMode string, s diagServices, val
 	}
 	if getenv("POLIS_PUBLIC_URL") != "" {
 		deps = append(deps, health.Dependency{Name: "polis", Check: checkHTTP(httpc, endpoint(envOr(getenv, "POLIS_ISSUER_URL", "http://sneakers-polis:5225"), "/api/health"))})
+	}
+	if d, ok := telemetry.OTLPDependency(telemetry.FromEnv(getenv)); ok {
+		deps = append(deps, d)
 	}
 	return deps
 }
