@@ -1487,8 +1487,9 @@ type MachineTarget {
 
 # Create (no id) or update a target. A token's new target is personal to its
 # user; editing a shared target needs a site admin (not a token).
-# sshHostKeys is the full pin list; changing it needs a site admin, so a
-# token can only send the pins the target already has. Omit it to keep them.
+# sshHostKeys is the full pin list; changing it needs a person (a site admin,
+# or a personal target's owner), so a token can only send the pins the target
+# already has. Omit it to keep them.
 input MachineTargetInput {
   id: ID
   name: String!

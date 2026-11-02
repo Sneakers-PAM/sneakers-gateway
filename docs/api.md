@@ -73,7 +73,8 @@ comes from domain `sneakers.gateway`:
 | `breakGlassSecret`, `openBreakGlassSession` | `UNAUTHENTICATED` | `BREAK_GLASS_CODE_INVALID` | The TOTP code is wrong, missing or expired. Identity doesn't say which, so neither does the reason. Ask for a fresh code. |
 | `breakGlassSecret` and the break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_WEB_ONLY` | Not a person's own signed-in web session: a personal (MCP or agent) token, a service account, an OAuth client, or no session. Checked before the code, and audited as `break_glass.denied`. |
 | The break-glass browse operations | `PERMISSION_DENIED` | `BREAK_GLASS_NOT_ADMIN` | The caller isn't a site admin or root. |
-| `scanTargetHostKey`, `pinTargetHostKey` | `PERMISSION_DENIED` | `HOST_KEY_PIN_NOT_ADMIN` | The caller isn't a person who is a site admin or root. |
+| `scanTargetHostKey`, `pinTargetHostKey` | `PERMISSION_DENIED` | `HOST_KEY_PIN_NOT_ADMIN` | The caller isn't a person (a token, an admin's included). |
+| `scanTargetHostKey`, `pinTargetHostKey` | `PERMISSION_DENIED` | `HOST_KEY_PIN_NOT_OWNER` | The caller is a person, but neither a site admin or root nor the owner of this personal target. |
 | `scanTargetHostKey`, `pinTargetHostKey` | `FAILED_PRECONDITION` | `TARGET_NO_SSH_CONNECTION` | The target has no SSH connection to scan. |
 | `pinTargetHostKey` | `FAILED_PRECONDITION` | `HOST_KEY_CHANGED` | The target now offers a key with another fingerprint than the one confirmed. Nothing was pinned; scan again and show the new fingerprint. |
 | `pinTargetHostKey` | `INVALID_ARGUMENT` | `HOST_KEY_FINGERPRINT_REQUIRED` | No fingerprint was sent. |
@@ -197,8 +198,9 @@ form (`ssh-ed25519 AAAA... comment`). An empty list means the target isn't pinne
 - `saveTarget(input: TargetInput)` and `saveTargetForPrincipal(input: MachineTargetInput)` take
   `sshHostKeys` as the whole list. Leave it out on an edit to keep the current pins (the gateway
   reads them from the vault and sends them back, since the vault replaces the list on every save);
-  send `[]` to clear them. The vault checks every key and lets only a human site admin change the
-  pins, so a token can save a target only with the pins it already has. The vault's rules are in
+  send `[]` to clear them. The vault checks every key and lets only a person change the pins (a
+  site admin on any target, or the owner of a personal target), so a token can save a target only
+  with the pins it already has. The vault's rules are in
   [sneakers-vault docs/api.md](https://github.com/Sneakers-PAM/sneakers-vault/blob/main/docs/api.md).
 - `openSshSession(secretId)` sends the target's pins to the broker with the session. The ticket
   comes back either way; for an unpinned target, or a host that presents another key, the broker
@@ -213,8 +215,8 @@ form (`ssh-ed25519 AAAA... comment`). An empty list means the target isn't pinne
   for `the SSH broker`). The broker bounds each step of the connect itself and closes the
   WebSocket with the step and the reason when one fails (see the broker's docs/api.md).
 
-Trust on first use (human schema only) lets a site admin pin the key a target offers without
-copying it by hand:
+Trust on first use (human schema only) lets a person pin the key a target offers without copying
+it by hand:
 
 - `scanTargetHostKey(targetId)` asks the broker's `ScanHostKey` for the key the target's SSH
   connection offers (its default connection when that is SSH, otherwise its first SSH one). The
@@ -230,9 +232,12 @@ copying it by hand:
   decision is audited as `target.host_key.pin` (outcome `pinned` or `mismatch`, with the
   fingerprints, never the key), and the vault audits the pin list change as
   `target.host_keys.change`.
-- Both are for a person who is a site admin or root, the same people the vault lets change a
-  target's pins. The gateway refuses anyone else (`HOST_KEY_PIN_NOT_ADMIN`) before it calls the
-  broker, so the broker can't be used to probe hosts on someone else's behalf.
+- Both are for a person: a site admin or root on any target, or the owner of a personal target,
+  the same people the vault lets change a target's pins. A token is refused
+  (`HOST_KEY_PIN_NOT_ADMIN`) before the gateway asks the vault or the broker. A person who may not
+  pin this target (a shared one, or someone else's personal one) is refused
+  (`HOST_KEY_PIN_NOT_OWNER`) once the gateway has read the target and before it calls the broker,
+  so the broker can't be used to probe hosts on someone else's behalf.
 
 ### Top-level folders
 

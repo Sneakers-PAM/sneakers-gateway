@@ -24,9 +24,15 @@ import (
 
 func errHostKeyPinNotAdmin() error {
 	return gatewayError(codes.PermissionDenied,
-		"SSH host keys are pinned by a person in the admin app (Targets → Scan and pin). "+
+		"SSH host keys are pinned by a person in the web app (Scan and pin host key). "+
 			"An agent's token can't change them, even an admin's.",
 		"HOST_KEY_PIN_NOT_ADMIN")
+}
+
+func errHostKeyPinNotOwner() error {
+	return gatewayError(codes.PermissionDenied,
+		"SSH host keys on a personal target are pinned by its owner, and on a shared target by a site admin.",
+		"HOST_KEY_PIN_NOT_OWNER")
 }
 
 func errHostKeyChanged() error {
@@ -37,9 +43,9 @@ func errNoSSHConnection() error {
 	return gatewayError(codes.FailedPrecondition, "the target has no SSH connection", "TARGET_NO_SSH_CONNECTION")
 }
 
-// hostKeyPinActor is the actor for a scan or a pin: a person who is a site
-// admin or root, the same people the vault lets change a target's pins.
-// Anyone else is refused before the broker or the vault is asked.
+// hostKeyPinActor is the actor for a scan or a pin: a person, never a token.
+// Anyone else is refused before the broker or the vault is asked. Whether
+// this person may pin the given target is mayPinTarget's call.
 func hostKeyPinActor(ctx context.Context) (*vaultv1.ActorContext, error) {
 	if _, machine := machineActorFrom(ctx); machine {
 		return nil, errHostKeyPinNotAdmin()
@@ -48,10 +54,20 @@ func hostKeyPinActor(ctx context.Context) (*vaultv1.ActorContext, error) {
 	if uid := a.GetUserId(); uid == "" || uid == "system" {
 		return nil, errHostKeyPinNotAdmin()
 	}
-	if a.GetPrincipalKind() != vaultv1.PrincipalKind_PRINCIPAL_KIND_HUMAN || (!a.GetIsSiteAdmin() && !a.GetIsRoot()) {
+	if a.GetPrincipalKind() != vaultv1.PrincipalKind_PRINCIPAL_KIND_HUMAN {
 		return nil, errHostKeyPinNotAdmin()
 	}
 	return a, nil
+}
+
+// mayPinTarget reports whether a person may scan and pin t: a site admin or
+// root on any target, or the owner of a personal target, the same people the
+// vault lets change a target's pins (#318).
+func mayPinTarget(a *vaultv1.ActorContext, t *vaultv1.Target) bool {
+	if a.GetIsSiteAdmin() || a.GetIsRoot() {
+		return true
+	}
+	return t.GetOwnerUserId() != "" && t.GetOwnerUserId() == a.GetUserId()
 }
 
 // sshScanTarget finds the target and the host and port of its SSH
@@ -70,6 +86,11 @@ func (r *Resolver) sshScanTarget(ctx context.Context, actor *vaultv1.ActorContex
 	}
 	if target == nil {
 		return nil, "", 0, gatewayError(codes.NotFound, "target not found", "TARGET_NOT_FOUND")
+	}
+	if !mayPinTarget(actor, target) {
+		r.logger(ctx).Warn("host key scan refused: not the target's owner or a site admin",
+			log.F("target_id", targetID), log.F("actor_user_id", actor.GetUserId()), log.F("shared", target.GetOwnerUserId() == ""))
+		return nil, "", 0, errHostKeyPinNotOwner()
 	}
 	cl, err := r.Vault.ListConnections(ctx, &vaultv1.ListConnectionsRequest{})
 	if err != nil {

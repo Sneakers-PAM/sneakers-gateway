@@ -5510,8 +5510,8 @@ input TargetInput {
   # send empty) to save with connectionId alone instead.
   connections: [TargetConnectionInput!]
   description: String
-  # The full pin list (site admin only to change). Omit to keep the target's
-  # current pins; [] clears them.
+  # The full pin list (a site admin, or a personal target's owner, may change
+  # it). Omit to keep the target's current pins; [] clears them.
   sshHostKeys: [String!]
 }
 
@@ -5985,9 +5985,10 @@ type Query {
   connections: [Connection!]!
   targets: [Target!]!
   # Reads the SSH host key the target's SSH connection offers, for a person to
-  # check before pinning it with pinTargetHostKey. Site admins only (the same
-  # people who may change a target's pins); the broker rate-limits scans per
-  # user. Audited by the broker as hostkey.scan.
+  # check before pinning it with pinTargetHostKey. A person only: a site admin
+  # on any target, or the owner of a personal target (the same people who may
+  # change a target's pins); the broker rate-limits scans per user. Audited by
+  # the broker as hostkey.scan.
   scanTargetHostKey(targetId: ID!): TargetHostKeyScan!
   passwordPolicies: [PasswordPolicy!]!
   securitySettings: SecuritySettings!
@@ -6220,7 +6221,7 @@ type Mutation {
   # Pins the host key the target offers now, only when its fingerprint is
   # exactly the one given (the one the person saw from scanTargetHostKey).
   # A different key is refused with HOST_KEY_CHANGED and nothing is pinned.
-  # Site admins only. Adds to the target's existing pins.
+  # The same people as scanTargetHostKey. Adds to the target's existing pins.
   pinTargetHostKey(targetId: ID!, fingerprint: String!): Target!
 
   savePasswordPolicy(input: PasswordPolicyInput!): PasswordPolicy!
