@@ -222,8 +222,9 @@ it by hand:
   connection offers (its default connection when that is SSH, otherwise its first SSH one). The
   broker reads the key during the handshake and never authenticates. The answer is a
   `TargetHostKeyScan`: `keyType`, `publicKey` (authorized_keys form), `fingerprint`
-  (`SHA256:<base64>`, as `ssh-keygen -l` prints it) and `pinned` (whether the target already pins
-  it). A scan pins nothing. The broker rate-limits scans per user (`RESOURCE_EXHAUSTED` past the
+  (`SHA256:<base64>`, as `ssh-keygen -l` prints it), `pinned` (whether the target already pins
+  it) and `address` (the `host:port` the broker dialled, an IPv6 address in brackets, so the person
+  can check they scanned the host they meant). A scan pins nothing. The broker rate-limits scans per user (`RESOURCE_EXHAUSTED` past the
   limit) and audits each as `hostkey.scan`.
 - `pinTargetHostKey(targetId, fingerprint)` pins only the key the person confirmed: the gateway
   scans again and adds the offered key to the target's pins only when its fingerprint is exactly

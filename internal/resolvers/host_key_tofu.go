@@ -5,6 +5,8 @@ package resolvers
 
 import (
 	"context"
+	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -119,11 +121,19 @@ func (r *Resolver) sshScanTarget(ctx context.Context, actor *vaultv1.ActorContex
 	return nil, "", 0, errNoSSHConnection()
 }
 
+// hostKeyScan is one scan's answer: the target, what the broker read, and the
+// address it dialled.
+type hostKeyScan struct {
+	target  *vaultv1.Target
+	resp    *sshbrokerv1.ScanHostKeyResponse
+	address string
+}
+
 // scanHostKey asks the broker for the key the target's SSH connection offers.
-func (r *Resolver) scanHostKey(ctx context.Context, actor *vaultv1.ActorContext, targetID string) (*vaultv1.Target, *sshbrokerv1.ScanHostKeyResponse, error) {
+func (r *Resolver) scanHostKey(ctx context.Context, actor *vaultv1.ActorContext, targetID string) (*hostKeyScan, error) {
 	target, host, port, err := r.sshScanTarget(ctx, actor, targetID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	start := time.Now()
 	resp, err := r.SSHBroker.ScanHostKey(ctx, &sshbrokerv1.ScanHostKeyRequest{
@@ -133,10 +143,10 @@ func (r *Resolver) scanHostKey(ctx context.Context, actor *vaultv1.ActorContext,
 	l := r.logger(ctx)
 	if err != nil {
 		l.Warn("host key scan failed", log.F("target_id", targetID), log.F("duration_ms", time.Since(start).Milliseconds()), log.F("error", err.Error()))
-		return nil, nil, err
+		return nil, err
 	}
 	l.Info("host key scanned", log.F("target_id", targetID), log.F("host_key_fingerprint", resp.GetFingerprintSha256()), log.F("duration_ms", time.Since(start).Milliseconds()))
-	return target, resp, nil
+	return &hostKeyScan{target: target, resp: resp, address: net.JoinHostPort(host, strconv.Itoa(port))}, nil
 }
 
 // hostKeyPinned reports whether pins already hold key (authorized_keys form,
@@ -164,10 +174,11 @@ func (r *Resolver) pinTargetHostKey(ctx context.Context, targetID, fingerprint s
 	if strings.TrimSpace(fingerprint) == "" {
 		return nil, gatewayError(codes.InvalidArgument, "fingerprint is required", "HOST_KEY_FINGERPRINT_REQUIRED")
 	}
-	target, scan, err := r.scanHostKey(ctx, actor, targetID)
+	scanned, err := r.scanHostKey(ctx, actor, targetID)
 	if err != nil {
 		return nil, err
 	}
+	target, scan := scanned.target, scanned.resp
 	l := r.logger(ctx)
 	if scan.GetFingerprintSha256() != fingerprint {
 		l.Warn("host key pin refused: the offered key changed", log.F("target_id", targetID),

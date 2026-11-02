@@ -143,6 +143,26 @@ func TestScanTargetHostKeyReturnsTheOfferedKeyAndPinsNothing(t *testing.T) {
 	}
 }
 
+// #318: the scan says which address the broker dialled, so the person can
+// check they scanned the host they meant.
+func TestScanTargetHostKeyReportsTheAddressItDialled(t *testing.T) {
+	for _, tc := range []struct{ host, want string }{
+		{"app01.example.org", "app01.example.org:2222"},
+		{"2001:db8::10", "[2001:db8::10]:2222"},
+	} {
+		fv := newTofuVault()
+		fv.target.Hostname = tc.host
+		var resp struct {
+			ScanTargetHostKey struct{ Address string }
+		}
+		newTofuClient(fv, &scanBroker{key: tofuKey, fp: tofuFP}, &tofuAudit{}, true).
+			MustPost(`{ scanTargetHostKey(targetId:"target-1") { address } }`, &resp)
+		if resp.ScanTargetHostKey.Address != tc.want {
+			t.Fatalf("address = %q, want %q", resp.ScanTargetHostKey.Address, tc.want)
+		}
+	}
+}
+
 func TestScanTargetHostKeyReportsAKeyAlreadyPinned(t *testing.T) {
 	fv := newTofuVault()
 	fv.target.SshHostKeys = []string{tofuKey + " a-comment"}

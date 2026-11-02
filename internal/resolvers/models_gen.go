@@ -659,6 +659,7 @@ type TargetHostKeyScan struct {
 	PublicKey   string `json:"publicKey"`
 	Fingerprint string `json:"fingerprint"`
 	Pinned      bool   `json:"pinned"`
+	Address     string `json:"address"`
 }
 
 type TargetInput struct {

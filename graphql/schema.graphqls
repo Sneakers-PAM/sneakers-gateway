@@ -489,6 +489,9 @@ type TargetHostKeyScan {
   fingerprint: String!
   # Whether the target already pins this key.
   pinned: Boolean!
+  # The host and port the broker dialled to read the key (host:port, an IPv6
+  # address in brackets), for the person to check they scanned the right host.
+  address: String!
 }
 type TargetConnection {
   connectionId: ID!
