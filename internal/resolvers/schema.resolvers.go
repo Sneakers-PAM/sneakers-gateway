@@ -1357,13 +1357,15 @@ func (r *queryResolver) ScanTargetHostKey(ctx context.Context, targetID string) 
 	if err != nil {
 		return nil, err
 	}
-	target, scan, err := r.scanHostKey(ctx, actor, targetID)
+	scanned, err := r.scanHostKey(ctx, actor, targetID)
 	if err != nil {
 		return nil, err
 	}
+	scan := scanned.resp
 	return &TargetHostKeyScan{
 		TargetID: targetID, KeyType: scan.GetKeyType(), PublicKey: scan.GetPublicKey(),
-		Fingerprint: scan.GetFingerprintSha256(), Pinned: hostKeyPinned(target.GetSshHostKeys(), scan.GetPublicKey()),
+		Fingerprint: scan.GetFingerprintSha256(), Pinned: hostKeyPinned(scanned.target.GetSshHostKeys(), scan.GetPublicKey()),
+		Address: scanned.address,
 	}, nil
 }
 

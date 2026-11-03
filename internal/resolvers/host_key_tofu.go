@@ -5,6 +5,8 @@ package resolvers
 
 import (
 	"context"
+	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,9 +26,15 @@ import (
 
 func errHostKeyPinNotAdmin() error {
 	return gatewayError(codes.PermissionDenied,
-		"SSH host keys are pinned by a person in the admin app (Targets → Scan and pin). "+
+		"SSH host keys are pinned by a person in the web app (Scan and pin host key). "+
 			"An agent's token can't change them, even an admin's.",
 		"HOST_KEY_PIN_NOT_ADMIN")
+}
+
+func errHostKeyPinNotOwner() error {
+	return gatewayError(codes.PermissionDenied,
+		"SSH host keys on a personal target are pinned by its owner, and on a shared target by a site admin.",
+		"HOST_KEY_PIN_NOT_OWNER")
 }
 
 func errHostKeyChanged() error {
@@ -37,9 +45,9 @@ func errNoSSHConnection() error {
 	return gatewayError(codes.FailedPrecondition, "the target has no SSH connection", "TARGET_NO_SSH_CONNECTION")
 }
 
-// hostKeyPinActor is the actor for a scan or a pin: a person who is a site
-// admin or root, the same people the vault lets change a target's pins.
-// Anyone else is refused before the broker or the vault is asked.
+// hostKeyPinActor is the actor for a scan or a pin: a person, never a token.
+// Anyone else is refused before the broker or the vault is asked. Whether
+// this person may pin the given target is mayPinTarget's call.
 func hostKeyPinActor(ctx context.Context) (*vaultv1.ActorContext, error) {
 	if _, machine := machineActorFrom(ctx); machine {
 		return nil, errHostKeyPinNotAdmin()
@@ -48,10 +56,20 @@ func hostKeyPinActor(ctx context.Context) (*vaultv1.ActorContext, error) {
 	if uid := a.GetUserId(); uid == "" || uid == "system" {
 		return nil, errHostKeyPinNotAdmin()
 	}
-	if a.GetPrincipalKind() != vaultv1.PrincipalKind_PRINCIPAL_KIND_HUMAN || (!a.GetIsSiteAdmin() && !a.GetIsRoot()) {
+	if a.GetPrincipalKind() != vaultv1.PrincipalKind_PRINCIPAL_KIND_HUMAN {
 		return nil, errHostKeyPinNotAdmin()
 	}
 	return a, nil
+}
+
+// mayPinTarget reports whether a person may scan and pin t: a site admin or
+// root on any target, or the owner of a personal target, the same people the
+// vault lets change a target's pins (#318).
+func mayPinTarget(a *vaultv1.ActorContext, t *vaultv1.Target) bool {
+	if a.GetIsSiteAdmin() || a.GetIsRoot() {
+		return true
+	}
+	return t.GetOwnerUserId() != "" && t.GetOwnerUserId() == a.GetUserId()
 }
 
 // sshScanTarget finds the target and the host and port of its SSH
@@ -70,6 +88,11 @@ func (r *Resolver) sshScanTarget(ctx context.Context, actor *vaultv1.ActorContex
 	}
 	if target == nil {
 		return nil, "", 0, gatewayError(codes.NotFound, "target not found", "TARGET_NOT_FOUND")
+	}
+	if !mayPinTarget(actor, target) {
+		r.logger(ctx).Warn("host key scan refused: not the target's owner or a site admin",
+			log.F("target_id", targetID), log.F("actor_user_id", actor.GetUserId()), log.F("shared", target.GetOwnerUserId() == ""))
+		return nil, "", 0, errHostKeyPinNotOwner()
 	}
 	cl, err := r.Vault.ListConnections(ctx, &vaultv1.ListConnectionsRequest{})
 	if err != nil {
@@ -98,11 +121,19 @@ func (r *Resolver) sshScanTarget(ctx context.Context, actor *vaultv1.ActorContex
 	return nil, "", 0, errNoSSHConnection()
 }
 
+// hostKeyScan is one scan's answer: the target, what the broker read, and the
+// address it dialled.
+type hostKeyScan struct {
+	target  *vaultv1.Target
+	resp    *sshbrokerv1.ScanHostKeyResponse
+	address string
+}
+
 // scanHostKey asks the broker for the key the target's SSH connection offers.
-func (r *Resolver) scanHostKey(ctx context.Context, actor *vaultv1.ActorContext, targetID string) (*vaultv1.Target, *sshbrokerv1.ScanHostKeyResponse, error) {
+func (r *Resolver) scanHostKey(ctx context.Context, actor *vaultv1.ActorContext, targetID string) (*hostKeyScan, error) {
 	target, host, port, err := r.sshScanTarget(ctx, actor, targetID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	start := time.Now()
 	resp, err := r.SSHBroker.ScanHostKey(ctx, &sshbrokerv1.ScanHostKeyRequest{
@@ -112,10 +143,10 @@ func (r *Resolver) scanHostKey(ctx context.Context, actor *vaultv1.ActorContext,
 	l := r.logger(ctx)
 	if err != nil {
 		l.Warn("host key scan failed", log.F("target_id", targetID), log.F("duration_ms", time.Since(start).Milliseconds()), log.F("error", err.Error()))
-		return nil, nil, err
+		return nil, err
 	}
 	l.Info("host key scanned", log.F("target_id", targetID), log.F("host_key_fingerprint", resp.GetFingerprintSha256()), log.F("duration_ms", time.Since(start).Milliseconds()))
-	return target, resp, nil
+	return &hostKeyScan{target: target, resp: resp, address: net.JoinHostPort(host, strconv.Itoa(port))}, nil
 }
 
 // hostKeyPinned reports whether pins already hold key (authorized_keys form,
@@ -143,10 +174,11 @@ func (r *Resolver) pinTargetHostKey(ctx context.Context, targetID, fingerprint s
 	if strings.TrimSpace(fingerprint) == "" {
 		return nil, gatewayError(codes.InvalidArgument, "fingerprint is required", "HOST_KEY_FINGERPRINT_REQUIRED")
 	}
-	target, scan, err := r.scanHostKey(ctx, actor, targetID)
+	scanned, err := r.scanHostKey(ctx, actor, targetID)
 	if err != nil {
 		return nil, err
 	}
+	target, scan := scanned.target, scanned.resp
 	l := r.logger(ctx)
 	if scan.GetFingerprintSha256() != fingerprint {
 		l.Warn("host key pin refused: the offered key changed", log.F("target_id", targetID),

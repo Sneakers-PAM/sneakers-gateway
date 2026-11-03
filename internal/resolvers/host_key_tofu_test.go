@@ -96,11 +96,15 @@ func (a *tofuAudit) RecordEvent(_ context.Context, in *auditv1.RecordEventReques
 }
 
 func newTofuClient(fv *tofuVault, fb *scanBroker, fa *tofuAudit, siteAdmin bool) *gqlclient.Client {
+	return newTofuClientAs(fv, fb, fa, "user-admin", siteAdmin)
+}
+
+func newTofuClientAs(fv *tofuVault, fb *scanBroker, fa *tofuAudit, userID string, siteAdmin bool) *gqlclient.Client {
 	h := handler.New(NewExecutableSchema(Config{Resolvers: &Resolver{Vault: fv, SSHBroker: fb, Audit: fa}}))
 	h.AddTransport(transport.POST{})
 	h.SetErrorPresenter(gqlerr.Present)
 	return gqlclient.New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := WithActorInfo(WithActor(r.Context(), "user-admin"), siteAdmin, false, nil)
+		ctx := WithActorInfo(WithActor(r.Context(), userID), siteAdmin, false, nil)
 		h.ServeHTTP(w, r.WithContext(ctx))
 	}))
 }
@@ -139,6 +143,26 @@ func TestScanTargetHostKeyReturnsTheOfferedKeyAndPinsNothing(t *testing.T) {
 	}
 }
 
+// #318: the scan says which address the broker dialled, so the person can
+// check they scanned the host they meant.
+func TestScanTargetHostKeyReportsTheAddressItDialled(t *testing.T) {
+	for _, tc := range []struct{ host, want string }{
+		{"app01.example.org", "app01.example.org:2222"},
+		{"2001:db8::10", "[2001:db8::10]:2222"},
+	} {
+		fv := newTofuVault()
+		fv.target.Hostname = tc.host
+		var resp struct {
+			ScanTargetHostKey struct{ Address string }
+		}
+		newTofuClient(fv, &scanBroker{key: tofuKey, fp: tofuFP}, &tofuAudit{}, true).
+			MustPost(`{ scanTargetHostKey(targetId:"target-1") { address } }`, &resp)
+		if resp.ScanTargetHostKey.Address != tc.want {
+			t.Fatalf("address = %q, want %q", resp.ScanTargetHostKey.Address, tc.want)
+		}
+	}
+}
+
 func TestScanTargetHostKeyReportsAKeyAlreadyPinned(t *testing.T) {
 	fv := newTofuVault()
 	fv.target.SshHostKeys = []string{tofuKey + " a-comment"}
@@ -149,18 +173,91 @@ func TestScanTargetHostKeyReportsAKeyAlreadyPinned(t *testing.T) {
 	}
 }
 
-func TestHostKeyTofuIsForSiteAdmins(t *testing.T) {
+// #318: a person who isn't a site admin may scan and pin only their own
+// personal target. A shared target stays with a site admin.
+func TestHostKeyTofuRefusesANonAdminOnASharedTarget(t *testing.T) {
 	fv, fb := newTofuVault(), &scanBroker{key: tofuKey, fp: tofuFP}
 	c := newTofuClient(fv, fb, &tofuAudit{}, false)
 	var resp map[string]any
 	for _, q := range []string{scanQuery, pinMutation(tofuFP)} {
 		err := c.Post(q, &resp)
-		if err == nil || !strings.Contains(err.Error(), "admin app") {
-			t.Fatalf("%s: err %v, want an admin-app refusal", q, err)
+		if err == nil || !strings.Contains(err.Error(), "HOST_KEY_PIN_NOT_OWNER") {
+			t.Fatalf("%s: err %v, want HOST_KEY_PIN_NOT_OWNER", q, err)
 		}
 	}
 	if len(fb.scans) != 0 || fv.lastSave != nil {
 		t.Fatalf("a refused caller reached the broker (%d scans) or the vault (%v)", len(fb.scans), fv.lastSave)
+	}
+}
+
+func TestHostKeyTofuRefusesAnotherPersonsPersonalTarget(t *testing.T) {
+	fv, fb := newTofuVault(), &scanBroker{key: tofuKey, fp: tofuFP}
+	fv.target.OwnerUserId = "user-dana"
+	c := newTofuClientAs(fv, fb, &tofuAudit{}, "user-eli", false)
+	var resp map[string]any
+	for _, q := range []string{scanQuery, pinMutation(tofuFP)} {
+		err := c.Post(q, &resp)
+		if err == nil || !strings.Contains(err.Error(), "HOST_KEY_PIN_NOT_OWNER") {
+			t.Fatalf("%s: err %v, want HOST_KEY_PIN_NOT_OWNER", q, err)
+		}
+	}
+	if len(fb.scans) != 0 || fv.lastSave != nil {
+		t.Fatalf("a refused caller reached the broker (%d scans) or the vault (%v)", len(fb.scans), fv.lastSave)
+	}
+}
+
+func TestHostKeyTofuLetsTheOwnerPinTheirPersonalTarget(t *testing.T) {
+	fv, fb, fa := newTofuVault(), &scanBroker{key: tofuKey, fp: tofuFP}, &tofuAudit{}
+	fv.target.OwnerUserId = "user-dana"
+	c := newTofuClientAs(fv, fb, fa, "user-dana", false)
+	var scan scanResp
+	c.MustPost(scanQuery, &scan)
+	if scan.ScanTargetHostKey.Fingerprint != tofuFP {
+		t.Fatalf("scan = %+v", scan.ScanTargetHostKey)
+	}
+	var resp map[string]any
+	c.MustPost(pinMutation(tofuFP), &resp)
+	if fv.lastSave == nil || fv.lastSave.GetActor().GetUserId() != "user-dana" {
+		t.Fatalf("pin not saved as the owner: %v", fv.lastSave)
+	}
+	if got := fv.lastSave.GetTarget().GetSshHostKeys(); len(got) != 2 || got[1] != tofuKey {
+		t.Fatalf("saved pins = %q", got)
+	}
+	if ev := lastTofuEvent(t, fa); ev.GetActorUserId() != "user-dana" || ev.GetAttributes()["outcome"] != "pinned" {
+		t.Fatalf("audit = %+v", ev)
+	}
+}
+
+func TestHostKeyTofuLetsASiteAdminPinASharedTarget(t *testing.T) {
+	fv, fb := newTofuVault(), &scanBroker{key: tofuKey, fp: tofuFP}
+	var resp map[string]any
+	newTofuClient(fv, fb, &tofuAudit{}, true).MustPost(pinMutation(tofuFP), &resp)
+	if fv.lastSave == nil {
+		t.Fatal("a site admin's pin on a shared target was not saved")
+	}
+}
+
+// A token is never a person: refused before the vault or the broker is
+// asked, even when its owner is the target's owner (sneakers-vault#164).
+func TestHostKeyTofuRefusesAToken(t *testing.T) {
+	fv, fb := newTofuVault(), &scanBroker{key: tofuKey, fp: tofuFP}
+	fv.target.OwnerUserId = "user-dana"
+	h := handler.New(NewExecutableSchema(Config{Resolvers: &Resolver{Vault: fv, SSHBroker: fb, Audit: &tofuAudit{}}}))
+	h.AddTransport(transport.POST{})
+	h.SetErrorPresenter(gqlerr.Present)
+	c := gqlclient.New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := WithMachineActor(WithActorInfo(WithActor(r.Context(), "user-dana"), true, false, nil), "sa-1", nil)
+		h.ServeHTTP(w, r.WithContext(ctx))
+	}))
+	var resp map[string]any
+	for _, q := range []string{scanQuery, pinMutation(tofuFP)} {
+		err := c.Post(q, &resp)
+		if err == nil || !strings.Contains(err.Error(), "HOST_KEY_PIN_NOT_ADMIN") || !strings.Contains(err.Error(), "token") {
+			t.Fatalf("%s: err %v, want the person-only refusal", q, err)
+		}
+	}
+	if len(fb.scans) != 0 || fv.lastSave != nil {
+		t.Fatalf("a token reached the broker (%d scans) or the vault (%v)", len(fb.scans), fv.lastSave)
 	}
 }
 

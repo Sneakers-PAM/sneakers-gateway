@@ -722,6 +722,7 @@ type ComplexityRoot struct {
 	}
 
 	TargetHostKeyScan struct {
+		Address     func(childComplexity int) int
 		Fingerprint func(childComplexity int) int
 		KeyType     func(childComplexity int) int
 		Pinned      func(childComplexity int) int
@@ -4627,6 +4628,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.TargetConnection.IsDefault(childComplexity), true
 
+	case "TargetHostKeyScan.address":
+		if e.ComplexityRoot.TargetHostKeyScan.Address == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetHostKeyScan.Address(childComplexity), true
 	case "TargetHostKeyScan.fingerprint":
 		if e.ComplexityRoot.TargetHostKeyScan.Fingerprint == nil {
 			break
@@ -5487,6 +5494,9 @@ type TargetHostKeyScan {
   fingerprint: String!
   # Whether the target already pins this key.
   pinned: Boolean!
+  # The host and port the broker dialled to read the key (host:port, an IPv6
+  # address in brackets), for the person to check they scanned the right host.
+  address: String!
 }
 type TargetConnection {
   connectionId: ID!
@@ -5510,8 +5520,8 @@ input TargetInput {
   # send empty) to save with connectionId alone instead.
   connections: [TargetConnectionInput!]
   description: String
-  # The full pin list (site admin only to change). Omit to keep the target's
-  # current pins; [] clears them.
+  # The full pin list (a site admin, or a personal target's owner, may change
+  # it). Omit to keep the target's current pins; [] clears them.
   sshHostKeys: [String!]
 }
 
@@ -5985,9 +5995,10 @@ type Query {
   connections: [Connection!]!
   targets: [Target!]!
   # Reads the SSH host key the target's SSH connection offers, for a person to
-  # check before pinning it with pinTargetHostKey. Site admins only (the same
-  # people who may change a target's pins); the broker rate-limits scans per
-  # user. Audited by the broker as hostkey.scan.
+  # check before pinning it with pinTargetHostKey. A person only: a site admin
+  # on any target, or the owner of a personal target (the same people who may
+  # change a target's pins); the broker rate-limits scans per user. Audited by
+  # the broker as hostkey.scan.
   scanTargetHostKey(targetId: ID!): TargetHostKeyScan!
   passwordPolicies: [PasswordPolicy!]!
   securitySettings: SecuritySettings!
@@ -6220,7 +6231,7 @@ type Mutation {
   # Pins the host key the target offers now, only when its fingerprint is
   # exactly the one given (the one the person saw from scanTargetHostKey).
   # A different key is refused with HOST_KEY_CHANGED and nothing is pinned.
-  # Site admins only. Adds to the target's existing pins.
+  # The same people as scanTargetHostKey. Adds to the target's existing pins.
   pinTargetHostKey(targetId: ID!, fingerprint: String!): Target!
 
   savePasswordPolicy(input: PasswordPolicyInput!): PasswordPolicy!
@@ -7564,6 +7575,8 @@ func (ec *executionContext) childFields_TargetHostKeyScan(ctx context.Context, f
 		return ec.fieldContext_TargetHostKeyScan_fingerprint(ctx, field)
 	case "pinned":
 		return ec.fieldContext_TargetHostKeyScan_pinned(ctx, field)
+	case "address":
+		return ec.fieldContext_TargetHostKeyScan_address(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type TargetHostKeyScan", field.Name)
 }
@@ -24990,6 +25003,29 @@ func (ec *executionContext) fieldContext_TargetHostKeyScan_pinned(_ context.Cont
 	return graphql.NewScalarFieldContext("TargetHostKeyScan", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _TargetHostKeyScan_address(ctx context.Context, field graphql.CollectedField, obj *TargetHostKeyScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetHostKeyScan_address(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Address, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetHostKeyScan_address(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetHostKeyScan", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _TypeChangedSecret_secret(ctx context.Context, field graphql.CollectedField, obj *TypeChangedSecret) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -33340,6 +33376,11 @@ func (ec *executionContext) _TargetHostKeyScan(ctx context.Context, sel ast.Sele
 			}
 		case "pinned":
 			out.Values[i] = ec._TargetHostKeyScan_pinned(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "address":
+			out.Values[i] = ec._TargetHostKeyScan_address(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
