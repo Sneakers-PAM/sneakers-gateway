@@ -180,6 +180,16 @@ func actorOf(ctx context.Context) *vaultv1.ActorContext {
 	}
 }
 
+// personActorOf is actorOf for a call that hands a person a secret's value
+// (reveal, copy, export, break-glass): it adds the opaque reference to the
+// signed-in web session, which the vault requires of a person's reveal. Outside
+// a web session there is no reference and none is sent.
+func personActorOf(ctx context.Context) *vaultv1.ActorContext {
+	a := actorOf(ctx)
+	a.SessionRef = SessionRef(ctx)
+	return a
+}
+
 // machineActor carries the verified non-human principal: a
 // service-account identity resolved by the gateway's MachineActor middleware
 // from an Authorization: Bearer credential. Unlike the human actor

@@ -235,7 +235,7 @@ func (r *mutationResolver) DetachSecretTarget(ctx context.Context, secretID stri
 
 // RevealSecretField is the resolver for the revealSecretField field.
 func (r *mutationResolver) RevealSecretField(ctx context.Context, id string, fieldKey string) (string, error) {
-	resp, err := r.Vault.RevealSecretField(ctx, &vaultv1.RevealSecretFieldRequest{Actor: actorOf(ctx), Id: id, FieldKey: fieldKey})
+	resp, err := r.Vault.RevealSecretField(ctx, &vaultv1.RevealSecretFieldRequest{Actor: personActorOf(ctx), Id: id, FieldKey: fieldKey})
 	if err != nil {
 		return "", err
 	}
@@ -245,7 +245,7 @@ func (r *mutationResolver) RevealSecretField(ctx context.Context, id string, fie
 // RevealSecretVersionField is the resolver for the revealSecretVersionField field.
 func (r *mutationResolver) RevealSecretVersionField(ctx context.Context, secretID string, versionNo int, fieldKey string) (string, error) {
 	resp, err := r.Vault.RevealSecretVersionField(ctx, &vaultv1.RevealSecretVersionFieldRequest{
-		Actor: actorOf(ctx), SecretId: secretID, VersionNo: safeconv.Int32(versionNo), FieldKey: fieldKey,
+		Actor: personActorOf(ctx), SecretId: secretID, VersionNo: safeconv.Int32(versionNo), FieldKey: fieldKey,
 	})
 	if err != nil {
 		return "", err
@@ -289,7 +289,7 @@ func (r *mutationResolver) CloseBreakGlassSession(ctx context.Context, id string
 
 // CopySecret is the resolver for the copySecret field.
 func (r *mutationResolver) CopySecret(ctx context.Context, id string) (*string, error) {
-	resp, err := r.Vault.CopySecret(ctx, &vaultv1.CopySecretRequest{Actor: actorOf(ctx), Id: id})
+	resp, err := r.Vault.CopySecret(ctx, &vaultv1.CopySecretRequest{Actor: personActorOf(ctx), Id: id})
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +355,7 @@ func (r *mutationResolver) ImportCertificate(ctx context.Context, folderID strin
 // the GraphQL transport (the browser then decodes + downloads them).
 func (r *mutationResolver) ExportCertificate(ctx context.Context, secretID string, format string, newPassphrase *string) (*CertExport, error) {
 	resp, err := r.Vault.ExportCertificate(ctx, &vaultv1.ExportCertificateRequest{
-		Actor: actorOf(ctx), SecretId: secretID, Format: format, NewPassphrase: deref(newPassphrase),
+		Actor: personActorOf(ctx), SecretId: secretID, Format: format, NewPassphrase: deref(newPassphrase),
 	})
 	if err != nil {
 		return nil, err
