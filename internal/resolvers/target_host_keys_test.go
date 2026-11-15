@@ -132,11 +132,13 @@ func TestSaveTargetOmittedHostKeysKeepsPins(t *testing.T) {
 
 	fv.lists = 0
 	c.MustPost(`mutation { saveTarget(input:{id:"t1", name:"app01", hostname:"app01.example.org", connectionId:"c1", sshHostKeys:[]}) { id } }`, &resp)
-	if got := fv.lastSave.GetTarget().GetSshHostKeys(); len(got) != 0 || fv.lists != 0 {
-		t.Fatalf("explicit [] sent %q after %d lookups, want none", got, fv.lists)
+	if got := fv.lastSave.GetTarget().GetSshHostKeys(); len(got) != 0 || fv.lists != 1 {
+		// The one lookup keeps the target's TLS certificate pins, not the SSH keys.
+		t.Fatalf("explicit [] sent %q after %d lookups, want one (for the TLS pins)", got, fv.lists)
 	}
 
 	// A new target with no sshHostKeys needs no lookup.
+	fv.lists = 0
 	c.MustPost(`mutation { saveTarget(input:{name:"app02", hostname:"app02.example.org", connectionId:"c1"}) { id } }`, &resp)
 	if fv.lists != 0 || len(fv.lastSave.GetTarget().GetSshHostKeys()) != 0 {
 		t.Fatalf("create looked up %d times, sent %q", fv.lists, fv.lastSave.GetTarget().GetSshHostKeys())

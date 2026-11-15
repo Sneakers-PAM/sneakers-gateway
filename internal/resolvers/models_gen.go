@@ -664,6 +664,7 @@ type Target struct {
 	SecretCount  int                 `json:"secretCount"`
 	OwnerUserID  *string             `json:"ownerUserId,omitempty"`
 	SSHHostKeys  []string            `json:"sshHostKeys"`
+	TLSCertPins  []string            `json:"tlsCertPins"`
 }
 
 type TargetConnection struct {
@@ -696,6 +697,33 @@ type TargetInput struct {
 	Connections  []*TargetConnectionInput `json:"connections,omitempty"`
 	Description  *string                  `json:"description,omitempty"`
 	SSHHostKeys  []string                 `json:"sshHostKeys,omitempty"`
+}
+
+type TargetTLSCertificate struct {
+	Subject      string   `json:"subject"`
+	CommonName   string   `json:"commonName"`
+	DNSNames     []string `json:"dnsNames"`
+	IPAddresses  []string `json:"ipAddresses"`
+	Issuer       string   `json:"issuer"`
+	NotBefore    *string  `json:"notBefore,omitempty"`
+	NotAfter     *string  `json:"notAfter,omitempty"`
+	Fingerprint  string   `json:"fingerprint"`
+	SerialNumber string   `json:"serialNumber"`
+	IsCa         bool     `json:"isCa"`
+	SelfSigned   bool     `json:"selfSigned"`
+	Pinnable     bool     `json:"pinnable"`
+	Pinned       bool     `json:"pinned"`
+}
+
+type TargetTLSCertificateScan struct {
+	TargetID          string                  `json:"targetId"`
+	Address           string                  `json:"address"`
+	ServerName        string                  `json:"serverName"`
+	TLSVersion        string                  `json:"tlsVersion"`
+	Chain             []*TargetTLSCertificate `json:"chain"`
+	SystemTrusted     bool                    `json:"systemTrusted"`
+	SystemTrustDetail *string                 `json:"systemTrustDetail,omitempty"`
+	HostNameMatches   bool                    `json:"hostNameMatches"`
 }
 
 type TypeChangedSecret struct {

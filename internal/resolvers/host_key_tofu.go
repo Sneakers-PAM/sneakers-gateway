@@ -72,12 +72,13 @@ func mayPinTarget(a *vaultv1.ActorContext, t *vaultv1.Target) bool {
 	return t.GetOwnerUserId() != "" && t.GetOwnerUserId() == a.GetUserId()
 }
 
-// sshScanTarget finds the target and the host and port of its SSH
-// connection: the default when that is SSH, otherwise the first SSH entry.
-func (r *Resolver) sshScanTarget(ctx context.Context, actor *vaultv1.ActorContext, targetID string) (*vaultv1.Target, string, int, error) {
+// pinnableTarget finds the target and refuses a person who may not scan and
+// pin it, before any broker or connector is asked. what names the pin kind in
+// the log; notOwner is the coded refusal for that kind.
+func (r *Resolver) pinnableTarget(ctx context.Context, actor *vaultv1.ActorContext, targetID, what string, notOwner func() error) (*vaultv1.Target, error) {
 	tl, err := r.Vault.ListTargets(ctx, &vaultv1.ListTargetsRequest{Actor: actor})
 	if err != nil {
-		return nil, "", 0, err
+		return nil, err
 	}
 	var target *vaultv1.Target
 	for _, t := range tl.GetTargets() {
@@ -87,12 +88,22 @@ func (r *Resolver) sshScanTarget(ctx context.Context, actor *vaultv1.ActorContex
 		}
 	}
 	if target == nil {
-		return nil, "", 0, gatewayError(codes.NotFound, "target not found", "TARGET_NOT_FOUND")
+		return nil, gatewayError(codes.NotFound, "target not found", "TARGET_NOT_FOUND")
 	}
 	if !mayPinTarget(actor, target) {
-		r.logger(ctx).Warn("host key scan refused: not the target's owner or a site admin",
+		r.logger(ctx).Warn(what+" scan refused: not the target's owner or a site admin",
 			log.F("target_id", targetID), log.F("actor_user_id", actor.GetUserId()), log.F("shared", target.GetOwnerUserId() == ""))
-		return nil, "", 0, errHostKeyPinNotOwner()
+		return nil, notOwner()
+	}
+	return target, nil
+}
+
+// sshScanTarget finds the target and the host and port of its SSH
+// connection: the default when that is SSH, otherwise the first SSH entry.
+func (r *Resolver) sshScanTarget(ctx context.Context, actor *vaultv1.ActorContext, targetID string) (*vaultv1.Target, string, int, error) {
+	target, err := r.pinnableTarget(ctx, actor, targetID, "host key", errHostKeyPinNotOwner)
+	if err != nil {
+		return nil, "", 0, err
 	}
 	cl, err := r.Vault.ListConnections(ctx, &vaultv1.ListConnectionsRequest{})
 	if err != nil {

@@ -48,6 +48,11 @@ func (r *mutationResolver) SaveTarget(ctx context.Context, input TargetInput) (*
 		return nil, err
 	}
 	t.SshHostKeys = keys
+	pins, err := TLSPinsForSave(ctx, r.Vault, actorOf(ctx), t.GetId())
+	if err != nil {
+		return nil, err
+	}
+	t.TlsCertPins = pins
 	resp, err := r.Vault.SaveTarget(ctx, &vaultv1.SaveTargetRequest{Actor: actorOf(ctx), Target: t})
 	if err != nil {
 		return nil, err
@@ -67,6 +72,15 @@ func (r *mutationResolver) DeleteTarget(ctx context.Context, id string) (bool, e
 // PinTargetHostKey is the resolver for the pinTargetHostKey field.
 func (r *mutationResolver) PinTargetHostKey(ctx context.Context, targetID string, fingerprint string) (*Target, error) {
 	t, err := r.pinTargetHostKey(ctx, targetID, fingerprint)
+	if err != nil {
+		return nil, err
+	}
+	return gqlTarget(t), nil
+}
+
+// PinTargetTLSCertificate is the resolver for the pinTargetTlsCertificate field.
+func (r *mutationResolver) PinTargetTLSCertificate(ctx context.Context, targetID string, fingerprint string) (*Target, error) {
+	t, err := r.pinTargetTLSCertificate(ctx, targetID, fingerprint)
 	if err != nil {
 		return nil, err
 	}
@@ -1387,6 +1401,11 @@ func (r *queryResolver) ScanTargetHostKey(ctx context.Context, targetID string) 
 		Fingerprint: scan.GetFingerprintSha256(), Pinned: hostKeyPinned(scanned.target.GetSshHostKeys(), scan.GetPublicKey()),
 		Address: scanned.address,
 	}, nil
+}
+
+// ScanTargetTLSCertificate is the resolver for the scanTargetTlsCertificate field.
+func (r *queryResolver) ScanTargetTLSCertificate(ctx context.Context, targetID string) (*TargetTLSCertificateScan, error) {
+	return r.scanTargetTLSCertificate(ctx, targetID)
 }
 
 // PasswordPolicies is the resolver for the passwordPolicies field.

@@ -382,6 +382,7 @@ func gqlTarget(t *vaultv1.Target) *Target {
 		ConnectionID: t.GetConnectionId(), Connections: conns, Description: strPtr(t.GetDescription()),
 		SecretCount: int(t.GetSecretCount()), OwnerUserID: strPtr(t.GetOwnerUserId()),
 		SSHHostKeys: append([]string{}, t.GetSshHostKeys()...),
+		TLSCertPins: append([]string{}, t.GetTlsCertPins()...),
 	}
 }
 func gqlTargetConnection(c *vaultv1.TargetConnection) *TargetConnection {
