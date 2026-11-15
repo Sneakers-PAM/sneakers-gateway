@@ -752,14 +752,17 @@ Both carry the build in the `Sneakers-Version` and `Sneakers-Commit` headers, an
 `Sneakers-Depstate-<name>` (`ok`, `degraded` or `down`) for each dependency. There is no plain
 `/health` route.
 
-`GET /.well-known/sneakers` publishes the release and the API level before anyone signs in, for the
-phone apps: unauthenticated and outside the session gate like `/readyz`.
-`{"product":"sneakers-pam","version":"v0.1.0","apiLevel":1}`. `version` comes from
+`GET /.well-known/sneakers` publishes the release, the API level and whether the system is
+internal-only before anyone signs in, for the phone apps: unauthenticated and outside the session
+gate like `/readyz`.
+`{"product":"sneakers-pam","version":"v0.1.0","apiLevel":1,"internalOnly":false}`. `version` comes from
 `SNEAKERS_PRODUCT_VERSION` and is `null` when none is set, so an app never reads a guess as a
-release; the same value is in the `Sneakers-Version` response header (absent when unset). The document
-carries nothing else: no components, commit, hostnames or dependency state. A configured release is
-cacheable for 60 seconds (`Cache-Control: public, max-age=60`); an unset one is `no-store`. Only
-`GET` and `HEAD` answer. The web front end must pass this path through to the gateway.
+release; the same value is in the `Sneakers-Version` response header (absent when unset).
+`internalOnly` is the admin setting below, `null` until the gateway has read it. The document
+carries nothing else: no components, commit, hostnames, networks or dependency state. A configured
+release with a known setting is cacheable for 60 seconds (`Cache-Control: public, max-age=60`);
+otherwise it is `no-store`. Only `GET` and `HEAD` answer. The web front end must pass this path
+through to the gateway.
 
 `GET /smoke` is the appliance's post-upgrade check: unauthenticated, outside the product routes
 like `/readyz`, and never cached. It makes a real read through identity (`GetSetupState`) and
@@ -795,6 +798,28 @@ or hanging never holds it. A check's error text is never in the answer.
 The running build is also in the `diagnostics` query; the image build stamps it from its
 `VERSION` and `COMMIT` build arguments into go-buildinfo's `Version` and `Commit`
 (`docker build --build-arg VERSION=v0.1.0 --build-arg COMMIT="$(git rev-parse HEAD)" .`).
+
+### Internal-only
+
+An admin can mark the system internal-only and list the source networks it allows
+(`internal_only` and `allowed_networks` in the vault's security settings, site admin only and audited
+there). While it is on, the gateway refuses every request whose source address is outside those
+networks with `403` and
+`{"error":"INTERNAL_ONLY","message":"This Sneakers install is internal-only. Connect to the VPN or the office network and try again."}`,
+a stable code the apps map to their own "connect to the VPN" message. It covers the whole gateway:
+`/graphql`, `/machine/graphql`, `/auth/*`, `/oauth2/*`, `/setup/*`, `/share/*`. Only these paths
+stay open, so the kubelet and the apps still work: `/livez`, `/readyz`, `/smoke`,
+`/telemetry-status` and `/.well-known/sneakers`, which carries `internalOnly` so an app can tell
+before it signs in. The gateway re-reads the setting every 15 seconds. Until its first read
+succeeds it refuses with `503` and `{"error":"NETWORK_POLICY_UNAVAILABLE"}`, since it can't tell
+a request is allowed; after that a failed read keeps the last known setting. An allowed network
+that doesn't parse is skipped (and logged), so a typo never opens the system up, and internal-only
+with no usable network refuses everyone.
+
+The source address is the connection's peer. Behind the web front end or an ingress that peer is
+the proxy, so set `TRUSTED_PROXY_CIDRS` to its network: a request from there is judged by its
+nearest `X-Forwarded-For` hop that isn't itself a trusted proxy. A header from any other peer is
+ignored, so it can't be forged to look internal. With the setting empty the header is never read.
 
 ## CORS
 
