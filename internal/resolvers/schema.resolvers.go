@@ -1131,6 +1131,16 @@ func (r *mutationResolver) UnlinkOidcClient(ctx context.Context, serviceAccountI
 	return gqlServiceAccount(resp.GetServiceAccount()), nil
 }
 
+// CreateShareLink is the resolver for the createShareLink field.
+func (r *mutationResolver) CreateShareLink(ctx context.Context, secretID string, fieldKey string, ttlSeconds *int) (*ShareLink, error) {
+	return r.createShareLink(ctx, secretID, fieldKey, ttlSeconds)
+}
+
+// RevokeShareLink is the resolver for the revokeShareLink field.
+func (r *mutationResolver) RevokeShareLink(ctx context.Context, id string) (bool, error) {
+	return r.revokeShareLink(ctx, id)
+}
+
 // ReportScreenCapture is the resolver for the reportScreenCapture field.
 func (r *mutationResolver) ReportScreenCapture(ctx context.Context, input ScreenCaptureInput) (bool, error) {
 	return r.reportScreenCapture(ctx, input)
@@ -1820,6 +1830,11 @@ func (r *queryResolver) Maintenance(ctx context.Context) (*Maintenance, error) {
 // Appliance is the resolver for the appliance field.
 func (r *queryResolver) Appliance(ctx context.Context) (*Appliance, error) {
 	return applianceOf(r.Resolver.Appliance), nil
+}
+
+// ShareLinks is the resolver for the shareLinks field.
+func (r *queryResolver) ShareLinks(ctx context.Context) ([]*ShareLink, error) {
+	return r.shareLinks(ctx)
 }
 
 // HeartbeatBlockedReason is the resolver for the heartbeatBlockedReason
