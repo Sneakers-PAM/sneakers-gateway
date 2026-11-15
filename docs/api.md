@@ -78,6 +78,9 @@ comes from domain `sneakers.gateway`:
 | `scanTargetHostKey`, `pinTargetHostKey` | `FAILED_PRECONDITION` | `TARGET_NO_SSH_CONNECTION` | The target has no SSH connection to scan. |
 | `pinTargetHostKey` | `FAILED_PRECONDITION` | `HOST_KEY_CHANGED` | The target now offers a key with another fingerprint than the one confirmed. Nothing was pinned; scan again and show the new fingerprint. |
 | `pinTargetHostKey` | `INVALID_ARGUMENT` | `HOST_KEY_FINGERPRINT_REQUIRED` | No fingerprint was sent. |
+| `createShareLink`, `revokeShareLink`, `shareLinks` | `PERMISSION_DENIED` | `SHARE_NOT_PERSON` | Not a signed-in person (a token, a service account or no session). |
+| `createShareLink`, `revokeShareLink`, `shareLinks` | `FAILED_PRECONDITION` | `SHARE_LINKS_OFF` | `OAUTH_PUBLIC_URL` isn't set, so no link can be built. |
+| `createShareLink` | `INVALID_ARGUMENT` | `SHARE_TTL_INVALID` | `ttlSeconds` is outside 60 to 604800 (zero and negative count). |
 
 Other vault reasons a client may see (domain `sneakers.vault`):
 
@@ -424,6 +427,39 @@ caller who isn't signed in:
 | `INVALID_ARGUMENT` | `BATCH_SIZE_INVALID` | No ids, or more than 20 distinct ones. Checked before the factor. |
 | `FAILED_PRECONDITION` | `STEP_UP_REQUIRED` | `APPROVE` without a `factor` and outside the session's window: step up and retry. |
 | `UNAUTHENTICATED` | `FACTOR_NOT_ACCEPTED` | The `factor` given was wrong. |
+
+### One-time share links
+
+A person can share one field of a secret with someone who has no account, as a link that shows the
+value once. The vault keeps the rules (Sneakers-PAM/sneakers-vault, "One-time shares"): the
+creator needs read access, the field and the reveal step-up, and the secret's approval level
+applies to the creator like any reveal, so an owner or approver decides it from
+`secretUsesToDecide` before the link opens. The gateway keeps the link: the token is never stored
+(only its hash, and the vault holds the same hash), and no value is kept in the gateway at all.
+
+- `createShareLink(secretId, fieldKey, ttlSeconds)` returns a `ShareLink` with the `url`, once. The
+  link lives 60 seconds to 7 days (a day when `ttlSeconds` is absent). `state` is `ready`, or
+  `awaiting_approval` while an owner hasn't decided; the link then opens only after the approval, and
+  an approval doesn't shorten it. The vault's refusals (no access, `STEP_UP_REQUIRED`, no approver)
+  come back unchanged and nothing is created.
+- `shareLinks` lists the caller's own open links with their `state` (`awaiting_approval`, `ready`,
+  `opened`, `expired`, `unknown`) and no URL. `revokeShareLink(id)` ends one that hasn't been opened:
+  its creator or a site admin (the vault decides). People only.
+- `GET /share/{token}`, outside the session gate like `/readyz`, answers a small page with a
+  "Show the secret" button and never calls the vault, so a chat app's link preview, a crawler or
+  a `HEAD` can't use up the view. Only the button's `POST` does: it shows the value once, escaped,
+  with `Cache-Control: no-store`, `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer` and a
+  `default-src 'none'` content security policy. An unapproved link answers `409` and stays usable;
+  an opened, expired, denied or revoked one answers `410`; a token that doesn't match answers `404`;
+  the vault being unreachable (or in read-only maintenance) answers `503` without using the link up.
+- Every use is audited by the vault: the creator's reveal reads as `secret.reveal` with `via` =
+  `share_link`, refusals as `secret.share.redeem`, a revoke as `secret.share.revoke`. Read access is
+  checked when the link is made and approved, not again when it is opened, so a person who loses
+  access should revoke their open links.
+
+The link is `<OAUTH_PUBLIC_URL>/share/<token>`, so the web front end has to pass `/share/` through
+to the gateway. The records live in Valkey with the sessions (process memory with
+`AUTH_MODE=noauth`).
 
 ### Break-glass is people only
 

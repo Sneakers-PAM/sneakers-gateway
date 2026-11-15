@@ -15,6 +15,7 @@ import (
 	workflowv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/workflow/v1"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/diag"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/maintenance"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/share"
 
 	log "github.com/Bugs5382/go-log"
 )
@@ -44,6 +45,8 @@ type Resolver struct {
 	// ActiveUsers lists the active people for the vault's approval
 	// decisions; nil means unknown (never a single-user install).
 	ActiveUsers *ActiveUsers
+	// Share serves the one-time share links; nil means they are off.
+	Share *share.Service
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 	// Log receives request-scoped lines; nil writes nothing.

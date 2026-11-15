@@ -1094,6 +1094,10 @@ type Query {
   # web banners. present is false on a plain Kubernetes install, and every
   # other field is then null or false.
   appliance: Appliance!
+
+  # The signed-in person's own one-time share links and where each stands. The URL
+  # isn't kept, so it isn't here; it's only returned by createShareLink.
+  shareLinks: [ShareLink!]!
 }
 
 type Appliance {
@@ -1472,6 +1476,16 @@ type Mutation {
   # Removes a service account's OIDC client linkage; its opaque API-token
   # path is unaffected. Site-admin-only.
   unlinkOidcClient(serviceAccountId: ID!): ServiceAccount!
+
+  # One-time share links for a secret field, for someone without an account. A person
+  # only. Creating one follows the normal reveal rules: access, the step-up, and the
+  # owner's approval (the link then waits, state awaiting_approval, and its owner
+  # decides it like any other use). The URL is returned once; the value is shown once,
+  # from a page that a link preview can't trigger. ttlSeconds is 60 to 604800, 86400
+  # when absent.
+  createShareLink(secretId: ID!, fieldKey: String!, ttlSeconds: Int): ShareLink!
+  # Ends a link that hasn't been opened: its creator or a site admin.
+  revokeShareLink(id: ID!): Boolean!
 }
 
 # Live push channel over WebSocket (graphql-ws). Every subscription is
@@ -1483,4 +1497,15 @@ type Subscription {
   # dashboard's poll while the socket is up. Scoped by the same GetSecretStats
   # over the actor's readable secrets as the secretStats query.
   secretStats: SecretStats!
+}
+
+type ShareLink {
+  id: ID!
+  # Only on the link just created; null in the list.
+  url: String
+  secretId: ID!
+  fieldKey: String!
+  expiresAtUnix: Int!
+  # awaiting_approval, ready, opened, expired or unknown.
+  state: String!
 }

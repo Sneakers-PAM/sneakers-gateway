@@ -618,6 +618,15 @@ type ServiceAccount struct {
 	OidcAllowedGroups []string `json:"oidcAllowedGroups"`
 }
 
+type ShareLink struct {
+	ID            string  `json:"id"`
+	URL           *string `json:"url,omitempty"`
+	SecretID      string  `json:"secretId"`
+	FieldKey      string  `json:"fieldKey"`
+	ExpiresAtUnix int     `json:"expiresAtUnix"`
+	State         string  `json:"state"`
+}
+
 type SSHSessionTicket struct {
 	WsURL            string `json:"wsUrl"`
 	Ticket           string `json:"ticket"`
