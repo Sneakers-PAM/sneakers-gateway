@@ -156,5 +156,8 @@ func brokerActor(actor *vaultv1.ActorContext) *sshbrokerv1.ActorContext {
 		IsRoot:        actor.GetIsRoot(),
 		GroupNames:    actor.GetGroupNames(),
 		PrincipalKind: sshbrokerv1.PrincipalKind(actor.GetPrincipalKind()),
+		// The broker passes this to the vault when it reveals the key, and the
+		// vault only reveals to a person's own signed-in web session (#151).
+		SessionRef: actor.GetSessionRef(),
 	}
 }

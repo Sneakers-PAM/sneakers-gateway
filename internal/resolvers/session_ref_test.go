@@ -91,3 +91,30 @@ func TestPersonRevealsWithoutAWebSessionSendNoRef(t *testing.T) {
 		}
 	}
 }
+
+// The broker hands the actor to the vault when it reveals the key, and the vault
+// wants the web session reference there, so the gateway must pass it on.
+func TestBrokerActorCarriesTheWebSessionRef(t *testing.T) {
+	got := brokerActor(&vaultv1.ActorContext{UserId: "u-1", SessionRef: "ref-1"})
+	if got.GetSessionRef() != "ref-1" {
+		t.Fatalf("broker actor session_ref = %q, want ref-1", got.GetSessionRef())
+	}
+}
+
+// Opening an SSH session from a web session sends the broker the session
+// reference, so the key reveal at redeem time is a person's own web session.
+func TestOpenSSHSessionSendsTheBrokerTheWebSessionRef(t *testing.T) {
+	fv := &fakeSSHVault{targetIDs: []string{"target-1"}}
+	fb := &fakeSSHBroker{}
+	h := handler.New(NewExecutableSchema(Config{Resolvers: &Resolver{Vault: fv, SSHBroker: fb}}))
+	h.AddTransport(transport.POST{})
+	c := gqlclient.New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := WithSessionRef(WithActor(r.Context(), "user-morgan"), "ref-9")
+		h.ServeHTTP(w, r.WithContext(ctx))
+	}))
+	var resp map[string]any
+	c.MustPost(openSSHSessionMutation, &resp)
+	if got := fb.lastReq.GetActor().GetSessionRef(); got != "ref-9" {
+		t.Fatalf("CreateSession actor session_ref = %q, want ref-9", got)
+	}
+}

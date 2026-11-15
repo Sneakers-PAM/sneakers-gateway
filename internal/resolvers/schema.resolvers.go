@@ -968,7 +968,7 @@ func (r *mutationResolver) MarkAllNotificationsRead(ctx context.Context) (bool, 
 func (r *mutationResolver) OpenSSHSession(ctx context.Context, secretID string, connectionID *string, targetID *string) (*SSHSessionTicket, error) {
 	ctx, cancel := context.WithTimeout(ctx, openSSHSessionTimeout)
 	defer cancel()
-	actor := actorOf(ctx)
+	actor := personActorOf(ctx)
 	op := r.sshOpen(ctx, actor.GetUserId(), secretID, deref(connectionID))
 	sec, err := r.Vault.GetSecret(ctx, &vaultv1.GetSecretRequest{Actor: actor, Id: secretID})
 	if err != nil {
