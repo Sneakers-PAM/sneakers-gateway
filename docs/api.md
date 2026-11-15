@@ -78,6 +78,10 @@ comes from domain `sneakers.gateway`:
 | `scanTargetHostKey`, `pinTargetHostKey` | `FAILED_PRECONDITION` | `TARGET_NO_SSH_CONNECTION` | The target has no SSH connection to scan. |
 | `pinTargetHostKey` | `FAILED_PRECONDITION` | `HOST_KEY_CHANGED` | The target now offers a key with another fingerprint than the one confirmed. Nothing was pinned; scan again and show the new fingerprint. |
 | `pinTargetHostKey` | `INVALID_ARGUMENT` | `HOST_KEY_FINGERPRINT_REQUIRED` | No fingerprint was sent. |
+| `reportScreenCapture`, `recordSecretScan` | `PERMISSION_DENIED` | `CLIENT_EVENT_NOT_PERSON` | Not a signed-in person (a token or service account, or no session). |
+| `reportScreenCapture`, `recordSecretScan` | `INVALID_ARGUMENT` | `CLIENT_EVENT_INVALID` | The secret/screen choice, `clientKind`, `device` or `screen` doesn't fit the rules in "What the apps report". |
+| `reportScreenCapture`, `recordSecretScan` | `NOT_FOUND` | `SECRET_NOT_FOUND` | The secret is unknown, or the caller can't see it; the two read the same. |
+| `reportScreenCapture`, `recordSecretScan` | `UNAVAILABLE` | `AUDIT_UNAVAILABLE` | The event could not be written to the audit log; the app can retry. |
 
 Other vault reasons a client may see (domain `sneakers.vault`):
 
@@ -315,6 +319,29 @@ cell but `C` is refused, same as any other vault validation error. `Secret.creat
 the secret's creator (set once, at creation); null on a secret created before this field existed.
 The vault's full rules (every read path this closes, the refusal and audit shape) are in
 [sneakers-vault docs/api.md](https://github.com/Sneakers-PAM/sneakers-vault/blob/main/docs/api.md).
+
+### What the apps report
+
+The phone apps report two things about themselves, each as an audit event for the signed-in person
+(a person only: a token, a service account or no session is refused). Neither carries a secret
+value, and both stay open in read-only maintenance, since they only write to the audit log.
+
+- `reportScreenCapture(input: {kind, secretId | screen, clientKind, device})` records a screenshot
+  or a screen recording taken while a secret is revealed or a sensitive screen is open, as
+  `client.screenshot` or `client.screen_recording` (audit tier), with the secret id as the subject,
+  or the `screen` name as an attribute when it isn't one secret. Give the secret or the screen, not
+  both.
+- `recordSecretScan(input: {secretId, clientKind, device})` records that a secret was opened by
+  scanning its QR label, as `secret.qr_scan`. The app calls it after the normal open succeeds;
+  the open itself is unchanged.
+
+Both record who, the time, and as attributes `client_kind`, `device` (when given) and
+`reported_by: client`. `clientKind` is a short lowercase token (`ios`, `android`), `device` a plain
+name of at most 80 characters, `screen` at most 64 characters of letters, digits, dot, dash,
+underscore and space; the gateway takes the app's word for them. A secret that is unknown, or that
+the caller can't see, is refused as `SECRET_NOT_FOUND` and records nothing, so the refusal doesn't
+say whether it exists. The events show in `auditRecords` and `auditActions` under their action
+names, so a client filters by kind on `action` (or hides the others with `excludeActions`).
 
 ### Audit subject
 
