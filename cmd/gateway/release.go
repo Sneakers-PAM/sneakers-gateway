@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	log "github.com/Bugs5382/go-log"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/netpolicy"
 )
 
 // apiLevel is the gateway's API level, published for the mobile apps. Raise
@@ -25,13 +26,16 @@ type releaseDocument struct {
 	// allowed networks, so an app can say "connect to the VPN" before sign-in.
 	// Null while the setting hasn't been read.
 	InternalOnly *bool `json:"internalOnly"`
+	// RequireManaged is whether the system refuses a phone app that wasn't
+	// installed and configured by the organisation's MDM. Null while unread.
+	RequireManaged *bool `json:"requireManaged"`
 }
 
 // releaseHandler serves GET /.well-known/sneakers, outside the session gate,
 // so an app learns which release a server runs, and whether it is
-// internal-only, before anyone signs in. internalOnly reports the setting and
-// whether it has been read.
-func releaseHandler(version string, internalOnly func() (on, known bool), lg log.Logger) http.Handler {
+// internal-only or requires managed apps, before anyone signs in. settings
+// reports them and whether they have been read.
+func releaseHandler(version string, settings func() netpolicy.Published, lg log.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")
@@ -42,9 +46,10 @@ func releaseHandler(version string, internalOnly func() (on, known bool), lg log
 		if version != "" {
 			doc.Version = &version
 		}
-		on, known := internalOnly()
+		pub := settings()
+		known := pub.Known
 		if known {
-			doc.InternalOnly = &on
+			doc.InternalOnly, doc.RequireManaged = &pub.InternalOnly, &pub.RequireManaged
 		}
 		body, err := json.Marshal(doc)
 		if err != nil {

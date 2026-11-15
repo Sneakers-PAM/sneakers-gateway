@@ -726,6 +726,19 @@ through the system browser session (`ASWebAuthenticationSession`, Custom Tabs), 
 the password, a second factor, a passkey or SSO as on the web, and they keep signing in while the MCP
 is off. A third-party native app registers dynamically with the same redirect rules.
 
+**Require managed apps.** An admin can turn on `require_managed` (in the vault's security settings,
+site admin only and audited there). While it is on, the token request of a first-party phone app
+(`sneakers-ios`, `sneakers-android`) must carry the header `X-Sneakers-Managed-Config: 1`, which the
+app sends when it reads a managed configuration from the organisation's MDM. Without it the gateway
+answers `403` `{"error":"MANAGED_APP_REQUIRED","error_description":"..."}` and mints nothing; the
+check runs before the code is redeemed, so the app can retry the same code. Only the value `1`
+counts. Browser sign-in, the CLIs, the MCP server and third-party native clients send no such header
+and aren't affected. The setting is published as `requireManaged` on `/.well-known/sneakers`, so an
+app can tell before it signs in. While the gateway hasn't read the setting yet, a phone app's token
+request gets a retryable `503` `temporarily_unavailable`. **The header is the app's own word, not
+proof**: it narrows the honest cases (an app installed from the store without the MDM
+configuration), and real enforcement needs the MDM's app attestation, which is a later item.
+
 Consent follows the same second-factor rule as approving pending secret uses: `GET
 /oauth2/consent/{id}` returns `factorRequired`, which is `false` while the session's second factor
 is within `MFA_MAX_AGE`. Then `POST /oauth2/consent/{id}` with `approve: true` and no `factor` is
@@ -791,10 +804,10 @@ Both carry the build in the `Sneakers-Version` and `Sneakers-Commit` headers, an
 `GET /.well-known/sneakers` publishes the release, the API level and whether the system is
 internal-only before anyone signs in, for the phone apps: unauthenticated and outside the session
 gate like `/readyz`.
-`{"product":"sneakers-pam","version":"v0.1.0","apiLevel":1,"internalOnly":false}`. `version` comes from
+`{"product":"sneakers-pam","version":"v0.1.0","apiLevel":1,"internalOnly":false,"requireManaged":false}`. `version` comes from
 `SNEAKERS_PRODUCT_VERSION` and is `null` when none is set, so an app never reads a guess as a
 release; the same value is in the `Sneakers-Version` response header (absent when unset).
-`internalOnly` is the admin setting below, `null` until the gateway has read it. The document
+`internalOnly` and `requireManaged` are the admin settings described under "Internal-only" and "OAuth for native clients", `null` until the gateway has read them. The document
 carries nothing else: no components, commit, hostnames, networks or dependency state. A configured
 release with a known setting is cacheable for 60 seconds (`Cache-Control: public, max-age=60`);
 otherwise it is `no-store`. Only `GET` and `HEAD` answer. The web front end must pass this path

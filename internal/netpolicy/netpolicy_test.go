@@ -22,15 +22,16 @@ import (
 // request's source address, never in the app.
 
 type fakeSource struct {
-	internalOnly bool
-	networks     []string
-	err          error
-	calls        int
+	internalOnly   bool
+	networks       []string
+	requireManaged bool
+	err            error
+	calls          int
 }
 
-func (f *fakeSource) Settings(context.Context) (bool, []string, error) {
+func (f *fakeSource) Settings(context.Context) (Settings, error) {
 	f.calls++
-	return f.internalOnly, f.networks, f.err
+	return Settings{InternalOnly: f.internalOnly, Networks: f.networks, RequireManaged: f.requireManaged}, f.err
 }
 
 func newProvider(t *testing.T, src *fakeSource) *Provider {
@@ -201,12 +202,30 @@ func TestProviderIgnoresAnInvalidNetworkButNeverOpensUp(t *testing.T) {
 func TestProviderReportsTheSettingForThePublishedDocument(t *testing.T) {
 	src := &fakeSource{internalOnly: true, networks: []string{"192.0.2.0/24"}}
 	p := newProvider(t, src)
-	if on, known := p.InternalOnly(); !on || !known {
-		t.Fatalf("on=%v known=%v", on, known)
+	if got := p.Published(); !got.InternalOnly || !got.Known || got.RequireManaged {
+		t.Fatalf("published = %+v", got)
 	}
 	unknown := NewProvider(&fakeSource{err: errors.New("x")}, log.Nop())
-	if on, known := unknown.InternalOnly(); on || known {
-		t.Fatalf("before the first read: on=%v known=%v", on, known)
+	if got := unknown.Published(); got.InternalOnly || got.Known || got.RequireManaged {
+		t.Fatalf("before the first read: %+v", got)
+	}
+}
+
+func TestProviderReportsRequireManagedAndKeepsItAcrossAFailedRead(t *testing.T) {
+	src := &fakeSource{requireManaged: true}
+	p := newProvider(t, src)
+	if got := p.Published(); !got.RequireManaged || !got.Known {
+		t.Fatalf("published = %+v", got)
+	}
+	src.err = errors.New("vault down")
+	_ = p.Refresh(context.Background())
+	if got := p.Published(); !got.RequireManaged {
+		t.Fatal("the last known setting must hold across a failed read")
+	}
+	src.err, src.requireManaged = nil, false
+	_ = p.Refresh(context.Background())
+	if got := p.Published(); got.RequireManaged {
+		t.Fatal("turning it off must take effect")
 	}
 }
 

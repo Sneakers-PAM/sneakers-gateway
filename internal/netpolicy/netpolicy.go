@@ -22,16 +22,33 @@ import (
 	log "github.com/Bugs5382/go-log"
 )
 
-// Source reads the stored setting.
-type Source interface {
-	Settings(ctx context.Context) (internalOnly bool, networks []string, err error)
+// Settings are the stored settings the gateway enforces: internal-only with
+// its allowed networks, and require-managed.
+type Settings struct {
+	InternalOnly   bool
+	Networks       []string
+	RequireManaged bool
 }
 
-// state is one reading of the setting.
+// Source reads the stored settings.
+type Source interface {
+	Settings(ctx context.Context) (Settings, error)
+}
+
+// Published is what the release document says about the settings, and whether
+// they have been read at all.
+type Published struct {
+	InternalOnly   bool
+	RequireManaged bool
+	Known          bool
+}
+
+// state is one reading of the settings.
 type state struct {
-	known        bool
-	internalOnly bool
-	allowed      []netip.Prefix
+	known          bool
+	internalOnly   bool
+	requireManaged bool
+	allowed        []netip.Prefix
 }
 
 // Provider keeps the last setting read from the vault. Until the first read
@@ -51,12 +68,13 @@ func NewProvider(src Source, lg log.Logger) *Provider { return &Provider{src: sr
 // Refresh reads the setting. An entry that isn't a network is skipped and
 // logged, never read as "allow everything".
 func (p *Provider) Refresh(ctx context.Context) error {
-	on, nets, err := p.src.Settings(ctx)
+	got, err := p.src.Settings(ctx)
+	on, nets := got.InternalOnly, got.Networks
 	if err != nil {
 		p.log.Ctx(ctx).Warn("network policy: the setting could not be read; keeping the last known one", log.F("error", err.Error()))
 		return err
 	}
-	st := state{known: true, internalOnly: on}
+	st := state{known: true, internalOnly: on, requireManaged: got.RequireManaged}
 	for _, n := range nets {
 		pf, perr := parsePrefix(n)
 		if perr != nil {
@@ -66,11 +84,11 @@ func (p *Provider) Refresh(ctx context.Context) error {
 		st.allowed = append(st.allowed, pf)
 	}
 	p.mu.Lock()
-	changed := p.cur.known && (p.cur.internalOnly != st.internalOnly || len(p.cur.allowed) != len(st.allowed))
+	changed := p.cur.known && (p.cur.internalOnly != st.internalOnly || p.cur.requireManaged != st.requireManaged || len(p.cur.allowed) != len(st.allowed))
 	p.cur = st
 	p.mu.Unlock()
 	if changed || !p.cur.known {
-		p.log.Ctx(ctx).Info("network policy: setting changed", log.F("internal_only", on), log.F("networks", len(st.allowed)))
+		p.log.Ctx(ctx).Info("network policy: setting changed", log.F("internal_only", on), log.F("networks", len(st.allowed)), log.F("require_managed", st.requireManaged))
 	}
 	return nil
 }
@@ -89,12 +107,12 @@ func (p *Provider) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// InternalOnly reports the setting and whether it has been read at all, for the
-// published release document.
-func (p *Provider) InternalOnly() (on, known bool) {
+// Published reports the settings the release document publishes, and whether
+// they have been read at all.
+func (p *Provider) Published() Published {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.cur.internalOnly, p.cur.known
+	return Published{InternalOnly: p.cur.internalOnly, RequireManaged: p.cur.requireManaged, Known: p.cur.known}
 }
 
 func (p *Provider) get() state {

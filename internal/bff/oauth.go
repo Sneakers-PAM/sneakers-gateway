@@ -41,7 +41,17 @@ type OAuth struct {
 	// apps. They need no dynamic registration, and their redirects are fixed
 	// by configuration.
 	FirstParty []NativeClient
+	// RequireManaged reports the require-managed setting and whether it has
+	// been read. With it on, a first-party phone app's token request must say it
+	// was installed and configured by the organisation's MDM
+	// (ManagedConfigHeader). Nil means the setting is off.
+	RequireManaged func() (on, known bool)
 }
+
+// ManagedConfigHeader is the request header a phone app sends on its token
+// request to say it was installed and configured by the organisation's MDM. It
+// is the app's own word, not an attestation.
+const ManagedConfigHeader = "X-Sneakers-Managed-Config"
 
 const (
 	oauthRequestTTL = 10 * time.Minute
@@ -507,6 +517,9 @@ func (o *OAuth) token(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lg := o.Handler.logger().Ctx(r.Context())
+	if o.refuseUnmanaged(w, r) {
+		return
+	}
 	grant, err := o.redeem(r.Context(), r.PostForm)
 	if errors.Is(err, errInvalidGrant) {
 		lg.Debug("oauth token refused: invalid grant")
@@ -532,6 +545,42 @@ func (o *OAuth) token(w http.ResponseWriter, r *http.Request) {
 	}
 	lg.Info("oauth token minted", log.F("client_id", grant.ClientID), log.F("client_kind", kind), log.F("token_id", resp.GetMeta().GetId()))
 	writeJSON(w, http.StatusOK, map[string]string{"access_token": resp.GetToken(), "token_type": "Bearer"})
+}
+
+// refuseUnmanaged answers MANAGED_APP_REQUIRED, and reports true, when the
+// require-managed setting is on and a first-party phone app's token request
+// doesn't carry the managed-configuration header. It runs before the code is
+// redeemed, so the app can retry the same code with the header. Browser, CLI
+// and third-party native sign-in are not first-party phone apps and aren't
+// affected. While the setting is unread it refuses with a retryable error.
+func (o *OAuth) refuseUnmanaged(w http.ResponseWriter, r *http.Request) bool {
+	if o.RequireManaged == nil || !o.isFirstParty(r.PostForm.Get("client_id")) {
+		return false
+	}
+	on, known := o.RequireManaged()
+	lg := o.Handler.logger().Ctx(r.Context())
+	switch {
+	case !known:
+		lg.Warn("oauth token refused: the require-managed setting has not been read yet", log.F("client_id", r.PostForm.Get("client_id")))
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporarily_unavailable"})
+		return true
+	case !on, r.Header.Get(ManagedConfigHeader) == "1":
+		return false
+	}
+	lg.Info("oauth token refused: the app did not report a managed configuration", log.F("client_id", r.PostForm.Get("client_id")))
+	writeJSON(w, http.StatusForbidden, map[string]string{
+		"error": "MANAGED_APP_REQUIRED", "error_description": "This Sneakers install only accepts the app when your organisation installed and configured it. Ask your administrator.",
+	})
+	return true
+}
+
+func (o *OAuth) isFirstParty(clientID string) bool {
+	for _, f := range o.FirstParty {
+		if f.ID == clientID {
+			return true
+		}
+	}
+	return false
 }
 
 // consentEmailCode lets a user whose second factor is email get a code for
