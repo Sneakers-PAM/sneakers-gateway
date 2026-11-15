@@ -148,9 +148,9 @@ func TestOAuthMetadataAdvertisesPKCEAndPublicClients(t *testing.T) {
 	}
 }
 
-func TestOAuthRegisterAcceptsOnlyLoopbackRedirects(t *testing.T) {
+func TestOAuthRegisterRefusesPlainHTTPOffLoopback(t *testing.T) {
 	fx := newOAuthFixture(t)
-	for _, bad := range []string{"https://evil.example.org/cb", "http://192.0.2.5:8080/cb", "http://127.0.0.1.evil.example.org/cb", "http://localhost.evil.example.org:80/cb"} {
+	for _, bad := range []string{"http://evil.example.org/cb", "http://192.0.2.5:8080/cb", "http://127.0.0.1.evil.example.org/cb", "http://localhost.evil.example.org:80/cb"} {
 		body, _ := json.Marshal(map[string]any{"client_name": "x", "redirect_uris": []string{bad}})
 		if rec := fx.do(t, http.MethodPost, "/oauth2/register", body, nil, false); rec.Code != http.StatusBadRequest {
 			t.Errorf("redirect %q: status=%d, want 400", bad, rec.Code)
