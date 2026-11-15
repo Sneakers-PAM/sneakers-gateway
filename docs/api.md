@@ -752,6 +752,15 @@ Both carry the build in the `Sneakers-Version` and `Sneakers-Commit` headers, an
 `Sneakers-Depstate-<name>` (`ok`, `degraded` or `down`) for each dependency. There is no plain
 `/health` route.
 
+`GET /.well-known/sneakers` publishes the release and the API level before anyone signs in, for the
+phone apps: unauthenticated and outside the session gate like `/readyz`.
+`{"product":"sneakers-pam","version":"v0.1.0","apiLevel":1}`. `version` comes from
+`SNEAKERS_PRODUCT_VERSION` and is `null` when none is set, so an app never reads a guess as a
+release; the same value is in the `Sneakers-Version` response header (absent when unset). The document
+carries nothing else: no components, commit, hostnames or dependency state. A configured release is
+cacheable for 60 seconds (`Cache-Control: public, max-age=60`); an unset one is `no-store`. Only
+`GET` and `HEAD` answer. The web front end must pass this path through to the gateway.
+
 `GET /smoke` is the appliance's post-upgrade check: unauthenticated, outside the product routes
 like `/readyz`, and never cached. It makes a real read through identity (`GetSetupState`) and
 vault (`GetSecuritySettings`), each of which reads its database, checks that workflow and audit
