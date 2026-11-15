@@ -583,6 +583,9 @@ func main() {
 	}
 	// The appliance's post-upgrade check: real reads through the core
 	// backends, uncached, outside auth like /readyz.
+	// The release and API level an app reads before anyone signs in, outside
+	// auth like /readyz.
+	mux.Handle("/.well-known/sneakers", releaseHandler(os.Getenv("SNEAKERS_PRODUCT_VERSION"), reqLog))
 	mux.Handle("/smoke", smokeHandler(smokeChecks(identityClient, vaultClient, conns, valkeyPing), reqLog))
 	// Each workload's OTLP export state for the box's telemetry card, outside
 	// auth like /smoke. It reads states only.
