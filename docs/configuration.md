@@ -28,7 +28,7 @@ workload identity (see [api.md](api.md), "Service-to-service authentication").
 | `AUDIT_ADDR` | `localhost:9194` | audit |
 | `NOTIFY_ADDR` | `localhost:9195` | notify |
 | `SSHBROKER_ADDR` | `localhost:9096` | SSH broker |
-| `CONNECTOR_ADDR` | (none) | Connector health (`GRPC_PORT`), read only for `GET /telemetry-status`. Unset shows the connector as `unknown`. The gateway doesn't otherwise call the connector, and start-up never depends on it. |
+| `CONNECTOR_ADDR` | (none) | The connector's gRPC address (`GRPC_PORT`): its health for `GET /telemetry-status` (unset shows it as `unknown`) and the TLS certificate scan behind `scanTargetTlsCertificate` (unset refuses it with `CONNECTOR_UNAVAILABLE`). Start-up never depends on it. |
 
 | Variable | Default | Meaning |
 |---|---|---|

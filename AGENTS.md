@@ -76,8 +76,8 @@ Follow the logging rules in `CLAUDE.md`. In short:
 - Every commit carries a DCO sign-off (`git commit -s`); the `checks / scrub` job fails without it.
 - No real identifiers anywhere: fixtures use example.org, 192.0.2.0/24, 2001:db8::/32 and invented
   names.
-- The service client stubs in `gen/go/thirdparty/` (identity, vault, workflow, audit, notify and
-  sshbroker) are generated from the commits pinned in `proto-refs.env` (see docs/api.md, "Calling
+- The service client stubs in `gen/go/thirdparty/` (identity, vault, workflow, audit, notify,
+  sshbroker and connector) are generated from the commits pinned in `proto-refs.env` (see docs/api.md, "Calling
   other services"); never import another service's Go module.
 - Request-scoped logging goes through a go-log `Logger` passed in (`Log` fields, `Ctx(ctx)` for
   trace ids); never the deprecated package-level `log.Ctx`.
@@ -88,6 +88,6 @@ Follow the logging rules in `CLAUDE.md`. In short:
   `proto-sync / check` job fails on either. To compile and test against a local package checkout,
   use a git-ignored `go.work` beside `go.mod` (`go work init . ../go-<pkg>`, which writes
   `use . ../go-<pkg>`); `go.work` and `go.work.sum` are in `.gitignore`. For local callee protos,
-  point `SNEAKERS_AUDIT_PROTO_DIR`, `SNEAKERS_IDENTITY_PROTO_DIR`, `SNEAKERS_NOTIFY_PROTO_DIR`,
+  point `SNEAKERS_AUDIT_PROTO_DIR`, `SNEAKERS_CONNECTOR_PROTO_DIR`, `SNEAKERS_IDENTITY_PROTO_DIR`, `SNEAKERS_NOTIFY_PROTO_DIR`,
   `SNEAKERS_SSHBROKER_PROTO_DIR` and `SNEAKERS_VAULT_PROTO_DIR` at a local `proto/` directory when
   running `scripts/proto-generate.sh`, rather than editing a pin in `proto-refs.env`.

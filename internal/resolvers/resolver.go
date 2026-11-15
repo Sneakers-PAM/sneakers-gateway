@@ -8,6 +8,7 @@ import (
 	"time"
 
 	auditv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/audit/v1"
+	connectorv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/connector/v1"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 	notifyv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/notify/v1"
 	sshbrokerv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/sshbroker/v1"
@@ -30,6 +31,9 @@ type Resolver struct {
 	Audit     auditv1.AuditServiceClient
 	Notify    notifyv1.NotifyServiceClient
 	SSHBroker sshbrokerv1.SSHBrokerServiceClient
+	// Connector reads a target's TLS certificate chain for a person to pin;
+	// nil means the connector isn't configured (CONNECTOR_ADDR).
+	Connector connectorv1.ConnectorServiceClient
 	// HydraIssuer is the gateway's configured Hydra issuer
 	// (env HYDRA_ISSUER), used as the OIDC issuer for LinkOidcClient — the
 	// admin picks the service account and the OAuth2 client_id (oidcSubject);

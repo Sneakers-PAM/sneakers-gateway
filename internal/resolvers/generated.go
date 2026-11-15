@@ -367,6 +367,7 @@ type ComplexityRoot struct {
 		OpenBreakGlassSession    func(childComplexity int, reason string, code string) int
 		OpenSSHSession           func(childComplexity int, secretID string, connectionID *string, targetID *string) int
 		PinTargetHostKey         func(childComplexity int, targetID string, fingerprint string) int
+		PinTargetTLSCertificate  func(childComplexity int, targetID string, fingerprint string) int
 		PrepareSecretReveal      func(childComplexity int, secretID string, fieldKey string, runID *string) int
 		RecordSecretScan         func(childComplexity int, input SecretScanInput) int
 		RedeemSecretReveal       func(childComplexity int, id string) int
@@ -475,6 +476,7 @@ type ComplexityRoot struct {
 		PreviewSecretTypeChange   func(childComplexity int, id string, newTypeID string, fieldMapping []*FieldMappingInput, fields []*KeyValueInput, unmappedFields *UnmappedFieldPolicy) int
 		ResolveUserLabels         func(childComplexity int, ids []string) int
 		ScanTargetHostKey         func(childComplexity int, targetID string) int
+		ScanTargetTLSCertificate  func(childComplexity int, targetID string) int
 		SearchUsers               func(childComplexity int, query string, limit *int) int
 		Secret                    func(childComplexity int, id string) int
 		SecretFields              func(childComplexity int, id string) int
@@ -728,6 +730,7 @@ type ComplexityRoot struct {
 		Realm        func(childComplexity int) int
 		SSHHostKeys  func(childComplexity int) int
 		SecretCount  func(childComplexity int) int
+		TLSCertPins  func(childComplexity int) int
 	}
 
 	TargetConnection struct {
@@ -742,6 +745,33 @@ type ComplexityRoot struct {
 		Pinned      func(childComplexity int) int
 		PublicKey   func(childComplexity int) int
 		TargetID    func(childComplexity int) int
+	}
+
+	TargetTlsCertificate struct {
+		CommonName   func(childComplexity int) int
+		DNSNames     func(childComplexity int) int
+		Fingerprint  func(childComplexity int) int
+		IPAddresses  func(childComplexity int) int
+		IsCa         func(childComplexity int) int
+		Issuer       func(childComplexity int) int
+		NotAfter     func(childComplexity int) int
+		NotBefore    func(childComplexity int) int
+		Pinnable     func(childComplexity int) int
+		Pinned       func(childComplexity int) int
+		SelfSigned   func(childComplexity int) int
+		SerialNumber func(childComplexity int) int
+		Subject      func(childComplexity int) int
+	}
+
+	TargetTlsCertificateScan struct {
+		Address           func(childComplexity int) int
+		Chain             func(childComplexity int) int
+		HostNameMatches   func(childComplexity int) int
+		ServerName        func(childComplexity int) int
+		SystemTrustDetail func(childComplexity int) int
+		SystemTrusted     func(childComplexity int) int
+		TLSVersion        func(childComplexity int) int
+		TargetID          func(childComplexity int) int
 	}
 
 	TypeChangedSecret struct {
@@ -805,6 +835,7 @@ type MutationResolver interface {
 	SaveTarget(ctx context.Context, input TargetInput) (*Target, error)
 	DeleteTarget(ctx context.Context, id string) (bool, error)
 	PinTargetHostKey(ctx context.Context, targetID string, fingerprint string) (*Target, error)
+	PinTargetTLSCertificate(ctx context.Context, targetID string, fingerprint string) (*Target, error)
 	SavePasswordPolicy(ctx context.Context, input PasswordPolicyInput) (*PasswordPolicy, error)
 	DeletePasswordPolicy(ctx context.Context, id string) (bool, error)
 	UpdateSecuritySettings(ctx context.Context, input SecuritySettingsInput) (*SecuritySettings, error)
@@ -906,6 +937,7 @@ type QueryResolver interface {
 	Connections(ctx context.Context) ([]*Connection, error)
 	Targets(ctx context.Context) ([]*Target, error)
 	ScanTargetHostKey(ctx context.Context, targetID string) (*TargetHostKeyScan, error)
+	ScanTargetTLSCertificate(ctx context.Context, targetID string) (*TargetTLSCertificateScan, error)
 	PasswordPolicies(ctx context.Context) ([]*PasswordPolicy, error)
 	SecuritySettings(ctx context.Context) (*SecuritySettings, error)
 	SecretTypes(ctx context.Context) ([]*SecretType, error)
@@ -2618,6 +2650,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.PinTargetHostKey(childComplexity, args["targetId"].(string), args["fingerprint"].(string)), true
+	case "Mutation.pinTargetTlsCertificate":
+		if e.ComplexityRoot.Mutation.PinTargetTLSCertificate == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_pinTargetTlsCertificate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.PinTargetTLSCertificate(childComplexity, args["targetId"].(string), args["fingerprint"].(string)), true
 	case "Mutation.prepareSecretReveal":
 		if e.ComplexityRoot.Mutation.PrepareSecretReveal == nil {
 			break
@@ -3474,6 +3517,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.ScanTargetHostKey(childComplexity, args["targetId"].(string)), true
+	case "Query.scanTargetTlsCertificate":
+		if e.ComplexityRoot.Query.ScanTargetTLSCertificate == nil {
+			break
+		}
+
+		args, err := ec.field_Query_scanTargetTlsCertificate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.ScanTargetTLSCertificate(childComplexity, args["targetId"].(string)), true
 	case "Query.searchUsers":
 		if e.ComplexityRoot.Query.SearchUsers == nil {
 			break
@@ -4720,6 +4774,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Target.SecretCount(childComplexity), true
+	case "Target.tlsCertPins":
+		if e.ComplexityRoot.Target.TLSCertPins == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Target.TLSCertPins(childComplexity), true
 
 	case "TargetConnection.connectionId":
 		if e.ComplexityRoot.TargetConnection.ConnectionID == nil {
@@ -4770,6 +4830,134 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TargetHostKeyScan.TargetID(childComplexity), true
+
+	case "TargetTlsCertificate.commonName":
+		if e.ComplexityRoot.TargetTlsCertificate.CommonName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.CommonName(childComplexity), true
+	case "TargetTlsCertificate.dnsNames":
+		if e.ComplexityRoot.TargetTlsCertificate.DNSNames == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.DNSNames(childComplexity), true
+	case "TargetTlsCertificate.fingerprint":
+		if e.ComplexityRoot.TargetTlsCertificate.Fingerprint == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.Fingerprint(childComplexity), true
+	case "TargetTlsCertificate.ipAddresses":
+		if e.ComplexityRoot.TargetTlsCertificate.IPAddresses == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.IPAddresses(childComplexity), true
+	case "TargetTlsCertificate.isCa":
+		if e.ComplexityRoot.TargetTlsCertificate.IsCa == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.IsCa(childComplexity), true
+	case "TargetTlsCertificate.issuer":
+		if e.ComplexityRoot.TargetTlsCertificate.Issuer == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.Issuer(childComplexity), true
+	case "TargetTlsCertificate.notAfter":
+		if e.ComplexityRoot.TargetTlsCertificate.NotAfter == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.NotAfter(childComplexity), true
+	case "TargetTlsCertificate.notBefore":
+		if e.ComplexityRoot.TargetTlsCertificate.NotBefore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.NotBefore(childComplexity), true
+	case "TargetTlsCertificate.pinnable":
+		if e.ComplexityRoot.TargetTlsCertificate.Pinnable == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.Pinnable(childComplexity), true
+	case "TargetTlsCertificate.pinned":
+		if e.ComplexityRoot.TargetTlsCertificate.Pinned == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.Pinned(childComplexity), true
+	case "TargetTlsCertificate.selfSigned":
+		if e.ComplexityRoot.TargetTlsCertificate.SelfSigned == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.SelfSigned(childComplexity), true
+	case "TargetTlsCertificate.serialNumber":
+		if e.ComplexityRoot.TargetTlsCertificate.SerialNumber == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.SerialNumber(childComplexity), true
+	case "TargetTlsCertificate.subject":
+		if e.ComplexityRoot.TargetTlsCertificate.Subject == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificate.Subject(childComplexity), true
+
+	case "TargetTlsCertificateScan.address":
+		if e.ComplexityRoot.TargetTlsCertificateScan.Address == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificateScan.Address(childComplexity), true
+	case "TargetTlsCertificateScan.chain":
+		if e.ComplexityRoot.TargetTlsCertificateScan.Chain == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificateScan.Chain(childComplexity), true
+	case "TargetTlsCertificateScan.hostNameMatches":
+		if e.ComplexityRoot.TargetTlsCertificateScan.HostNameMatches == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificateScan.HostNameMatches(childComplexity), true
+	case "TargetTlsCertificateScan.serverName":
+		if e.ComplexityRoot.TargetTlsCertificateScan.ServerName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificateScan.ServerName(childComplexity), true
+	case "TargetTlsCertificateScan.systemTrustDetail":
+		if e.ComplexityRoot.TargetTlsCertificateScan.SystemTrustDetail == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificateScan.SystemTrustDetail(childComplexity), true
+	case "TargetTlsCertificateScan.systemTrusted":
+		if e.ComplexityRoot.TargetTlsCertificateScan.SystemTrusted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificateScan.SystemTrusted(childComplexity), true
+	case "TargetTlsCertificateScan.tlsVersion":
+		if e.ComplexityRoot.TargetTlsCertificateScan.TLSVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificateScan.TLSVersion(childComplexity), true
+	case "TargetTlsCertificateScan.targetId":
+		if e.ComplexityRoot.TargetTlsCertificateScan.TargetID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetTlsCertificateScan.TargetID(childComplexity), true
 
 	case "TypeChangedSecret.changeLabel":
 		if e.ComplexityRoot.TypeChangedSecret.ChangeLabel == nil {
@@ -5588,6 +5776,10 @@ type Target {
   # per entry ("ssh-ed25519 AAAA... comment"). Empty = not pinned: SSH
   # sessions to it are refused.
   sshHostKeys: [String!]!
+  # SHA-256 fingerprints (64 lowercase hex digits) of the TLS certificates the
+  # connector trusts for this target (LDAPS and other TLS connections). Empty =
+  # no pin: the connector checks the certificate against the system roots.
+  tlsCertPins: [String!]!
 }
 # The SSH host key a target offers, read by the SSH broker during the
 # handshake without authenticating. Nothing is pinned by reading it.
@@ -5631,6 +5823,48 @@ input TargetInput {
   # The full pin list (a site admin, or a personal target's owner, may change
   # it). Omit to keep the target's current pins; [] clears them.
   sshHostKeys: [String!]
+}
+
+# One certificate a target sent during the TLS handshake, read by the connector
+# without sending any application data. Nothing is pinned by reading it.
+type TargetTlsCertificate {
+  # The full subject, e.g. CN=dc01.example.org,O=Example Org.
+  subject: String!
+  commonName: String!
+  # The subject alternative names.
+  dnsNames: [String!]!
+  ipAddresses: [String!]!
+  issuer: String!
+  notBefore: String
+  notAfter: String
+  # SHA-256 of the certificate, 64 lowercase hex digits.
+  # pinTargetTlsCertificate takes exactly this value.
+  fingerprint: String!
+  serialNumber: String!
+  isCa: Boolean!
+  selfSigned: Boolean!
+  # Whether pinning this certificate alone would let the connector trust the
+  # target now. Offer only these.
+  pinnable: Boolean!
+  # Whether the target already pins this certificate.
+  pinned: Boolean!
+}
+# The certificate chain a target offers, in the order it sent them: its own
+# certificate first.
+type TargetTlsCertificateScan {
+  targetId: ID!
+  # The ip:port the connector connected to.
+  address: String!
+  # The host name the certificate was checked against.
+  serverName: String!
+  tlsVersion: String!
+  chain: [TargetTlsCertificate!]!
+  # Whether the chain already verifies against the connector's system roots, so
+  # the target works without a pin.
+  systemTrusted: Boolean!
+  systemTrustDetail: String
+  # Whether the target's own certificate covers serverName.
+  hostNameMatches: Boolean!
 }
 
 enum PwStartClass { any letter digit symbol }
@@ -6108,6 +6342,11 @@ type Query {
   # change a target's pins); the broker rate-limits scans per user. Audited by
   # the broker as hostkey.scan.
   scanTargetHostKey(targetId: ID!): TargetHostKeyScan!
+  # Reads the TLS certificate chain the target's TLS connection offers (the
+  # default connection when it uses TLS, otherwise its first TLS one), through
+  # the connector, for a person to check before pinning one with
+  # pinTargetTlsCertificate. The same people as scanTargetHostKey. Pins nothing.
+  scanTargetTlsCertificate(targetId: ID!): TargetTlsCertificateScan!
   passwordPolicies: [PasswordPolicy!]!
   securitySettings: SecuritySettings!
   secretTypes: [SecretType!]!
@@ -6345,6 +6584,12 @@ type Mutation {
   # A different key is refused with HOST_KEY_CHANGED and nothing is pinned.
   # The same people as scanTargetHostKey. Adds to the target's existing pins.
   pinTargetHostKey(targetId: ID!, fingerprint: String!): Target!
+  # Pins a TLS certificate by its SHA-256 fingerprint, only if the target still
+  # offers exactly it in a fresh scan (otherwise TLS_CERT_CHANGED), and only if
+  # pinning it alone would work (otherwise TLS_CERT_NOT_PINNABLE). Accepts the
+  # fingerprint with or without a sha256: prefix and colons, in any case. Adds
+  # to the target's existing pins. The same people as scanTargetTlsCertificate.
+  pinTargetTlsCertificate(targetId: ID!, fingerprint: String!): Target!
 
   savePasswordPolicy(input: PasswordPolicyInput!): PasswordPolicy!
   deletePasswordPolicy(id: ID!): Boolean!
@@ -7734,6 +7979,8 @@ func (ec *executionContext) childFields_Target(ctx context.Context, field graphq
 		return ec.fieldContext_Target_ownerUserId(ctx, field)
 	case "sshHostKeys":
 		return ec.fieldContext_Target_sshHostKeys(ctx, field)
+	case "tlsCertPins":
+		return ec.fieldContext_Target_tlsCertPins(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Target", field.Name)
 }
@@ -7764,6 +8011,60 @@ func (ec *executionContext) childFields_TargetHostKeyScan(ctx context.Context, f
 		return ec.fieldContext_TargetHostKeyScan_address(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type TargetHostKeyScan", field.Name)
+}
+
+func (ec *executionContext) childFields_TargetTlsCertificate(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "subject":
+		return ec.fieldContext_TargetTlsCertificate_subject(ctx, field)
+	case "commonName":
+		return ec.fieldContext_TargetTlsCertificate_commonName(ctx, field)
+	case "dnsNames":
+		return ec.fieldContext_TargetTlsCertificate_dnsNames(ctx, field)
+	case "ipAddresses":
+		return ec.fieldContext_TargetTlsCertificate_ipAddresses(ctx, field)
+	case "issuer":
+		return ec.fieldContext_TargetTlsCertificate_issuer(ctx, field)
+	case "notBefore":
+		return ec.fieldContext_TargetTlsCertificate_notBefore(ctx, field)
+	case "notAfter":
+		return ec.fieldContext_TargetTlsCertificate_notAfter(ctx, field)
+	case "fingerprint":
+		return ec.fieldContext_TargetTlsCertificate_fingerprint(ctx, field)
+	case "serialNumber":
+		return ec.fieldContext_TargetTlsCertificate_serialNumber(ctx, field)
+	case "isCa":
+		return ec.fieldContext_TargetTlsCertificate_isCa(ctx, field)
+	case "selfSigned":
+		return ec.fieldContext_TargetTlsCertificate_selfSigned(ctx, field)
+	case "pinnable":
+		return ec.fieldContext_TargetTlsCertificate_pinnable(ctx, field)
+	case "pinned":
+		return ec.fieldContext_TargetTlsCertificate_pinned(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type TargetTlsCertificate", field.Name)
+}
+
+func (ec *executionContext) childFields_TargetTlsCertificateScan(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "targetId":
+		return ec.fieldContext_TargetTlsCertificateScan_targetId(ctx, field)
+	case "address":
+		return ec.fieldContext_TargetTlsCertificateScan_address(ctx, field)
+	case "serverName":
+		return ec.fieldContext_TargetTlsCertificateScan_serverName(ctx, field)
+	case "tlsVersion":
+		return ec.fieldContext_TargetTlsCertificateScan_tlsVersion(ctx, field)
+	case "chain":
+		return ec.fieldContext_TargetTlsCertificateScan_chain(ctx, field)
+	case "systemTrusted":
+		return ec.fieldContext_TargetTlsCertificateScan_systemTrusted(ctx, field)
+	case "systemTrustDetail":
+		return ec.fieldContext_TargetTlsCertificateScan_systemTrustDetail(ctx, field)
+	case "hostNameMatches":
+		return ec.fieldContext_TargetTlsCertificateScan_hostNameMatches(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type TargetTlsCertificateScan", field.Name)
 }
 
 func (ec *executionContext) childFields_TypeChangedSecret(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -9088,6 +9389,28 @@ func (ec *executionContext) field_Mutation_pinTargetHostKey_args(ctx context.Con
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_pinTargetTlsCertificate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "targetId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["targetId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fingerprint",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["fingerprint"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_prepareSecretReveal_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -10171,6 +10494,20 @@ func (ec *executionContext) field_Query_resolveUserLabels_args(ctx context.Conte
 }
 
 func (ec *executionContext) field_Query_scanTargetHostKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "targetId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["targetId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_scanTargetTlsCertificate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "targetId",
@@ -15097,6 +15434,50 @@ func (ec *executionContext) fieldContext_Mutation_pinTargetHostKey(ctx context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_pinTargetTlsCertificate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_pinTargetTlsCertificate(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().PinTargetTLSCertificate(ctx, fc.Args["targetId"].(string), fc.Args["fingerprint"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Target) graphql.Marshaler {
+			return ec.marshalNTarget2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTarget(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_pinTargetTlsCertificate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Target(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_pinTargetTlsCertificate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_savePasswordPolicy(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19908,6 +20289,50 @@ func (ec *executionContext) fieldContext_Query_scanTargetHostKey(ctx context.Con
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_scanTargetHostKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_scanTargetTlsCertificate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_scanTargetTlsCertificate(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().ScanTargetTLSCertificate(ctx, fc.Args["targetId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *TargetTLSCertificateScan) graphql.Marshaler {
+			return ec.marshalNTargetTlsCertificateScan2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetTLSCertificateScan(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_scanTargetTlsCertificate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TargetTlsCertificateScan(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_scanTargetTlsCertificate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -25445,6 +25870,29 @@ func (ec *executionContext) fieldContext_Target_sshHostKeys(_ context.Context, f
 	return graphql.NewScalarFieldContext("Target", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _Target_tlsCertPins(ctx context.Context, field graphql.CollectedField, obj *Target) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Target_tlsCertPins(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TLSCertPins, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Target_tlsCertPins(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Target", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _TargetConnection_connectionId(ctx context.Context, field graphql.CollectedField, obj *TargetConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -25627,6 +26075,498 @@ func (ec *executionContext) _TargetHostKeyScan_address(ctx context.Context, fiel
 }
 func (ec *executionContext) fieldContext_TargetHostKeyScan_address(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("TargetHostKeyScan", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_subject(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_subject(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Subject, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_subject(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_commonName(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_commonName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CommonName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_commonName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_dnsNames(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_dnsNames(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DNSNames, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_dnsNames(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_ipAddresses(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_ipAddresses(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IPAddresses, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_ipAddresses(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_issuer(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_issuer(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Issuer, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_issuer(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_notBefore(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_notBefore(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotBefore, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_notBefore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_notAfter(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_notAfter(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotAfter, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_notAfter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_fingerprint(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_fingerprint(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Fingerprint, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_fingerprint(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_serialNumber(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_serialNumber(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SerialNumber, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_serialNumber(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_isCa(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_isCa(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IsCa, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_isCa(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_selfSigned(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_selfSigned(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SelfSigned, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_selfSigned(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_pinnable(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_pinnable(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Pinnable, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_pinnable(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificate_pinned(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificate_pinned(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Pinned, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificate_pinned(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificate", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificateScan_targetId(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificateScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificateScan_targetId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TargetID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificateScan_targetId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificateScan", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificateScan_address(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificateScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificateScan_address(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Address, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificateScan_address(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificateScan", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificateScan_serverName(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificateScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificateScan_serverName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ServerName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificateScan_serverName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificateScan", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificateScan_tlsVersion(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificateScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificateScan_tlsVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TLSVersion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificateScan_tlsVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificateScan", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificateScan_chain(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificateScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificateScan_chain(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Chain, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*TargetTLSCertificate) graphql.Marshaler {
+			return ec.marshalNTargetTlsCertificate2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetTLSCertificateᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificateScan_chain(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TargetTlsCertificateScan",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TargetTlsCertificate(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TargetTlsCertificateScan_systemTrusted(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificateScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificateScan_systemTrusted(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SystemTrusted, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificateScan_systemTrusted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificateScan", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificateScan_systemTrustDetail(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificateScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificateScan_systemTrustDetail(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SystemTrustDetail, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificateScan_systemTrustDetail(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificateScan", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TargetTlsCertificateScan_hostNameMatches(ctx context.Context, field graphql.CollectedField, obj *TargetTLSCertificateScan) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetTlsCertificateScan_hostNameMatches(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HostNameMatches, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetTlsCertificateScan_hostNameMatches(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetTlsCertificateScan", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _TypeChangedSecret_secret(ctx context.Context, field graphql.CollectedField, obj *TypeChangedSecret) (ret graphql.Marshaler) {
@@ -30613,6 +31553,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "pinTargetTlsCertificate":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_pinTargetTlsCertificate(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "savePasswordPolicy":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_savePasswordPolicy(ctx, field)
@@ -31779,6 +32726,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_scanTargetHostKey(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "scanTargetTlsCertificate":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_scanTargetTlsCertificate(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -34092,6 +35061,11 @@ func (ec *executionContext) _Target(ctx context.Context, sel ast.SelectionSet, o
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "tlsCertPins":
+			out.Values[i] = ec._Target_tlsCertPins(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -34197,6 +35171,170 @@ func (ec *executionContext) _TargetHostKeyScan(ctx context.Context, sel ast.Sele
 			}
 		case "address":
 			out.Values[i] = ec._TargetHostKeyScan_address(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var targetTlsCertificateImplementors = []string{"TargetTlsCertificate"}
+
+func (ec *executionContext) _TargetTlsCertificate(ctx context.Context, sel ast.SelectionSet, obj *TargetTLSCertificate) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, targetTlsCertificateImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TargetTlsCertificate")
+		case "subject":
+			out.Values[i] = ec._TargetTlsCertificate_subject(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "commonName":
+			out.Values[i] = ec._TargetTlsCertificate_commonName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "dnsNames":
+			out.Values[i] = ec._TargetTlsCertificate_dnsNames(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ipAddresses":
+			out.Values[i] = ec._TargetTlsCertificate_ipAddresses(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "issuer":
+			out.Values[i] = ec._TargetTlsCertificate_issuer(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notBefore":
+			out.Values[i] = ec._TargetTlsCertificate_notBefore(ctx, field, obj)
+		case "notAfter":
+			out.Values[i] = ec._TargetTlsCertificate_notAfter(ctx, field, obj)
+		case "fingerprint":
+			out.Values[i] = ec._TargetTlsCertificate_fingerprint(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "serialNumber":
+			out.Values[i] = ec._TargetTlsCertificate_serialNumber(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isCa":
+			out.Values[i] = ec._TargetTlsCertificate_isCa(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "selfSigned":
+			out.Values[i] = ec._TargetTlsCertificate_selfSigned(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pinnable":
+			out.Values[i] = ec._TargetTlsCertificate_pinnable(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pinned":
+			out.Values[i] = ec._TargetTlsCertificate_pinned(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var targetTlsCertificateScanImplementors = []string{"TargetTlsCertificateScan"}
+
+func (ec *executionContext) _TargetTlsCertificateScan(ctx context.Context, sel ast.SelectionSet, obj *TargetTLSCertificateScan) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, targetTlsCertificateScanImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TargetTlsCertificateScan")
+		case "targetId":
+			out.Values[i] = ec._TargetTlsCertificateScan_targetId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "address":
+			out.Values[i] = ec._TargetTlsCertificateScan_address(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "serverName":
+			out.Values[i] = ec._TargetTlsCertificateScan_serverName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "tlsVersion":
+			out.Values[i] = ec._TargetTlsCertificateScan_tlsVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "chain":
+			out.Values[i] = ec._TargetTlsCertificateScan_chain(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "systemTrusted":
+			out.Values[i] = ec._TargetTlsCertificateScan_systemTrusted(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "systemTrustDetail":
+			out.Values[i] = ec._TargetTlsCertificateScan_systemTrustDetail(ctx, field, obj)
+		case "hostNameMatches":
+			out.Values[i] = ec._TargetTlsCertificateScan_hostNameMatches(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -36562,6 +37700,46 @@ func (ec *executionContext) marshalNTargetHostKeyScan2ᚖgithubᚗcomᚋSneakers
 func (ec *executionContext) unmarshalNTargetInput2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetInput(ctx context.Context, v any) (TargetInput, error) {
 	res, err := ec.unmarshalInputTargetInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTargetTlsCertificate2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetTLSCertificateᚄ(ctx context.Context, sel ast.SelectionSet, v []*TargetTLSCertificate) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTargetTlsCertificate2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetTLSCertificate(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTargetTlsCertificate2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetTLSCertificate(ctx context.Context, sel ast.SelectionSet, v *TargetTLSCertificate) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TargetTlsCertificate(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTargetTlsCertificateScan2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetTLSCertificateScan(ctx context.Context, sel ast.SelectionSet, v TargetTLSCertificateScan) graphql.Marshaler {
+	return ec._TargetTlsCertificateScan(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTargetTlsCertificateScan2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTargetTLSCertificateScan(ctx context.Context, sel ast.SelectionSet, v *TargetTLSCertificateScan) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TargetTlsCertificateScan(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNTypeChangedSecret2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐTypeChangedSecret(ctx context.Context, sel ast.SelectionSet, v TypeChangedSecret) graphql.Marshaler {

@@ -19,6 +19,9 @@ managed:
       path: sneakers/audit/v1
       value: github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/audit/v1;auditv1
     - file_option: go_package
+      path: sneakers/connector/v1
+      value: github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/connector/v1;connectorv1
+    - file_option: go_package
       path: sneakers/identity/v1
       value: github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1;identityv1
     - file_option: go_package

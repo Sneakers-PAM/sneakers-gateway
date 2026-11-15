@@ -78,6 +78,13 @@ comes from domain `sneakers.gateway`:
 | `scanTargetHostKey`, `pinTargetHostKey` | `FAILED_PRECONDITION` | `TARGET_NO_SSH_CONNECTION` | The target has no SSH connection to scan. |
 | `pinTargetHostKey` | `FAILED_PRECONDITION` | `HOST_KEY_CHANGED` | The target now offers a key with another fingerprint than the one confirmed. Nothing was pinned; scan again and show the new fingerprint. |
 | `pinTargetHostKey` | `INVALID_ARGUMENT` | `HOST_KEY_FINGERPRINT_REQUIRED` | No fingerprint was sent. |
+| `scanTargetTlsCertificate`, `pinTargetTlsCertificate` | `PERMISSION_DENIED` | `TLS_CERT_PIN_NOT_ADMIN` | The caller isn't a person (a token, an admin's included). |
+| `scanTargetTlsCertificate`, `pinTargetTlsCertificate` | `PERMISSION_DENIED` | `TLS_CERT_PIN_NOT_OWNER` | The caller is a person, but neither a site admin or root nor the owner of this personal target. |
+| `scanTargetTlsCertificate`, `pinTargetTlsCertificate` | `FAILED_PRECONDITION` | `TARGET_NO_TLS_CONNECTION` | The target has no TLS connection to scan. |
+| `scanTargetTlsCertificate`, `pinTargetTlsCertificate` | `UNAVAILABLE` | `CONNECTOR_UNAVAILABLE` | `CONNECTOR_ADDR` isn't set on this server. |
+| `pinTargetTlsCertificate` | `FAILED_PRECONDITION` | `TLS_CERT_CHANGED` | The target no longer sends the confirmed certificate. Nothing was pinned; scan again. |
+| `pinTargetTlsCertificate` | `FAILED_PRECONDITION` | `TLS_CERT_NOT_PINNABLE` | Pinning that certificate alone would not let the connector trust the target. |
+| `pinTargetTlsCertificate` | `INVALID_ARGUMENT` | `TLS_CERT_FINGERPRINT_INVALID` | The fingerprint isn't 64 hex digits. |
 | `createShareLink`, `revokeShareLink`, `shareLinks` | `PERMISSION_DENIED` | `SHARE_NOT_PERSON` | Not a signed-in person (a token, a service account or no session). |
 | `createShareLink`, `revokeShareLink`, `shareLinks` | `FAILED_PRECONDITION` | `SHARE_LINKS_OFF` | `OAUTH_PUBLIC_URL` isn't set, so no link can be built. |
 | `createShareLink` | `INVALID_ARGUMENT` | `SHARE_TTL_INVALID` | `ttlSeconds` is outside 60 to 604800 (zero and negative count). |
@@ -246,6 +253,32 @@ it by hand:
   pin this target (a shared one, or someone else's personal one) is refused
   (`HOST_KEY_PIN_NOT_OWNER`) once the gateway has read the target and before it calls the broker,
   so the broker can't be used to probe hosts on someone else's behalf.
+
+A target's TLS certificate (LDAPS and the other TLS connections) is pinned the same way, through
+the connector's `ScanTLSCertificate` (`CONNECTOR_ADDR`):
+
+- `scanTargetTlsCertificate(targetId)` reads the certificate chain the target's TLS connection
+  sends (its default connection when that uses TLS, otherwise its first TLS one; an SSH connection
+  never counts). The answer is a `TargetTlsCertificateScan`: `address` (the `ip:port` the connector
+  connected to), `serverName`, `tlsVersion`, `systemTrusted` and `systemTrustDetail` (whether the
+  chain already verifies without a pin), `hostNameMatches`, and the `chain` in the order the target
+  sent it, each certificate with `subject`, `commonName`, `dnsNames`, `ipAddresses`, `issuer`,
+  `notBefore`, `notAfter`, `fingerprint` (SHA-256, 64 lowercase hex digits), `serialNumber`, `isCa`,
+  `selfSigned`, `pinnable` (whether pinning it alone would work; offer only these) and `pinned`
+  (whether the target already pins it). A scan pins nothing.
+- `pinTargetTlsCertificate(targetId, fingerprint)` scans again and adds exactly `fingerprint`
+  (with or without a `sha256:` prefix and colons, in any case) to the target's `tlsCertPins` only
+  when the target still sends that certificate: otherwise `TLS_CERT_CHANGED`, nothing pinned. A
+  certificate that is not `pinnable` is refused (`TLS_CERT_NOT_PINNABLE`), and a malformed
+  fingerprint is `TLS_CERT_FINGERPRINT_INVALID`. One already pinned is left as it is. The target's
+  other pins and fields are kept. The decision is audited as `target.tls_cert.pin` (outcome
+  `pinned` or `mismatch`, with the fingerprint), and the vault audits the pin list change itself.
+  `saveTarget` keeps the target's current `tlsCertPins`; `Target.tlsCertPins` lists them.
+- The same rules as the host-key pair: a person, never a token (`TLS_CERT_PIN_NOT_ADMIN`); a site
+  admin or root on any target, or the owner of a personal target (`TLS_CERT_PIN_NOT_OWNER`), checked
+  before the connector is called. A target with no TLS connection is `TARGET_NO_TLS_CONNECTION`;
+  with no `CONNECTOR_ADDR` the scan is `CONNECTOR_UNAVAILABLE`. The connector rate-limits scans per
+  user.
 
 ### Top-level folders
 
@@ -899,14 +932,15 @@ The gateway never imports another service's Go module. It generates its own clie
 callee's protos, pinned by commit:
 
 - `proto-refs.env` pins each callee: `SNEAKERS_AUDIT_REF=<commit>` for
-  `Sneakers-PAM/sneakers-audit`, `SNEAKERS_IDENTITY_REF=<commit>` for
+  `Sneakers-PAM/sneakers-audit`, `SNEAKERS_CONNECTOR_REF=<commit>` for
+  `Sneakers-PAM/sneakers-connector`, `SNEAKERS_IDENTITY_REF=<commit>` for
   `Sneakers-PAM/sneakers-identity`, `SNEAKERS_NOTIFY_REF=<commit>` for
   `Sneakers-PAM/sneakers-notify`, `SNEAKERS_SSHBROKER_REF=<commit>` for
   `Sneakers-PAM/sneakers-sshbroker` and `SNEAKERS_VAULT_REF=<commit>` for
   `Sneakers-PAM/sneakers-vault`.
 - `scripts/proto-generate.sh` downloads only the callee's `proto/` at that commit into `.protos/`
   (git-ignored) and runs `buf generate`. The stubs land in `gen/go/thirdparty/audit/v1`,
-  `gen/go/thirdparty/identity/v1`, `gen/go/thirdparty/notify/v1`, `gen/go/thirdparty/sshbroker/v1`,
+  `gen/go/thirdparty/connector/v1`, `gen/go/thirdparty/identity/v1`, `gen/go/thirdparty/notify/v1`, `gen/go/thirdparty/sshbroker/v1`,
   `gen/go/thirdparty/vault/v1` and `gen/go/thirdparty/workflow/v1`, inside this module, so they
   can't collide with the owner's Go packages. The stubs are committed, so a build needs no network;
   the protos never are.

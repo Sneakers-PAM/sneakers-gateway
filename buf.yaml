@@ -4,6 +4,7 @@
 version: v2
 modules:
   - path: .protos/sneakers-audit
+  - path: .protos/sneakers-connector
   - path: .protos/sneakers-identity
   - path: .protos/sneakers-notify
   - path: .protos/sneakers-sshbroker

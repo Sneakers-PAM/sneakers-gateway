@@ -372,5 +372,18 @@ func ecdsaPublicFromJWK(crv, xB64, yB64 string) (*ecdsa.PublicKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode y: %w", err)
 	}
-	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+	// ParseUncompressedPublicKey also rejects a point that is not on the curve.
+	size := (curve.Params().BitSize + 7) / 8
+	if x.BitLen() > size*8 || y.BitLen() > size*8 {
+		return nil, fmt.Errorf("EC coordinate too large for %s", crv)
+	}
+	point := make([]byte, 1+2*size)
+	point[0] = 4
+	x.FillBytes(point[1 : 1+size])
+	y.FillBytes(point[1+size:])
+	pub, err := ecdsa.ParseUncompressedPublicKey(curve, point)
+	if err != nil {
+		return nil, fmt.Errorf("invalid EC point: %w", err)
+	}
+	return pub, nil
 }

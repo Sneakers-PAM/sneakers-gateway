@@ -3,7 +3,7 @@
 # protos are fetched into .protos/ (git-ignored) and never committed; only the
 # generated stubs are.
 #
-# SNEAKERS_AUDIT_PROTO_DIR, SNEAKERS_IDENTITY_PROTO_DIR,
+# SNEAKERS_AUDIT_PROTO_DIR, SNEAKERS_CONNECTOR_PROTO_DIR, SNEAKERS_IDENTITY_PROTO_DIR,
 # SNEAKERS_NOTIFY_PROTO_DIR, SNEAKERS_SSHBROKER_PROTO_DIR and
 # SNEAKERS_VAULT_PROTO_DIR each point at a local proto/ directory instead, for
 # trying an unmerged proto change.
@@ -40,6 +40,7 @@ fetch() {
 }
 
 fetch sneakers-audit "$SNEAKERS_AUDIT_REF" "${SNEAKERS_AUDIT_PROTO_DIR:-}" sneakers/audit
+fetch sneakers-connector "$SNEAKERS_CONNECTOR_REF" "${SNEAKERS_CONNECTOR_PROTO_DIR:-}" sneakers/connector
 fetch sneakers-identity "$SNEAKERS_IDENTITY_REF" "${SNEAKERS_IDENTITY_PROTO_DIR:-}" sneakers/identity
 fetch sneakers-notify "$SNEAKERS_NOTIFY_REF" "${SNEAKERS_NOTIFY_PROTO_DIR:-}" sneakers/notify
 fetch sneakers-sshbroker "$SNEAKERS_SSHBROKER_REF" "${SNEAKERS_SSHBROKER_PROTO_DIR:-}" sneakers/sshbroker

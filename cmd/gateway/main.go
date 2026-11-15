@@ -26,6 +26,7 @@ import (
 	bredis "github.com/Bugs5382/go-redis"
 	workloadauth "github.com/Bugs5382/go-workload-identity"
 	auditv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/audit/v1"
+	connectorv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/connector/v1"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 	notifyv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/notify/v1"
 	sshbrokerv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/sshbroker/v1"
@@ -355,10 +356,11 @@ func main() {
 	defer func() { _ = sshbrokerConn.Close() }()
 	sshbrokerClient := sshbrokerv1.NewSSHBrokerServiceClient(sshbrokerConn)
 
-	// The connector answers only the telemetry rollup's health check, and
-	// only where its chart lets the gateway call it, so a bad address stays a
+	// The connector answers the telemetry rollup's health check and the TLS
+	// certificate scan, and only where its chart lets the gateway call it, so a bad address stays a
 	// warning: the rollup reads unknown.
 	var connectorConn grpc.ClientConnInterface
+	var connectorClient connectorv1.ConnectorServiceClient
 	if addr := os.Getenv("CONNECTOR_ADDR"); addr != "" {
 		cc, cerr := grpc.NewClient(addr, backendOpts...)
 		if cerr != nil {
@@ -366,6 +368,7 @@ func main() {
 		} else {
 			defer func() { _ = cc.Close() }()
 			connectorConn = cc
+			connectorClient = connectorv1.NewConnectorServiceClient(cc)
 		}
 	}
 
@@ -391,7 +394,7 @@ func main() {
 	logger.Info().Bool("maintenance_readonly", maintenanceForced).Bool("appliance_configmap", watcher != nil).Msg("maintenance mode config")
 	// One identity listing serves both schemas' approval checks.
 	activeUsers := &resolvers.ActiveUsers{Identity: identityClient, Log: reqLog}
-	gqlResolver := &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, HydraIssuer: hydraIssuer, MFAMaxAge: mfaMaxAge, ActiveUsers: activeUsers, Log: reqLog, Maintenance: maintenanceMode, Appliance: watcher}
+	gqlResolver := &resolvers.Resolver{Vault: vaultClient, Identity: identityClient, Workflow: workflowClient, Audit: auditClient, Notify: notifyClient, SSHBroker: sshbrokerClient, Connector: connectorClient, HydraIssuer: hydraIssuer, MFAMaxAge: mfaMaxAge, ActiveUsers: activeUsers, Log: reqLog, Maintenance: maintenanceMode, Appliance: watcher}
 	gql := handler.New(resolvers.NewExecutableSchema(resolvers.Config{Resolvers: gqlResolver}))
 	gql.AddTransport(transport.Options{})
 	gql.AddTransport(transport.POST{})
