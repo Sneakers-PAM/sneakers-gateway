@@ -40,6 +40,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/netpolicy"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/setup"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/share"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/telemetry"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
@@ -440,6 +441,9 @@ func main() {
 	oauthMounted := false
 	// valkeyInfo reads the session store's INFO for the diagnostics; it stays
 	// nil (not configured) in noauth mode, which has no Valkey client.
+	// shareStore keeps the one-time share links' records: Valkey with the
+	// sessions in real mode, process memory otherwise.
+	shareStore := bff.NewMemOAuthStore()
 	var valkeyInfo func(context.Context) (string, error)
 	var valkeyPing func(context.Context) error
 	if authMode == "real" {
@@ -477,6 +481,7 @@ func main() {
 		valkeyPing = func(ctx context.Context) error { return valkey.Redis().Ping(ctx).Err() }
 		bffH.Log = reqLog
 		bffH.Audit = auditClient
+		shareStore = bffH.OAuthStore
 		// MCP /login and the CLIs' login: the OAuth native-app authorization
 		// server that issues personal tokens. Mounted whenever the env's
 		// public UI URL is set; with the MCP off it serves CLI clients only.
@@ -582,6 +587,13 @@ func main() {
 	conns := diagServices{
 		identity: idConn, vault: conn, workflow: wfConn, audit: auditConn, notify: nConn, sshbroker: sshbrokerConn,
 	}
+	// One-time share links: the public page, outside auth like /readyz (its token
+	// is the credential), and the resolvers' side. They need the UI's public URL
+	// to build a link.
+	shareSvc := &share.Service{Store: shareStore, Vault: vaultClient, PublicURL: env("OAUTH_PUBLIC_URL", ""), Log: reqLog}
+	mux.Handle("/share/", shareSvc.Handler())
+	gqlResolver.Share = shareSvc
+	logger.Info().Bool("share_links", shareSvc.PublicURL != "").Msg("share links config")
 	checker, err := startChecker(ctx, reqLog, healthDeps(os.Getenv, authMode, conns, valkeyPing))
 	if err != nil {
 		logger.Fatal().Err(err).Msg("health checker")

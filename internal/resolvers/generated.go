@@ -341,6 +341,7 @@ type ComplexityRoot struct {
 		CreateSecretMoveRequest  func(childComplexity int, secretID string, destFolderID string, reason *string, secretName *string, destFolderName *string) int
 		CreateSecretType         func(childComplexity int, input SecretTypeInput) int
 		CreateServiceAccount     func(childComplexity int, name string, description string) int
+		CreateShareLink          func(childComplexity int, secretID string, fieldKey string, ttlSeconds *int) int
 		CreateUseGrant           func(childComplexity int, input UseGrantInput, factor FactorInput) int
 		DecideSecretUse          func(childComplexity int, id string, approve bool, factor *FactorInput) int
 		DecideSecretUses         func(childComplexity int, ids []string, decision SecretUseDecision, factor *FactorInput) int
@@ -385,6 +386,7 @@ type ComplexityRoot struct {
 		RevealSecretVersionField func(childComplexity int, secretID string, versionNo int, fieldKey string) int
 		RevokeAPIToken           func(childComplexity int, id string) int
 		RevokeMyToken            func(childComplexity int, id string) int
+		RevokeShareLink          func(childComplexity int, id string) int
 		RevokeUseGrant           func(childComplexity int, id string) int
 		RevokeUserToken          func(childComplexity int, userID string, id string) int
 		RotateSecret             func(childComplexity int, secretID string) int
@@ -488,6 +490,7 @@ type ComplexityRoot struct {
 		SecretsInFolder           func(childComplexity int, folderID string, includeRetired *bool) int
 		SecuritySettings          func(childComplexity int) int
 		ServiceAccounts           func(childComplexity int) int
+		ShareLinks                func(childComplexity int) int
 		SimulateFolder            func(childComplexity int, folderID string, userID string, draftRules []*RaciRuleInput) int
 		SimulateSecret            func(childComplexity int, secretID string, userID string, draftRules []*RaciRuleInput) int
 		Targets                   func(childComplexity int) int
@@ -692,6 +695,15 @@ type ComplexityRoot struct {
 		OidcSubject       func(childComplexity int) int
 	}
 
+	ShareLink struct {
+		ExpiresAtUnix func(childComplexity int) int
+		FieldKey      func(childComplexity int) int
+		ID            func(childComplexity int) int
+		SecretID      func(childComplexity int) int
+		State         func(childComplexity int) int
+		URL           func(childComplexity int) int
+	}
+
 	SshSessionTicket struct {
 		ExpiresInSeconds func(childComplexity int) int
 		SessionID        func(childComplexity int) int
@@ -872,6 +884,8 @@ type MutationResolver interface {
 	RevokeAPIToken(ctx context.Context, id string) (*APIToken, error)
 	LinkOidcClient(ctx context.Context, serviceAccountID string, oidcSubject string, allowedGroups []string) (*ServiceAccount, error)
 	UnlinkOidcClient(ctx context.Context, serviceAccountID string) (*ServiceAccount, error)
+	CreateShareLink(ctx context.Context, secretID string, fieldKey string, ttlSeconds *int) (*ShareLink, error)
+	RevokeShareLink(ctx context.Context, id string) (bool, error)
 	ReportScreenCapture(ctx context.Context, input ScreenCaptureInput) (bool, error)
 	RecordSecretScan(ctx context.Context, input SecretScanInput) (bool, error)
 }
@@ -933,6 +947,7 @@ type QueryResolver interface {
 	Diagnostics(ctx context.Context) (*Diagnostics, error)
 	Maintenance(ctx context.Context) (*Maintenance, error)
 	Appliance(ctx context.Context) (*Appliance, error)
+	ShareLinks(ctx context.Context) ([]*ShareLink, error)
 }
 type SecretResolver interface {
 	HeartbeatBlockedReason(ctx context.Context, obj *Secret) (*string, error)
@@ -2322,6 +2337,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateServiceAccount(childComplexity, args["name"].(string), args["description"].(string)), true
+	case "Mutation.createShareLink":
+		if e.ComplexityRoot.Mutation.CreateShareLink == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createShareLink_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateShareLink(childComplexity, args["secretId"].(string), args["fieldKey"].(string), args["ttlSeconds"].(*int)), true
 	case "Mutation.createUseGrant":
 		if e.ComplexityRoot.Mutation.CreateUseGrant == nil {
 			break
@@ -2801,6 +2827,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RevokeMyToken(childComplexity, args["id"].(string)), true
+	case "Mutation.revokeShareLink":
+		if e.ComplexityRoot.Mutation.RevokeShareLink == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_revokeShareLink_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RevokeShareLink(childComplexity, args["id"].(string)), true
 	case "Mutation.revokeUseGrant":
 		if e.ComplexityRoot.Mutation.RevokeUseGrant == nil {
 			break
@@ -3577,6 +3614,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.ServiceAccounts(childComplexity), true
+	case "Query.shareLinks":
+		if e.ComplexityRoot.Query.ShareLinks == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.ShareLinks(childComplexity), true
 	case "Query.simulateFolder":
 		if e.ComplexityRoot.Query.SimulateFolder == nil {
 			break
@@ -4535,6 +4578,43 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ServiceAccount.OidcSubject(childComplexity), true
+
+	case "ShareLink.expiresAtUnix":
+		if e.ComplexityRoot.ShareLink.ExpiresAtUnix == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ShareLink.ExpiresAtUnix(childComplexity), true
+	case "ShareLink.fieldKey":
+		if e.ComplexityRoot.ShareLink.FieldKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ShareLink.FieldKey(childComplexity), true
+	case "ShareLink.id":
+		if e.ComplexityRoot.ShareLink.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ShareLink.ID(childComplexity), true
+	case "ShareLink.secretId":
+		if e.ComplexityRoot.ShareLink.SecretID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ShareLink.SecretID(childComplexity), true
+	case "ShareLink.state":
+		if e.ComplexityRoot.ShareLink.State == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ShareLink.State(childComplexity), true
+	case "ShareLink.url":
+		if e.ComplexityRoot.ShareLink.URL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ShareLink.URL(childComplexity), true
 
 	case "SshSessionTicket.expiresInSeconds":
 		if e.ComplexityRoot.SshSessionTicket.ExpiresInSeconds == nil {
@@ -6127,6 +6207,10 @@ type Query {
   # web banners. present is false on a plain Kubernetes install, and every
   # other field is then null or false.
   appliance: Appliance!
+
+  # The signed-in person's own one-time share links and where each stands. The URL
+  # isn't kept, so it isn't here; it's only returned by createShareLink.
+  shareLinks: [ShareLink!]!
 }
 
 type Appliance {
@@ -6506,6 +6590,15 @@ type Mutation {
   # path is unaffected. Site-admin-only.
   unlinkOidcClient(serviceAccountId: ID!): ServiceAccount!
 
+  # One-time share links for a secret field, for someone without an account. A person
+  # only. Creating one follows the normal reveal rules: access, the step-up, and the
+  # owner's approval (the link then waits, state awaiting_approval, and its owner
+  # decides it like any other use). The URL is returned once; the value is shown once,
+  # from a page that a link preview can't trigger. ttlSeconds is 60 to 604800, 86400
+  # when absent.
+  createShareLink(secretId: ID!, fieldKey: String!, ttlSeconds: Int): ShareLink!
+  # Ends a link that hasn't been opened: its creator or a site admin.
+  revokeShareLink(id: ID!): Boolean!
   # What a phone app reports about itself, for the audit log. Both need a signed-in
   # person (never a token), carry no secret value, and are refused with
   # SECRET_NOT_FOUND for a secret that is unknown or that the caller can't see.
@@ -6528,6 +6621,17 @@ type Subscription {
   # dashboard's poll while the socket is up. Scoped by the same GetSecretStats
   # over the actor's readable secrets as the secretStats query.
   secretStats: SecretStats!
+}
+
+type ShareLink {
+  id: ID!
+  # Only on the link just created; null in the list.
+  url: String
+  secretId: ID!
+  fieldKey: String!
+  expiresAtUnix: Int!
+  # awaiting_approval, ready, opened, expired or unknown.
+  state: String!
 }
 
 enum ScreenCaptureKind {
@@ -7572,6 +7676,24 @@ func (ec *executionContext) childFields_ServiceAccount(ctx context.Context, fiel
 	return nil, fmt.Errorf("no field named %q was found under type ServiceAccount", field.Name)
 }
 
+func (ec *executionContext) childFields_ShareLink(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_ShareLink_id(ctx, field)
+	case "url":
+		return ec.fieldContext_ShareLink_url(ctx, field)
+	case "secretId":
+		return ec.fieldContext_ShareLink_secretId(ctx, field)
+	case "fieldKey":
+		return ec.fieldContext_ShareLink_fieldKey(ctx, field)
+	case "expiresAtUnix":
+		return ec.fieldContext_ShareLink_expiresAtUnix(ctx, field)
+	case "state":
+		return ec.fieldContext_ShareLink_state(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ShareLink", field.Name)
+}
+
 func (ec *executionContext) childFields_SshSessionTicket(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "wsUrl":
@@ -8421,6 +8543,36 @@ func (ec *executionContext) field_Mutation_createServiceAccount_args(ctx context
 		return nil, err
 	}
 	args["description"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_createShareLink_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "secretId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["secretId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fieldKey",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["fieldKey"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "ttlSeconds",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["ttlSeconds"] = arg2
 	return args, nil
 }
 
@@ -9309,6 +9461,20 @@ func (ec *executionContext) field_Mutation_revokeApiToken_args(ctx context.Conte
 }
 
 func (ec *executionContext) field_Mutation_revokeMyToken_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_revokeShareLink_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
@@ -18353,6 +18519,94 @@ func (ec *executionContext) fieldContext_Mutation_unlinkOidcClient(ctx context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_createShareLink(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createShareLink(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateShareLink(ctx, fc.Args["secretId"].(string), fc.Args["fieldKey"].(string), fc.Args["ttlSeconds"].(*int))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *ShareLink) graphql.Marshaler {
+			return ec.marshalNShareLink2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐShareLink(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createShareLink(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ShareLink(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createShareLink_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_revokeShareLink(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_revokeShareLink(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RevokeShareLink(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_revokeShareLink(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_revokeShareLink_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_reportScreenCapture(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -21225,6 +21479,38 @@ func (ec *executionContext) fieldContext_Query_appliance(_ context.Context, fiel
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Appliance(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_shareLinks(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_shareLinks(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().ShareLinks(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*ShareLink) graphql.Marshaler {
+			return ec.marshalNShareLink2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐShareLinkᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_shareLinks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ShareLink(ctx, field)
 		},
 	}
 	return fc, nil
@@ -24610,6 +24896,144 @@ func (ec *executionContext) _ServiceAccount_oidcAllowedGroups(ctx context.Contex
 }
 func (ec *executionContext) fieldContext_ServiceAccount_oidcAllowedGroups(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("ServiceAccount", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _ShareLink_id(ctx context.Context, field graphql.CollectedField, obj *ShareLink) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ShareLink_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ShareLink_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ShareLink", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _ShareLink_url(ctx context.Context, field graphql.CollectedField, obj *ShareLink) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ShareLink_url(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.URL, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ShareLink_url(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ShareLink", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _ShareLink_secretId(ctx context.Context, field graphql.CollectedField, obj *ShareLink) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ShareLink_secretId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SecretID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ShareLink_secretId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ShareLink", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _ShareLink_fieldKey(ctx context.Context, field graphql.CollectedField, obj *ShareLink) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ShareLink_fieldKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FieldKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ShareLink_fieldKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ShareLink", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _ShareLink_expiresAtUnix(ctx context.Context, field graphql.CollectedField, obj *ShareLink) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ShareLink_expiresAtUnix(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAtUnix, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ShareLink_expiresAtUnix(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ShareLink", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _ShareLink_state(ctx context.Context, field graphql.CollectedField, obj *ShareLink) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ShareLink_state(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.State, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ShareLink_state(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ShareLink", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _SshSessionTicket_wsUrl(ctx context.Context, field graphql.CollectedField, obj *SSHSessionTicket) (ret graphql.Marshaler) {
@@ -30739,6 +31163,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "createShareLink":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createShareLink(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "revokeShareLink":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_revokeShareLink(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "reportScreenCapture":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_reportScreenCapture(ctx, field)
@@ -32249,6 +32687,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "shareLinks":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_shareLinks(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -33415,6 +33875,67 @@ func (ec *executionContext) _ServiceAccount(ctx context.Context, sel ast.Selecti
 			out.Values[i] = ec._ServiceAccount_oidcSubject(ctx, field, obj)
 		case "oidcAllowedGroups":
 			out.Values[i] = ec._ServiceAccount_oidcAllowedGroups(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var shareLinkImplementors = []string{"ShareLink"}
+
+func (ec *executionContext) _ShareLink(ctx context.Context, sel ast.SelectionSet, obj *ShareLink) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, shareLinkImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ShareLink")
+		case "id":
+			out.Values[i] = ec._ShareLink_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "url":
+			out.Values[i] = ec._ShareLink_url(ctx, field, obj)
+		case "secretId":
+			out.Values[i] = ec._ShareLink_secretId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fieldKey":
+			out.Values[i] = ec._ShareLink_fieldKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "expiresAtUnix":
+			out.Values[i] = ec._ShareLink_expiresAtUnix(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "state":
+			out.Values[i] = ec._ShareLink_state(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -35851,6 +36372,36 @@ func (ec *executionContext) marshalNServiceAccount2ᚖgithubᚗcomᚋSneakersᚑ
 		return graphql.Null
 	}
 	return ec._ServiceAccount(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNShareLink2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐShareLink(ctx context.Context, sel ast.SelectionSet, v ShareLink) graphql.Marshaler {
+	return ec._ShareLink(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNShareLink2ᚕᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐShareLinkᚄ(ctx context.Context, sel ast.SelectionSet, v []*ShareLink) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNShareLink2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐShareLink(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNShareLink2ᚖgithubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐShareLink(ctx context.Context, sel ast.SelectionSet, v *ShareLink) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ShareLink(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNSshSessionTicket2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSSHSessionTicket(ctx context.Context, sel ast.SelectionSet, v SSHSessionTicket) graphql.Marshaler {
