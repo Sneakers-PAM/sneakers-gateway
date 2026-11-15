@@ -12,10 +12,21 @@ import (
 	log "github.com/Bugs5382/go-log"
 )
 
+// internalOnlyState is what the network policy says: on, and whether it has
+// been read at all.
+type internalOnlyState struct{ on, known bool }
+
+func (s internalOnlyState) get() (bool, bool) { return s.on, s.known }
+
 func getRelease(t *testing.T, version, method string) *httptest.ResponseRecorder {
 	t.Helper()
+	return getReleaseWith(t, version, method, internalOnlyState{false, true})
+}
+
+func getReleaseWith(t *testing.T, version, method string, st internalOnlyState) *httptest.ResponseRecorder {
+	t.Helper()
 	rec := httptest.NewRecorder()
-	releaseHandler(version, log.Nop()).ServeHTTP(rec, httptest.NewRequest(method, "/.well-known/sneakers", nil))
+	releaseHandler(version, st.get, log.Nop()).ServeHTTP(rec, httptest.NewRequest(method, "/.well-known/sneakers", nil))
 	return rec
 }
 
@@ -28,7 +39,7 @@ func TestReleaseDocumentCarriesProductVersionAndLevel(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 3 || got["product"] != "sneakers-pam" || got["version"] != "v0.1.0" || got["apiLevel"] != float64(apiLevel) {
+	if len(got) != 4 || got["product"] != "sneakers-pam" || got["version"] != "v0.1.0" || got["apiLevel"] != float64(apiLevel) || got["internalOnly"] != false {
 		t.Fatalf("body %v", got)
 	}
 	if h := rec.Header().Get("Sneakers-Version"); h != "v0.1.0" {
@@ -66,5 +77,31 @@ func TestReleaseDocumentAnswersHeadAndRefusesWrites(t *testing.T) {
 	rec := getRelease(t, "v0.1.0", http.MethodPost)
 	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != "GET, HEAD" {
 		t.Fatalf("POST: code %d allow %q", rec.Code, rec.Header().Get("Allow"))
+	}
+}
+
+func TestReleaseDocumentPublishesTheInternalOnlySetting(t *testing.T) {
+	for name, c := range map[string]struct {
+		st   internalOnlyState
+		want any
+	}{
+		"on":      {internalOnlyState{true, true}, true},
+		"off":     {internalOnlyState{false, true}, false},
+		"unknown": {internalOnlyState{false, false}, nil},
+	} {
+		rec := getReleaseWith(t, "v0.1.0", http.MethodGet, c.st)
+		var got map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		if v, present := got["internalOnly"]; !present || v != c.want {
+			t.Errorf("%s: internalOnly = %v (present %v), want %v", name, v, present, c.want)
+		}
+		if cc := rec.Header().Get("Cache-Control"); cc != "public, max-age=60" && c.st.known {
+			t.Errorf("%s: cache control %q", name, cc)
+		}
+	}
+	if rec := getReleaseWith(t, "v0.1.0", http.MethodGet, internalOnlyState{true, false}); rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("an unknown setting must not be cached")
 	}
 }

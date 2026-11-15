@@ -21,28 +21,42 @@ type releaseDocument struct {
 	Product  string  `json:"product"`
 	Version  *string `json:"version"`
 	APILevel int     `json:"apiLevel"`
+	// InternalOnly is whether the system refuses requests from outside its
+	// allowed networks, so an app can say "connect to the VPN" before sign-in.
+	// Null while the setting hasn't been read.
+	InternalOnly *bool `json:"internalOnly"`
 }
 
 // releaseHandler serves GET /.well-known/sneakers, outside the session gate,
-// so an app learns which release a server runs before anyone signs in.
-func releaseHandler(version string, lg log.Logger) http.Handler {
-	doc := releaseDocument{Product: "sneakers-pam", APILevel: apiLevel}
-	if version != "" {
-		doc.Version = &version
-	}
-	body, err := json.Marshal(doc)
-	if err != nil {
-		lg.Error(err, "release document: marshal")
-	}
+// so an app learns which release a server runs, and whether it is
+// internal-only, before anyone signs in. internalOnly reports the setting and
+// whether it has been read.
+func releaseHandler(version string, internalOnly func() (on, known bool), lg log.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		doc := releaseDocument{Product: "sneakers-pam", APILevel: apiLevel}
+		if version != "" {
+			doc.Version = &version
+		}
+		on, known := internalOnly()
+		if known {
+			doc.InternalOnly = &on
+		}
+		body, err := json.Marshal(doc)
+		if err != nil {
+			lg.Ctx(r.Context()).Error(err, "release document: marshal")
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		if version != "" {
 			w.Header().Set("Sneakers-Version", version)
+		}
+		if version != "" && known {
 			w.Header().Set("Cache-Control", "public, max-age=60")
 		} else {
 			w.Header().Set("Cache-Control", "no-store")
@@ -51,6 +65,6 @@ func releaseHandler(version string, lg log.Logger) http.Handler {
 		if r.Method == http.MethodGet {
 			_, _ = w.Write(body)
 		}
-		lg.Ctx(r.Context()).Debug("release document served", log.F("method", r.Method), log.F("release_configured", version != ""))
+		lg.Ctx(r.Context()).Debug("release document served", log.F("method", r.Method), log.F("release_configured", version != ""), log.F("internal_only_known", known))
 	})
 }

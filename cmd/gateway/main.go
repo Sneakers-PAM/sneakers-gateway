@@ -37,6 +37,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/gqllog"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/machineresolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/maintenance"
+	"github.com/Sneakers-PAM/sneakers-gateway/internal/netpolicy"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/resolvers"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/setup"
 	"github.com/Sneakers-PAM/sneakers-gateway/internal/share"
@@ -604,7 +605,22 @@ func main() {
 	// backends, uncached, outside auth like /readyz.
 	// The release and API level an app reads before anyone signs in, outside
 	// auth like /readyz.
-	mux.Handle("/.well-known/sneakers", releaseHandler(os.Getenv("SNEAKERS_PRODUCT_VERSION"), reqLog))
+	// Internal-only: the setting lives in the vault and is read on a timer; the
+	// guard around the whole mux refuses requests from outside the allowed
+	// networks (below), and the release document says so before sign-in.
+	trustedProxies, err := netpolicy.ParseTrustedProxies(os.Getenv("TRUSTED_PROXY_CIDRS"))
+	if err != nil {
+		logger.Fatal().Err(err).Msg("TRUSTED_PROXY_CIDRS")
+	}
+	netPolicy := netpolicy.NewProvider(vaultNetworkSettings{vault: vaultClient}, reqLog)
+	initCtx, cancelInit := context.WithTimeout(ctx, 5*time.Second)
+	if rerr := netPolicy.Refresh(initCtx); rerr != nil {
+		logger.Warn().Err(rerr).Msg("network policy: the setting could not be read at start-up; requests are refused until it can")
+	}
+	cancelInit()
+	go netPolicy.Run(ctx, networkPolicyRefresh)
+	logger.Info().Int("trusted_proxies", len(trustedProxies)).Msg("network policy config")
+	mux.Handle("/.well-known/sneakers", releaseHandler(os.Getenv("SNEAKERS_PRODUCT_VERSION"), netPolicy.InternalOnly, reqLog))
 	mux.Handle("/smoke", smokeHandler(smokeChecks(identityClient, vaultClient, conns, valkeyPing), reqLog))
 	// Each workload's OTLP export state for the box's telemetry card, outside
 	// auth like /smoke. It reads states only.
@@ -662,7 +678,7 @@ func main() {
 	mux.Handle("/setup/seed", cors(setupH.SeedHandler()))
 	logSetupToken(logger, setupToken)
 
-	srv := &http.Server{Addr: ":" + httpPort, Handler: instrument(reqLog, mux), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Addr: ":" + httpPort, Handler: instrument(reqLog, netpolicy.Guard(mux, netPolicy, trustedProxies, reqLog)), ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {
 		<-ctx.Done()
