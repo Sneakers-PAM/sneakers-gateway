@@ -1131,6 +1131,16 @@ func (r *mutationResolver) UnlinkOidcClient(ctx context.Context, serviceAccountI
 	return gqlServiceAccount(resp.GetServiceAccount()), nil
 }
 
+// ReportScreenCapture is the resolver for the reportScreenCapture field.
+func (r *mutationResolver) ReportScreenCapture(ctx context.Context, input ScreenCaptureInput) (bool, error) {
+	return r.reportScreenCapture(ctx, input)
+}
+
+// RecordSecretScan is the resolver for the recordSecretScan field.
+func (r *mutationResolver) RecordSecretScan(ctx context.Context, input SecretScanInput) (bool, error) {
+	return r.recordSecretScan(ctx, input)
+}
+
 // Users is the resolver for the users field.
 func (r *queryResolver) Users(ctx context.Context) ([]*User, error) {
 	resp, err := r.Identity.ListUsers(ctx, &identityv1.ListUsersRequest{})
