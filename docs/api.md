@@ -628,17 +628,40 @@ its credential id; the gateway doesn't write a second copy.
 ## OAuth for native clients
 
 With `OAUTH_PUBLIC_URL` set, the gateway is an OAuth 2.0 authorization server for native clients
-(loopback redirect URIs, PKCE `S256`), which is how the MCP server and the CLIs (`sneakers-put
-login`, `sneakers-run login`) get a personal token:
+(PKCE `S256`), which is how the MCP server, the CLIs (`sneakers-put login`, `sneakers-run login`)
+and the phone apps get a personal token:
 
 | Route | Purpose |
 |---|---|
 | `GET /.well-known/oauth-authorization-server` | Server metadata. |
-| `POST /oauth2/register` | Dynamic client registration (loopback redirect URIs only). A CLI sends `"software_id": "sneakers-cli"`. |
+| `POST /oauth2/register` | Dynamic client registration (the redirect rules below). A CLI sends `"software_id": "sneakers-cli"`. |
 | `GET /oauth2/authorize` | Start the flow; the user signs in and consents in the UI. |
 | `GET /oauth2/consent/{id}`, `POST /oauth2/consent/{id}` | Read and answer the consent request (signed-in user). |
 | `POST /oauth2/consent/{id}/email-code`, `POST /oauth2/consent/{id}/passkey/begin` | Step-up second factor for the consent. |
 | `POST /oauth2/token` | Exchange the code for a personal token. |
+
+**Redirect URIs** (RFC 8252). A client registers redirect URIs of these shapes and no other:
+
+- a loopback address (`http://127.0.0.1:<port>/path`, `http://localhost`, `http://[::1]`), for the
+  CLIs and the MCP server; the port is not compared, because the client picks a fresh one for each
+  sign-in;
+- a private-use scheme in reverse-domain form with a path and nothing else
+  (`com.example.app:/oauth2redirect`): the scheme must contain a dot, and an authority
+  (`com.example.app://host/cb`), credentials or a fragment are refused;
+- a claimed https link, a universal link or an app link (`https://app.example.org/oauth2redirect`):
+  a host and a path, no credentials, fragment or wildcard.
+
+Plain `http` outside loopback is refused. Outside loopback the redirect of an authorize request must
+match a registered one exactly, character for character: no wildcard, no prefix, no other path,
+query, case or port. A request that doesn't match gets a `400` and is never redirected. PKCE `S256`
+is required for every shape: a request without it, or with `plain`, is sent back to the redirect with
+`error=invalid_request`. The token request must repeat the same `redirect_uri`.
+
+The phone apps are registered by the gateway, not by dynamic registration: `sneakers-ios` from
+`OAUTH_IOS_REDIRECT_URIS` and `sneakers-android` from `OAUTH_ANDROID_REDIRECT_URIS`. They sign in
+through the system browser session (`ASWebAuthenticationSession`, Custom Tabs), so the person uses
+the password, a second factor, a passkey or SSO as on the web, and they keep signing in while the MCP
+is off. A third-party native app registers dynamically with the same redirect rules.
 
 Consent follows the same second-factor rule as approving pending secret uses: `GET
 /oauth2/consent/{id}` returns `factorRequired`, which is `false` while the session's second factor

@@ -480,7 +480,14 @@ func main() {
 		// server that issues personal tokens. Mounted whenever the env's
 		// public UI URL is set; with the MCP off it serves CLI clients only.
 		if pub := env("OAUTH_PUBLIC_URL", ""); pub != "" {
-			o := (&bff.OAuth{Handler: bffH, Store: bffH.OAuthStore, PublicURL: pub, MCPDisabled: !mcpEnabled}).Routes()
+			firstParty, ferr := bff.FirstPartyClients(os.Getenv)
+			if ferr != nil {
+				logger.Fatal().Err(ferr).Msg("oauth: first-party app redirects")
+			}
+			for _, c := range firstParty {
+				logger.Info().Str("client_id", c.ID).Int("redirect_uris", len(c.RedirectURIs)).Msg("oauth: first-party app registered")
+			}
+			o := (&bff.OAuth{Handler: bffH, Store: bffH.OAuthStore, PublicURL: pub, MCPDisabled: !mcpEnabled, FirstParty: firstParty}).Routes()
 			mux.Handle("/oauth2/", o)
 			mux.Handle("/.well-known/oauth-authorization-server", o)
 			oauthMounted = true
