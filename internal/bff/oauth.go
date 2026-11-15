@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -36,6 +37,10 @@ type OAuth struct {
 	// MCPDisabled is the MCP switch (MCP_ENABLED=false): MCP clients are
 	// refused with MCP_DISABLED at every step, CLI clients carry on.
 	MCPDisabled bool
+	// FirstParty are the clients the gateway registers itself: the phone
+	// apps. They need no dynamic registration, and their redirects are fixed
+	// by configuration.
+	FirstParty []NativeClient
 }
 
 const (
@@ -116,7 +121,7 @@ func (o *OAuth) metadata(w http.ResponseWriter, _ *http.Request) {
 }
 
 // isLoopback accepts only http redirect URIs on the local machine, the one
-// place a native client can receive the code (RFC 8252 section 7.3).
+// place a desktop client can receive the code (RFC 8252 section 7.3).
 func isLoopback(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "http" || u.Fragment != "" || u.User != nil {
@@ -131,12 +136,85 @@ func isLoopback(raw string) bool {
 	}
 }
 
-// sameLoopback compares scheme, host and path but not the port, which a
-// native client picks fresh for each sign-in.
+// isPrivateUse accepts a private-use URI scheme in reverse-domain form with a
+// path and nothing else, such as com.example.app:/oauth2redirect (RFC 8252
+// section 7.1). The dot keeps out the schemes a browser acts on (javascript,
+// data, file) and the plain ones (http, https).
+func isPrivateUse(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || !strings.Contains(u.Scheme, ".") || u.Host != "" || u.User != nil ||
+		u.Opaque != "" || u.Fragment != "" || !strings.HasPrefix(u.Path, "/") || strings.HasPrefix(u.Path, "//") {
+		return false
+	}
+	return strings.HasPrefix(raw, u.Scheme+":/") && !strings.HasPrefix(raw, u.Scheme+"://")
+}
+
+// isClaimedHTTPS accepts an https link the app claims (a universal link or an
+// app link): a host and a path, no credentials, fragment or wildcard (RFC 8252
+// section 7.2).
+func isClaimedHTTPS(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" ||
+		u.Path == "" || strings.Contains(raw, "*") {
+		return false
+	}
+	return true
+}
+
+// validRedirect is every redirect shape a native client may register.
+func validRedirect(raw string) bool {
+	return isLoopback(raw) || isPrivateUse(raw) || isClaimedHTTPS(raw)
+}
+
+// sameRedirect matches a redirect against a registered one. A loopback
+// redirect ignores the port, which a desktop client picks fresh for each
+// sign-in; every other shape matches exactly, with no wildcard or prefix.
+func sameRedirect(registered, got string) bool {
+	if isLoopback(registered) {
+		return isLoopback(got) && sameLoopback(registered, got)
+	}
+	return registered == got && validRedirect(got)
+}
+
+// sameLoopback compares scheme, host and path but not the port.
 func sameLoopback(registered, got string) bool {
 	a, errA := url.Parse(registered)
 	b, errB := url.Parse(got)
 	return errA == nil && errB == nil && a.Scheme == b.Scheme && a.Hostname() == b.Hostname() && a.Path == b.Path
+}
+
+// NativeClient is a first-party phone app the gateway registers itself.
+type NativeClient struct {
+	ID           string
+	Name         string
+	RedirectURIs []string
+}
+
+// FirstPartyClients reads the phone apps' redirects from the environment:
+// OAUTH_IOS_REDIRECT_URIS and OAUTH_ANDROID_REDIRECT_URIS, each a comma
+// separated list. An app with none listed is not registered. A redirect that is
+// not a valid native shape is an error, so a typo stops start-up.
+func FirstPartyClients(getenv func(string) string) ([]NativeClient, error) {
+	var out []NativeClient
+	for _, a := range []struct{ id, name, env string }{
+		{"sneakers-ios", "Sneakers for iOS", "OAUTH_IOS_REDIRECT_URIS"},
+		{"sneakers-android", "Sneakers for Android", "OAUTH_ANDROID_REDIRECT_URIS"},
+	} {
+		var uris []string
+		for _, u := range strings.Split(getenv(a.env), ",") {
+			if u = strings.TrimSpace(u); u == "" {
+				continue
+			}
+			if !validRedirect(u) {
+				return nil, fmt.Errorf("%s: %q is not a private-use scheme, a claimed https link or a loopback address", a.env, u)
+			}
+			uris = append(uris, u)
+		}
+		if len(uris) > 0 {
+			out = append(out, NativeClient{ID: a.id, Name: a.name, RedirectURIs: uris})
+		}
+	}
+	return out, nil
 }
 
 func randomID() (string, error) {
@@ -167,8 +245,8 @@ func (o *OAuth) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, u := range in.RedirectURIs {
-		if !isLoopback(u) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_redirect_uri", "error_description": "only loopback redirect URIs are allowed"})
+		if !validRedirect(u) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_redirect_uri", "error_description": "only a loopback address, a private-use scheme in reverse-domain form or a claimed https link is allowed"})
 			return
 		}
 	}
@@ -219,17 +297,24 @@ func (o *OAuth) refuseMCPRequest(w http.ResponseWriter, r *http.Request, req oau
 }
 
 func (o *OAuth) client(ctx context.Context, id string) (oauthClient, bool) {
+	for _, f := range o.FirstParty {
+		if f.ID == id {
+			// A phone app is never an MCP client, so it keeps signing in
+			// while the MCP is off.
+			return oauthClient{ID: f.ID, Name: f.Name, RedirectURIs: f.RedirectURIs, Kind: ClientKindCLI}, true
+		}
+	}
 	var c oauthClient
 	ok, err := o.Store.Get(ctx, "client:"+id, &c)
 	return c, ok && err == nil
 }
 
 func redirectWith(w http.ResponseWriter, r *http.Request, target string, params url.Values) {
-	if !isLoopback(target) {
+	if !validRedirect(target) {
 		http.Error(w, "invalid redirect_uri", http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, withQuery(target, params), http.StatusFound) // #nosec G710 -- target is a registered loopback redirect_uri, re-checked just above
+	http.Redirect(w, r, withQuery(target, params), http.StatusFound) // #nosec G710 -- target is a registered native redirect_uri, re-checked just above
 }
 
 func (o *OAuth) authorize(w http.ResponseWriter, r *http.Request) {
@@ -238,7 +323,7 @@ func (o *OAuth) authorize(w http.ResponseWriter, r *http.Request) {
 	redirect := q.Get("redirect_uri")
 	registered := false
 	for _, u := range c.RedirectURIs {
-		registered = registered || (ok && sameLoopback(u, redirect))
+		registered = registered || (ok && sameRedirect(u, redirect))
 	}
 	if !registered {
 		http.Error(w, "unknown client or redirect_uri", http.StatusBadRequest)

@@ -368,6 +368,7 @@ type ComplexityRoot struct {
 		OpenSSHSession           func(childComplexity int, secretID string, connectionID *string, targetID *string) int
 		PinTargetHostKey         func(childComplexity int, targetID string, fingerprint string) int
 		PrepareSecretReveal      func(childComplexity int, secretID string, fieldKey string, runID *string) int
+		RecordSecretScan         func(childComplexity int, input SecretScanInput) int
 		RedeemSecretReveal       func(childComplexity int, id string) int
 		RemoveFolderRule         func(childComplexity int, id string) int
 		RemoveGroupMember        func(childComplexity int, userID string, groupID string) int
@@ -375,6 +376,7 @@ type ComplexityRoot struct {
 		ReorderFolders           func(childComplexity int, parentID *string, orderedIds []string) int
 		ReorderSecrets           func(childComplexity int, folderID string, orderedIds []string) int
 		ReplaceCertificate       func(childComplexity int, secretID string, fileBase64 string, passphrase *string, alias *string) int
+		ReportScreenCapture      func(childComplexity int, input ScreenCaptureInput) int
 		RequestEmailVerification func(childComplexity int, userID string) int
 		ResolveApproval          func(childComplexity int, id string, approve bool, grantHours *int) int
 		RestoreSecret            func(childComplexity int, id string) int
@@ -884,6 +886,8 @@ type MutationResolver interface {
 	UnlinkOidcClient(ctx context.Context, serviceAccountID string) (*ServiceAccount, error)
 	CreateShareLink(ctx context.Context, secretID string, fieldKey string, ttlSeconds *int) (*ShareLink, error)
 	RevokeShareLink(ctx context.Context, id string) (bool, error)
+	ReportScreenCapture(ctx context.Context, input ScreenCaptureInput) (bool, error)
+	RecordSecretScan(ctx context.Context, input SecretScanInput) (bool, error)
 }
 type QueryResolver interface {
 	Users(ctx context.Context) ([]*User, error)
@@ -2625,6 +2629,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.PrepareSecretReveal(childComplexity, args["secretId"].(string), args["fieldKey"].(string), args["runId"].(*string)), true
+	case "Mutation.recordSecretScan":
+		if e.ComplexityRoot.Mutation.RecordSecretScan == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_recordSecretScan_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RecordSecretScan(childComplexity, args["input"].(SecretScanInput)), true
 	case "Mutation.redeemSecretReveal":
 		if e.ComplexityRoot.Mutation.RedeemSecretReveal == nil {
 			break
@@ -2702,6 +2717,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ReplaceCertificate(childComplexity, args["secretId"].(string), args["fileBase64"].(string), args["passphrase"].(*string), args["alias"].(*string)), true
+	case "Mutation.reportScreenCapture":
+		if e.ComplexityRoot.Mutation.ReportScreenCapture == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_reportScreenCapture_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ReportScreenCapture(childComplexity, args["input"].(ScreenCaptureInput)), true
 	case "Mutation.requestEmailVerification":
 		if e.ComplexityRoot.Mutation.RequestEmailVerification == nil {
 			break
@@ -4983,7 +5009,9 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputPasswordPolicyInput,
 		ec.unmarshalInputRaciRuleGrantInput,
 		ec.unmarshalInputRaciRuleInput,
+		ec.unmarshalInputScreenCaptureInput,
 		ec.unmarshalInputSecretFieldDefInput,
+		ec.unmarshalInputSecretScanInput,
 		ec.unmarshalInputSecretTypeInput,
 		ec.unmarshalInputSecuritySettingsInput,
 		ec.unmarshalInputTargetConnectionInput,
@@ -6571,6 +6599,17 @@ type Mutation {
   createShareLink(secretId: ID!, fieldKey: String!, ttlSeconds: Int): ShareLink!
   # Ends a link that hasn't been opened: its creator or a site admin.
   revokeShareLink(id: ID!): Boolean!
+  # What a phone app reports about itself, for the audit log. Both need a signed-in
+  # person (never a token), carry no secret value, and are refused with
+  # SECRET_NOT_FOUND for a secret that is unknown or that the caller can't see.
+  #
+  # Records a screenshot or screen recording taken while a secret is revealed or a
+  # sensitive screen is open, as client.screenshot or client.screen_recording.
+  # Give the secret or the screen name, not both.
+  reportScreenCapture(input: ScreenCaptureInput!): Boolean!
+  # Records that a secret was opened by scanning its QR label, as secret.qr_scan.
+  # Call it after the normal open succeeds; the open itself is unchanged.
+  recordSecretScan(input: SecretScanInput!): Boolean!
 }
 
 # Live push channel over WebSocket (graphql-ws). Every subscription is
@@ -6593,6 +6632,29 @@ type ShareLink {
   expiresAtUnix: Int!
   # awaiting_approval, ready, opened, expired or unknown.
   state: String!
+}
+
+enum ScreenCaptureKind {
+  SCREENSHOT
+  SCREEN_RECORDING
+}
+
+# What the app saw. clientKind is a short token such as ios or android; device is
+# a name for the device (at most 80 characters). Both are as the app reports them.
+input ScreenCaptureInput {
+  kind: ScreenCaptureKind!
+  secretId: ID
+  # A screen name (letters, digits, dot, dash, underscore, space; at most 64) for a
+  # sensitive screen that isn't one secret.
+  screen: String
+  clientKind: String!
+  device: String
+}
+
+input SecretScanInput {
+  secretId: ID!
+  clientKind: String!
+  device: String
 }
 `, BuiltIn: false},
 }
@@ -9056,6 +9118,20 @@ func (ec *executionContext) field_Mutation_prepareSecretReveal_args(ctx context.
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_recordSecretScan_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (SecretScanInput, error) {
+			return ec.unmarshalNSecretScanInput2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretScanInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_redeemSecretReveal_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -9207,6 +9283,20 @@ func (ec *executionContext) field_Mutation_replaceCertificate_args(ctx context.C
 		return nil, err
 	}
 	args["alias"] = arg3
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_reportScreenCapture_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (ScreenCaptureInput, error) {
+			return ec.unmarshalNScreenCaptureInput2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐScreenCaptureInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -18517,6 +18607,94 @@ func (ec *executionContext) fieldContext_Mutation_revokeShareLink(ctx context.Co
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_reportScreenCapture(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_reportScreenCapture(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ReportScreenCapture(ctx, fc.Args["input"].(ScreenCaptureInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_reportScreenCapture(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_reportScreenCapture_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_recordSecretScan(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_recordSecretScan(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RecordSecretScan(ctx, fc.Args["input"].(SecretScanInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_recordSecretScan(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_recordSecretScan_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Notification_id(ctx context.Context, field graphql.CollectedField, obj *Notification) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -27813,6 +27991,64 @@ func (ec *executionContext) unmarshalInputRaciRuleInput(ctx context.Context, obj
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputScreenCaptureInput(ctx context.Context, obj any) (ScreenCaptureInput, error) {
+	var it ScreenCaptureInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"kind", "secretId", "screen", "clientKind", "device"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "kind":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("kind"))
+			data, err := ec.unmarshalNScreenCaptureKind2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐScreenCaptureKind(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Kind = data
+		case "secretId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("secretId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SecretID = data
+		case "screen":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("screen"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Screen = data
+		case "clientKind":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientKind"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientKind = data
+		case "device":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("device"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Device = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputSecretFieldDefInput(ctx context.Context, obj any) (SecretFieldDefInput, error) {
 	var it SecretFieldDefInput
 	if obj == nil {
@@ -27922,6 +28158,50 @@ func (ec *executionContext) unmarshalInputSecretFieldDefInput(ctx context.Contex
 				return it, err
 			}
 			it.MaxLength = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputSecretScanInput(ctx context.Context, obj any) (SecretScanInput, error) {
+	var it SecretScanInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"secretId", "clientKind", "device"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "secretId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("secretId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SecretID = data
+		case "clientKind":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientKind"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientKind = data
+		case "device":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("device"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Device = data
 		}
 	}
 	return it, nil
@@ -30893,6 +31173,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "revokeShareLink":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_revokeShareLink(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reportScreenCapture":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_reportScreenCapture(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "recordSecretScan":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_recordSecretScan(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -35690,6 +35984,21 @@ func (ec *executionContext) marshalNRequestKind2githubᚗcomᚋSneakersᚑPAMᚋ
 	return v
 }
 
+func (ec *executionContext) unmarshalNScreenCaptureInput2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐScreenCaptureInput(ctx context.Context, v any) (ScreenCaptureInput, error) {
+	res, err := ec.unmarshalInputScreenCaptureInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNScreenCaptureKind2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐScreenCaptureKind(ctx context.Context, v any) (ScreenCaptureKind, error) {
+	var res ScreenCaptureKind
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNScreenCaptureKind2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐScreenCaptureKind(ctx context.Context, sel ast.SelectionSet, v ScreenCaptureKind) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNSecret2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecret(ctx context.Context, sel ast.SelectionSet, v Secret) graphql.Marshaler {
 	return ec._Secret(ctx, sel, &v)
 }
@@ -35804,6 +36113,11 @@ func (ec *executionContext) marshalNSecretRuleset2ᚖgithubᚗcomᚋSneakersᚑP
 		return graphql.Null
 	}
 	return ec._SecretRuleset(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNSecretScanInput2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretScanInput(ctx context.Context, v any) (SecretScanInput, error) {
+	res, err := ec.unmarshalInputSecretScanInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNSecretStats2githubᚗcomᚋSneakersᚑPAMᚋsneakersᚑgatewayᚋinternalᚋresolversᚐSecretStats(ctx context.Context, sel ast.SelectionSet, v SecretStats) graphql.Marshaler {

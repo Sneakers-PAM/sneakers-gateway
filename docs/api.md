@@ -81,6 +81,10 @@ comes from domain `sneakers.gateway`:
 | `createShareLink`, `revokeShareLink`, `shareLinks` | `PERMISSION_DENIED` | `SHARE_NOT_PERSON` | Not a signed-in person (a token, a service account or no session). |
 | `createShareLink`, `revokeShareLink`, `shareLinks` | `FAILED_PRECONDITION` | `SHARE_LINKS_OFF` | `OAUTH_PUBLIC_URL` isn't set, so no link can be built. |
 | `createShareLink` | `INVALID_ARGUMENT` | `SHARE_TTL_INVALID` | `ttlSeconds` is outside 60 to 604800 (zero and negative count). |
+| `reportScreenCapture`, `recordSecretScan` | `PERMISSION_DENIED` | `CLIENT_EVENT_NOT_PERSON` | Not a signed-in person (a token or service account, or no session). |
+| `reportScreenCapture`, `recordSecretScan` | `INVALID_ARGUMENT` | `CLIENT_EVENT_INVALID` | The secret/screen choice, `clientKind`, `device` or `screen` doesn't fit the rules in "What the apps report". |
+| `reportScreenCapture`, `recordSecretScan` | `NOT_FOUND` | `SECRET_NOT_FOUND` | The secret is unknown, or the caller can't see it; the two read the same. |
+| `reportScreenCapture`, `recordSecretScan` | `UNAVAILABLE` | `AUDIT_UNAVAILABLE` | The event could not be written to the audit log; the app can retry. |
 
 Other vault reasons a client may see (domain `sneakers.vault`):
 
@@ -318,6 +322,29 @@ cell but `C` is refused, same as any other vault validation error. `Secret.creat
 the secret's creator (set once, at creation); null on a secret created before this field existed.
 The vault's full rules (every read path this closes, the refusal and audit shape) are in
 [sneakers-vault docs/api.md](https://github.com/Sneakers-PAM/sneakers-vault/blob/main/docs/api.md).
+
+### What the apps report
+
+The phone apps report two things about themselves, each as an audit event for the signed-in person
+(a person only: a token, a service account or no session is refused). Neither carries a secret
+value, and both stay open in read-only maintenance, since they only write to the audit log.
+
+- `reportScreenCapture(input: {kind, secretId | screen, clientKind, device})` records a screenshot
+  or a screen recording taken while a secret is revealed or a sensitive screen is open, as
+  `client.screenshot` or `client.screen_recording` (audit tier), with the secret id as the subject,
+  or the `screen` name as an attribute when it isn't one secret. Give the secret or the screen, not
+  both.
+- `recordSecretScan(input: {secretId, clientKind, device})` records that a secret was opened by
+  scanning its QR label, as `secret.qr_scan`. The app calls it after the normal open succeeds;
+  the open itself is unchanged.
+
+Both record who, the time, and as attributes `client_kind`, `device` (when given) and
+`reported_by: client`. `clientKind` is a short lowercase token (`ios`, `android`), `device` a plain
+name of at most 80 characters, `screen` at most 64 characters of letters, digits, dot, dash,
+underscore and space; the gateway takes the app's word for them. A secret that is unknown, or that
+the caller can't see, is refused as `SECRET_NOT_FOUND` and records nothing, so the refusal doesn't
+say whether it exists. The events show in `auditRecords` and `auditActions` under their action
+names, so a client filters by kind on `action` (or hides the others with `excludeActions`).
 
 ### Audit subject
 
@@ -664,17 +691,40 @@ its credential id; the gateway doesn't write a second copy.
 ## OAuth for native clients
 
 With `OAUTH_PUBLIC_URL` set, the gateway is an OAuth 2.0 authorization server for native clients
-(loopback redirect URIs, PKCE `S256`), which is how the MCP server and the CLIs (`sneakers-put
-login`, `sneakers-run login`) get a personal token:
+(PKCE `S256`), which is how the MCP server, the CLIs (`sneakers-put login`, `sneakers-run login`)
+and the phone apps get a personal token:
 
 | Route | Purpose |
 |---|---|
 | `GET /.well-known/oauth-authorization-server` | Server metadata. |
-| `POST /oauth2/register` | Dynamic client registration (loopback redirect URIs only). A CLI sends `"software_id": "sneakers-cli"`. |
+| `POST /oauth2/register` | Dynamic client registration (the redirect rules below). A CLI sends `"software_id": "sneakers-cli"`. |
 | `GET /oauth2/authorize` | Start the flow; the user signs in and consents in the UI. |
 | `GET /oauth2/consent/{id}`, `POST /oauth2/consent/{id}` | Read and answer the consent request (signed-in user). |
 | `POST /oauth2/consent/{id}/email-code`, `POST /oauth2/consent/{id}/passkey/begin` | Step-up second factor for the consent. |
 | `POST /oauth2/token` | Exchange the code for a personal token. |
+
+**Redirect URIs** (RFC 8252). A client registers redirect URIs of these shapes and no other:
+
+- a loopback address (`http://127.0.0.1:<port>/path`, `http://localhost`, `http://[::1]`), for the
+  CLIs and the MCP server; the port is not compared, because the client picks a fresh one for each
+  sign-in;
+- a private-use scheme in reverse-domain form with a path and nothing else
+  (`com.example.app:/oauth2redirect`): the scheme must contain a dot, and an authority
+  (`com.example.app://host/cb`), credentials or a fragment are refused;
+- a claimed https link, a universal link or an app link (`https://app.example.org/oauth2redirect`):
+  a host and a path, no credentials, fragment or wildcard.
+
+Plain `http` outside loopback is refused. Outside loopback the redirect of an authorize request must
+match a registered one exactly, character for character: no wildcard, no prefix, no other path,
+query, case or port. A request that doesn't match gets a `400` and is never redirected. PKCE `S256`
+is required for every shape: a request without it, or with `plain`, is sent back to the redirect with
+`error=invalid_request`. The token request must repeat the same `redirect_uri`.
+
+The phone apps are registered by the gateway, not by dynamic registration: `sneakers-ios` from
+`OAUTH_IOS_REDIRECT_URIS` and `sneakers-android` from `OAUTH_ANDROID_REDIRECT_URIS`. They sign in
+through the system browser session (`ASWebAuthenticationSession`, Custom Tabs), so the person uses
+the password, a second factor, a passkey or SSO as on the web, and they keep signing in while the MCP
+is off. A third-party native app registers dynamically with the same redirect rules.
 
 Consent follows the same second-factor rule as approving pending secret uses: `GET
 /oauth2/consent/{id}` returns `factorRequired`, which is `false` while the session's second factor
@@ -737,6 +787,15 @@ Two unauthenticated endpoints served by go-buildinfo, plus the smoke and telemet
 Both carry the build in the `Sneakers-Version` and `Sneakers-Commit` headers, and `/readyz` adds
 `Sneakers-Depstate-<name>` (`ok`, `degraded` or `down`) for each dependency. There is no plain
 `/health` route.
+
+`GET /.well-known/sneakers` publishes the release and the API level before anyone signs in, for the
+phone apps: unauthenticated and outside the session gate like `/readyz`.
+`{"product":"sneakers-pam","version":"v0.1.0","apiLevel":1}`. `version` comes from
+`SNEAKERS_PRODUCT_VERSION` and is `null` when none is set, so an app never reads a guess as a
+release; the same value is in the `Sneakers-Version` response header (absent when unset). The document
+carries nothing else: no components, commit, hostnames or dependency state. A configured release is
+cacheable for 60 seconds (`Cache-Control: public, max-age=60`); an unset one is `no-store`. Only
+`GET` and `HEAD` answer. The web front end must pass this path through to the gateway.
 
 `GET /smoke` is the appliance's post-upgrade check: unauthenticated, outside the product routes
 like `/readyz`, and never cached. It makes a real read through identity (`GetSetupState`) and

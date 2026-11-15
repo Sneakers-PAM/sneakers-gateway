@@ -42,6 +42,8 @@ var HumanAllowed = []string{
 	"markNotificationRead",
 	"markAllNotificationsRead",
 	"closeBreakGlassSession",
+	"reportScreenCapture",
+	"recordSecretScan",
 }
 
 // MachineAllowed are the /machine/graphql mutations that stay open in

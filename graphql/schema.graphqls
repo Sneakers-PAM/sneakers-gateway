@@ -1486,6 +1486,17 @@ type Mutation {
   createShareLink(secretId: ID!, fieldKey: String!, ttlSeconds: Int): ShareLink!
   # Ends a link that hasn't been opened: its creator or a site admin.
   revokeShareLink(id: ID!): Boolean!
+  # What a phone app reports about itself, for the audit log. Both need a signed-in
+  # person (never a token), carry no secret value, and are refused with
+  # SECRET_NOT_FOUND for a secret that is unknown or that the caller can't see.
+  #
+  # Records a screenshot or screen recording taken while a secret is revealed or a
+  # sensitive screen is open, as client.screenshot or client.screen_recording.
+  # Give the secret or the screen name, not both.
+  reportScreenCapture(input: ScreenCaptureInput!): Boolean!
+  # Records that a secret was opened by scanning its QR label, as secret.qr_scan.
+  # Call it after the normal open succeeds; the open itself is unchanged.
+  recordSecretScan(input: SecretScanInput!): Boolean!
 }
 
 # Live push channel over WebSocket (graphql-ws). Every subscription is
@@ -1508,4 +1519,27 @@ type ShareLink {
   expiresAtUnix: Int!
   # awaiting_approval, ready, opened, expired or unknown.
   state: String!
+}
+
+enum ScreenCaptureKind {
+  SCREENSHOT
+  SCREEN_RECORDING
+}
+
+# What the app saw. clientKind is a short token such as ios or android; device is
+# a name for the device (at most 80 characters). Both are as the app reports them.
+input ScreenCaptureInput {
+  kind: ScreenCaptureKind!
+  secretId: ID
+  # A screen name (letters, digits, dot, dash, underscore, space; at most 64) for a
+  # sensitive screen that isn't one secret.
+  screen: String
+  clientKind: String!
+  device: String
+}
+
+input SecretScanInput {
+  secretId: ID!
+  clientKind: String!
+  device: String
 }

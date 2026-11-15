@@ -485,7 +485,14 @@ func main() {
 		// server that issues personal tokens. Mounted whenever the env's
 		// public UI URL is set; with the MCP off it serves CLI clients only.
 		if pub := env("OAUTH_PUBLIC_URL", ""); pub != "" {
-			o := (&bff.OAuth{Handler: bffH, Store: bffH.OAuthStore, PublicURL: pub, MCPDisabled: !mcpEnabled}).Routes()
+			firstParty, ferr := bff.FirstPartyClients(os.Getenv)
+			if ferr != nil {
+				logger.Fatal().Err(ferr).Msg("oauth: first-party app redirects")
+			}
+			for _, c := range firstParty {
+				logger.Info().Str("client_id", c.ID).Int("redirect_uris", len(c.RedirectURIs)).Msg("oauth: first-party app registered")
+			}
+			o := (&bff.OAuth{Handler: bffH, Store: bffH.OAuthStore, PublicURL: pub, MCPDisabled: !mcpEnabled, FirstParty: firstParty}).Routes()
 			mux.Handle("/oauth2/", o)
 			mux.Handle("/.well-known/oauth-authorization-server", o)
 			oauthMounted = true
@@ -595,6 +602,9 @@ func main() {
 	}
 	// The appliance's post-upgrade check: real reads through the core
 	// backends, uncached, outside auth like /readyz.
+	// The release and API level an app reads before anyone signs in, outside
+	// auth like /readyz.
+	mux.Handle("/.well-known/sneakers", releaseHandler(os.Getenv("SNEAKERS_PRODUCT_VERSION"), reqLog))
 	mux.Handle("/smoke", smokeHandler(smokeChecks(identityClient, vaultClient, conns, valkeyPing), reqLog))
 	// Each workload's OTLP export state for the box's telemetry card, outside
 	// auth like /smoke. It reads states only.

@@ -420,6 +420,14 @@ type RaciRuleInput struct {
 	Grants      []*RaciRuleGrantInput `json:"grants"`
 }
 
+type ScreenCaptureInput struct {
+	Kind       ScreenCaptureKind `json:"kind"`
+	SecretID   *string           `json:"secretId,omitempty"`
+	Screen     *string           `json:"screen,omitempty"`
+	ClientKind string            `json:"clientKind"`
+	Device     *string           `json:"device,omitempty"`
+}
+
 type Secret struct {
 	ID                     string           `json:"id"`
 	Name                   string           `json:"name"`
@@ -494,6 +502,12 @@ type SecretRuleset struct {
 	SecretID  string               `json:"secretId"`
 	Rules     []*RaciRule          `json:"rules"`
 	Inherited []*InheritedRaciRule `json:"inherited"`
+}
+
+type SecretScanInput struct {
+	SecretID   string  `json:"secretId"`
+	ClientKind string  `json:"clientKind"`
+	Device     *string `json:"device,omitempty"`
 }
 
 type SecretStats struct {
@@ -1524,6 +1538,61 @@ func (e *RotationState) UnmarshalJSON(b []byte) error {
 }
 
 func (e RotationState) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type ScreenCaptureKind string
+
+const (
+	ScreenCaptureKindScreenshot      ScreenCaptureKind = "SCREENSHOT"
+	ScreenCaptureKindScreenRecording ScreenCaptureKind = "SCREEN_RECORDING"
+)
+
+var AllScreenCaptureKind = []ScreenCaptureKind{
+	ScreenCaptureKindScreenshot,
+	ScreenCaptureKindScreenRecording,
+}
+
+func (e ScreenCaptureKind) IsValid() bool {
+	switch e {
+	case ScreenCaptureKindScreenshot, ScreenCaptureKindScreenRecording:
+		return true
+	}
+	return false
+}
+
+func (e ScreenCaptureKind) String() string {
+	return string(e)
+}
+
+func (e *ScreenCaptureKind) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ScreenCaptureKind(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ScreenCaptureKind", str)
+	}
+	return nil
+}
+
+func (e ScreenCaptureKind) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ScreenCaptureKind) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ScreenCaptureKind) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
