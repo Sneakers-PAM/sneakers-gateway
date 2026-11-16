@@ -454,8 +454,8 @@ A personal token asks with the machine `prepareSecretUse`; a person whose `revea
 runId)`, and collects the value with `redeemSecretReveal(id)` once it's approved, still under the
 step-up window. A use that needs a decision waits, `PENDING`. One task's uses share a run id
 (`prepareSecretUse(runId, purpose)`, see [machine-graphql.md](machine-graphql.md#secret-uses)), so
-they're decided or confirmed on one page with one factor, and a confirmed run covers its later
-uses. Service accounts have no pending uses.
+they're decided or confirmed on one page with one factor. The run id only groups uses for display:
+each use needs its own approval, which covers that use alone and is redeemed once. Service accounts have no pending uses.
 
 - `pendingSecretUses` lists all the caller's own pending uses; `secretUseRun(runId)` lists the
   ones of one run, with `mfaFreshUntilUnix`, the time the session's second factor stops covering
