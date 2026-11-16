@@ -104,6 +104,7 @@ type ComplexityRoot struct {
 	Query struct {
 		AvailableExtensions     func(childComplexity int) int
 		ConnectionsForPrincipal func(childComplexity int) int
+		DisabledMcpTools        func(childComplexity int) int
 		FindSecretsForPrincipal func(childComplexity int, query *string, folderID *string, typeID *string, changedSince *string) int
 		FoldersForPrincipal     func(childComplexity int, query *string, parentID *string) int
 		MachineHealth           func(childComplexity int) int
@@ -234,6 +235,7 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	MachineHealth(ctx context.Context) (bool, error)
+	DisabledMcpTools(ctx context.Context) ([]string, error)
 	MachineWhoami(ctx context.Context) (*MachinePrincipal, error)
 	ConnectionsForPrincipal(ctx context.Context) ([]*MachineConnection, error)
 	TargetsForPrincipal(ctx context.Context, query *string, connectionID *string) ([]*MachineTarget, error)
@@ -664,6 +666,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.ConnectionsForPrincipal(childComplexity), true
+	case "Query.disabledMcpTools":
+		if e.ComplexityRoot.Query.DisabledMcpTools == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.DisabledMcpTools(childComplexity), true
 	case "Query.findSecretsForPrincipal":
 		if e.ComplexityRoot.Query.FindSecretsForPrincipal == nil {
 			break
@@ -1516,6 +1524,12 @@ type Query {
   # Trivial liveness probe for the machine endpoint; also satisfies GraphQL's
   # requirement that a schema define a Query root type.
   machineHealth: Boolean!
+
+  # MCP tools the install keeps switched off (names from the MCP server's tool
+  # list; empty means all are on). Install-wide and read-only here: it is the
+  # list an admin sets in the MCP settings. Any valid bearer may read it. It
+  # holds switch names only; no certificate-bound caller check applies.
+  disabledMcpTools: [String!]!
 
   # Who this bearer is: for logs and diagnostics at the edge. Carries no grants.
   machineWhoami: MachinePrincipal!
@@ -4415,6 +4429,29 @@ func (ec *executionContext) _Query_machineHealth(ctx context.Context, field grap
 }
 func (ec *executionContext) fieldContext_Query_machineHealth(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Query", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Query_disabledMcpTools(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_disabledMcpTools(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().DisabledMcpTools(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_disabledMcpTools(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Query", field, true, true, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _Query_machineWhoami(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -8109,6 +8146,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_machineHealth(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "disabledMcpTools":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_disabledMcpTools(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

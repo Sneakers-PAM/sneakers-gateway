@@ -677,6 +677,7 @@ type ComplexityRoot struct {
 	SecuritySettings struct {
 		AllowAPIForSensitive           func(childComplexity int) int
 		DefaultPasswordPolicyID        func(childComplexity int) int
+		DisabledMcpTools               func(childComplexity int) int
 		MfaMaxAgeSeconds               func(childComplexity int) int
 		RequestHistoryRetentionDays    func(childComplexity int) int
 		RequireMfaForReveal            func(childComplexity int) int
@@ -4541,6 +4542,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecuritySettings.DefaultPasswordPolicyID(childComplexity), true
+	case "SecuritySettings.disabledMcpTools":
+		if e.ComplexityRoot.SecuritySettings.DisabledMcpTools == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecuritySettings.DisabledMcpTools(childComplexity), true
 	case "SecuritySettings.mfaMaxAgeSeconds":
 		if e.ComplexityRoot.SecuritySettings.MfaMaxAgeSeconds == nil {
 			break
@@ -5925,6 +5932,11 @@ type SecuritySettings {
   # through the machine API's createFolderForPrincipal. Changing it needs a site
   # admin, and the vault audits the change.
   restrictTopLevelFolders: Boolean!
+  # MCP tools the install keeps switched off: names from the MCP server's tool
+  # list. Empty means every tool is on. The MCP server re-reads it from the
+  # machine schema, refuses a listed tool and does not offer it. Changing it
+  # needs a site admin, and the vault audits the old and new list.
+  disabledMcpTools: [String!]!
 }
 # Partial update: only the fields provided are changed.
 input SecuritySettingsInput {
@@ -5935,6 +5947,9 @@ input SecuritySettingsInput {
   sessionTtlSeconds: Int
   requireMfaForReveal: Boolean
   restrictTopLevelFolders: Boolean
+  # Replaces the whole list; [] turns every tool back on; omitted keeps it. Names
+  # are trimmed, blanks and repeats dropped, at most 100 names of 64 characters.
+  disabledMcpTools: [String!]
 }
 
 # A platform user. ` + "`" + `roles` + "`" + ` are elevated roles on top of the baseline; ` + "`" + `isRoot` + "`" + `
@@ -7893,6 +7908,8 @@ func (ec *executionContext) childFields_SecuritySettings(ctx context.Context, fi
 		return ec.fieldContext_SecuritySettings_mfaMaxAgeSeconds(ctx, field)
 	case "restrictTopLevelFolders":
 		return ec.fieldContext_SecuritySettings_restrictTopLevelFolders(ctx, field)
+	case "disabledMcpTools":
+		return ec.fieldContext_SecuritySettings_disabledMcpTools(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecuritySettings", field.Name)
 }
@@ -25116,6 +25133,29 @@ func (ec *executionContext) fieldContext_SecuritySettings_restrictTopLevelFolder
 	return graphql.NewScalarFieldContext("SecuritySettings", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _SecuritySettings_disabledMcpTools(ctx context.Context, field graphql.CollectedField, obj *SecuritySettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecuritySettings_disabledMcpTools(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DisabledMcpTools, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecuritySettings_disabledMcpTools(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecuritySettings", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _ServiceAccount_id(ctx context.Context, field graphql.CollectedField, obj *ServiceAccount) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -29216,7 +29256,7 @@ func (ec *executionContext) unmarshalInputSecuritySettingsInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"defaultPasswordPolicyId", "requireMfaForSensitiveCheckout", "allowApiForSensitive", "requestHistoryRetentionDays", "sessionTtlSeconds", "requireMfaForReveal", "restrictTopLevelFolders"}
+	fieldsInOrder := [...]string{"defaultPasswordPolicyId", "requireMfaForSensitiveCheckout", "allowApiForSensitive", "requestHistoryRetentionDays", "sessionTtlSeconds", "requireMfaForReveal", "restrictTopLevelFolders", "disabledMcpTools"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -29272,6 +29312,13 @@ func (ec *executionContext) unmarshalInputSecuritySettingsInput(ctx context.Cont
 				return it, err
 			}
 			it.RestrictTopLevelFolders = data
+		case "disabledMcpTools":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("disabledMcpTools"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DisabledMcpTools = data
 		}
 	}
 	return it, nil
@@ -34771,6 +34818,11 @@ func (ec *executionContext) _SecuritySettings(ctx context.Context, sel ast.Selec
 			}
 		case "restrictTopLevelFolders":
 			out.Values[i] = ec._SecuritySettings_restrictTopLevelFolders(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "disabledMcpTools":
+			out.Values[i] = ec._SecuritySettings_disabledMcpTools(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

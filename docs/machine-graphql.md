@@ -2,6 +2,10 @@
 
 `/machine/graphql` serves personal tokens and service accounts (bearer auth). The schema is `graphql/machine.graphqls`. Every call runs as the calling principal; vault does the RACI checks and the audit.
 
+## Read
+
+`disabledMcpTools` (`[String!]!`) returns the MCP tools the install keeps switched off, so the MCP server can refuse them; empty means all are on. It is install-wide and read-only here (an admin sets it on `/graphql`), and any valid bearer can read it. See `docs/api.md`, "MCP tool switches".
+
 ## Organize
 
 | Mutation | Needs | Returns |

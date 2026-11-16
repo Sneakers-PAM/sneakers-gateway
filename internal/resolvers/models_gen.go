@@ -600,24 +600,26 @@ type SecretVersion struct {
 }
 
 type SecuritySettings struct {
-	DefaultPasswordPolicyID        *string `json:"defaultPasswordPolicyId,omitempty"`
-	RequireMfaForSensitiveCheckout bool    `json:"requireMfaForSensitiveCheckout"`
-	AllowAPIForSensitive           bool    `json:"allowApiForSensitive"`
-	RequestHistoryRetentionDays    *int    `json:"requestHistoryRetentionDays,omitempty"`
-	SessionTTLSeconds              *int    `json:"sessionTtlSeconds,omitempty"`
-	RequireMfaForReveal            bool    `json:"requireMfaForReveal"`
-	MfaMaxAgeSeconds               int     `json:"mfaMaxAgeSeconds"`
-	RestrictTopLevelFolders        bool    `json:"restrictTopLevelFolders"`
+	DefaultPasswordPolicyID        *string  `json:"defaultPasswordPolicyId,omitempty"`
+	RequireMfaForSensitiveCheckout bool     `json:"requireMfaForSensitiveCheckout"`
+	AllowAPIForSensitive           bool     `json:"allowApiForSensitive"`
+	RequestHistoryRetentionDays    *int     `json:"requestHistoryRetentionDays,omitempty"`
+	SessionTTLSeconds              *int     `json:"sessionTtlSeconds,omitempty"`
+	RequireMfaForReveal            bool     `json:"requireMfaForReveal"`
+	MfaMaxAgeSeconds               int      `json:"mfaMaxAgeSeconds"`
+	RestrictTopLevelFolders        bool     `json:"restrictTopLevelFolders"`
+	DisabledMcpTools               []string `json:"disabledMcpTools"`
 }
 
 type SecuritySettingsInput struct {
-	DefaultPasswordPolicyID        *string `json:"defaultPasswordPolicyId,omitempty"`
-	RequireMfaForSensitiveCheckout *bool   `json:"requireMfaForSensitiveCheckout,omitempty"`
-	AllowAPIForSensitive           *bool   `json:"allowApiForSensitive,omitempty"`
-	RequestHistoryRetentionDays    *int    `json:"requestHistoryRetentionDays,omitempty"`
-	SessionTTLSeconds              *int    `json:"sessionTtlSeconds,omitempty"`
-	RequireMfaForReveal            *bool   `json:"requireMfaForReveal,omitempty"`
-	RestrictTopLevelFolders        *bool   `json:"restrictTopLevelFolders,omitempty"`
+	DefaultPasswordPolicyID        *string  `json:"defaultPasswordPolicyId,omitempty"`
+	RequireMfaForSensitiveCheckout *bool    `json:"requireMfaForSensitiveCheckout,omitempty"`
+	AllowAPIForSensitive           *bool    `json:"allowApiForSensitive,omitempty"`
+	RequestHistoryRetentionDays    *int     `json:"requestHistoryRetentionDays,omitempty"`
+	SessionTTLSeconds              *int     `json:"sessionTtlSeconds,omitempty"`
+	RequireMfaForReveal            *bool    `json:"requireMfaForReveal,omitempty"`
+	RestrictTopLevelFolders        *bool    `json:"restrictTopLevelFolders,omitempty"`
+	DisabledMcpTools               []string `json:"disabledMcpTools,omitempty"`
 }
 
 type ServiceAccount struct {

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Bugs5382/go-log"
 	identityv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/identity/v1"
 	notifyv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/notify/v1"
 	sshbrokerv1 "github.com/Sneakers-PAM/sneakers-gateway/gen/go/thirdparty/sshbroker/v1"
@@ -115,6 +116,15 @@ func (r *mutationResolver) UpdateSecuritySettings(ctx context.Context, input Sec
 	req.SessionTtlSeconds = intToI32Ptr(input.SessionTTLSeconds)
 	req.RequireMfaForReveal = input.RequireMfaForReveal
 	req.RestrictTopLevelFolders = input.RestrictTopLevelFolders
+	if input.DisabledMcpTools != nil {
+		names, err := cleanMcpTools(input.DisabledMcpTools)
+		if err != nil {
+			r.logger(ctx).Info("security settings: MCP tool list refused", log.F("received", len(input.DisabledMcpTools)))
+			return nil, err
+		}
+		r.logger(ctx).Debug("security settings: replacing the disabled MCP tool list", log.F("count", len(names)))
+		req.DisabledMcpTools = &vaultv1.McpToolList{Names: names}
+	}
 	resp, err := r.Vault.UpdateSecuritySettings(ctx, req)
 	if err != nil {
 		return nil, err
