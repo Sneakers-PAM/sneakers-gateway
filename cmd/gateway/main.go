@@ -684,12 +684,35 @@ func main() {
 	mux.Handle("/setup/seed", cors(setupH.SeedHandler()))
 	logSetupToken(logger, setupToken)
 
-	srv := &http.Server{Addr: ":" + httpPort, Handler: instrument(reqLog, netpolicy.Guard(mux, netPolicy, trustedProxies, reqLog)), ReadHeaderTimeout: 10 * time.Second}
+	top := instrument(reqLog, netpolicy.Guard(mux, netPolicy, trustedProxies, reqLog))
+	srv := &http.Server{Addr: ":" + httpPort, Handler: top, ReadHeaderTimeout: 10 * time.Second}
+
+	// With mutual TLS configured, a second listener serves only
+	// /machine/graphql and /readyz to callers holding a cluster certificate
+	// (the MCP server). The edge port above is unchanged.
+	var machineSrv *http.Server
+	if prov, merr := loadMTLS(os.Getenv); merr != nil {
+		logger.Fatal().Err(merr).Msg("mutual TLS")
+	} else if prov != nil {
+		mtlsPort := env("MTLS_PORT", "9443")
+		machineSrv = newMachineServer(":"+mtlsPort, prov, top)
+		go func() {
+			logger.Info().Str("mtls_port", mtlsPort).Msg("machine listener starting (/machine/graphql and /readyz, client certificate required)")
+			if err := machineSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				logger.Fatal().Err(err).Msg("machine listener exited")
+			}
+		}()
+	} else {
+		logger.Info().Msg("machine listener off: no MTLS_* files set")
+	}
 
 	go func() {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		if machineSrv != nil {
+			_ = machineSrv.Shutdown(shutCtx)
+		}
 		_ = srv.Shutdown(shutCtx)
 	}()
 
