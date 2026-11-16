@@ -307,6 +307,22 @@ activation in the audit log.
 `updateSecuritySettings` on `/graphql`. Writing it needs a site admin; the vault enforces that and
 audits each change.
 
+### MCP tool switches
+
+`SecuritySettings.disabledMcpTools` (`[String!]!`) lists the MCP tools the install keeps switched
+off; empty means every tool is on. An admin sets it with `updateSecuritySettings(input:
+{disabledMcpTools: [...]})` on `/graphql`: omitted keeps the list, a list replaces it and `[]` turns
+every tool back on. The vault requires a site admin and audits the old and new list. The gateway
+trims the names, drops blanks and repeats, and refuses a name over 64 characters or more than 100
+names. It does not check names against the MCP server's tool list, which it doesn't own: the MCP
+server ignores a name it doesn't know, with a warning, so the settings page should offer only the
+server's real tool names.
+
+The MCP server reads the list with `query { disabledMcpTools }` on `/machine/graphql`, which the
+mutual-TLS port serves. It is read-only there. Any valid machine bearer can read it, because it
+holds switch names only and the machine API has no per-service caller identity; there is no check
+that the caller is the MCP server. A bearer that `MACHINE_API_ENABLED=false` refuses can't read it.
+
 ### Target connections
 
 `Target.connections` (`[TargetConnection!]!`, each a `connectionId` plus `isDefault`) lists a

@@ -324,6 +324,18 @@ func (r *queryResolver) MachineHealth(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// DisabledMcpTools is the resolver for the disabledMcpTools field.
+func (r *queryResolver) DisabledMcpTools(ctx context.Context) ([]string, error) {
+	resp, err := r.Vault.GetSecuritySettings(ctx, &vaultv1.GetSecuritySettingsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	if names := resp.GetSettings().GetDisabledMcpTools(); names != nil {
+		return names, nil
+	}
+	return []string{}, nil
+}
+
 // MachineWhoami is the resolver for the machineWhoami field.
 func (r *queryResolver) MachineWhoami(ctx context.Context) (*MachinePrincipal, error) {
 	a := resolvers.MachineActorOf(ctx)

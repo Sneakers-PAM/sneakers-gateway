@@ -624,6 +624,11 @@ type SecuritySettings {
   # through the machine API's createFolderForPrincipal. Changing it needs a site
   # admin, and the vault audits the change.
   restrictTopLevelFolders: Boolean!
+  # MCP tools the install keeps switched off: names from the MCP server's tool
+  # list. Empty means every tool is on. The MCP server re-reads it from the
+  # machine schema, refuses a listed tool and does not offer it. Changing it
+  # needs a site admin, and the vault audits the old and new list.
+  disabledMcpTools: [String!]!
 }
 # Partial update: only the fields provided are changed.
 input SecuritySettingsInput {
@@ -634,6 +639,9 @@ input SecuritySettingsInput {
   sessionTtlSeconds: Int
   requireMfaForReveal: Boolean
   restrictTopLevelFolders: Boolean
+  # Replaces the whole list; [] turns every tool back on; omitted keeps it. Names
+  # are trimmed, blanks and repeats dropped, at most 100 names of 64 characters.
+  disabledMcpTools: [String!]
 }
 
 # A platform user. `roles` are elevated roles on top of the baseline; `isRoot`

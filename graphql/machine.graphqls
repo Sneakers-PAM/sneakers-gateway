@@ -297,6 +297,12 @@ type Query {
   # requirement that a schema define a Query root type.
   machineHealth: Boolean!
 
+  # MCP tools the install keeps switched off (names from the MCP server's tool
+  # list; empty means all are on). Install-wide and read-only here: it is the
+  # list an admin sets in the MCP settings. Any valid bearer may read it. It
+  # holds switch names only; no certificate-bound caller check applies.
+  disabledMcpTools: [String!]!
+
   # Who this bearer is: for logs and diagnostics at the edge. Carries no grants.
   machineWhoami: MachinePrincipal!
 
