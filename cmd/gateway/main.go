@@ -313,6 +313,8 @@ func main() {
 		logger.Info().Msg("workload identity: sending the projected service-account token to every backend")
 	}
 
+	logger.Info().Bool("mtls", os.Getenv("MTLS_CERT_FILE") != "").Msg("backend transport: mutual TLS when the MTLS_* files are set, plaintext otherwise")
+
 	// gRPC client spans to the vault (otel stats handler).
 	conn, err := grpc.NewClient(vaultAddr, backendOpts...)
 	if err != nil {

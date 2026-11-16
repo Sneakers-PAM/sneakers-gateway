@@ -17,16 +17,22 @@ import (
 var errNoWorkloadToken = errors.New(workloadauth.EnvTokenFile + " is not set: AUTH_MODE=real needs the gateway's projected service-account token (audience sneakers) to call the backends")
 
 // backendDialOptions are the options for every gRPC client to a backend
-// (vault, workflow, identity, audit, notify, SSH broker): plaintext inside the
-// cluster, otel client spans, and the gateway's workload token as
+// (vault, workflow, identity, audit, notify, SSH broker, connector): mutual TLS
+// when MTLS_CERT_FILE, MTLS_KEY_FILE and MTLS_CA_FILE are set (the server is
+// checked against the name dialed), plaintext when none is, otel client spans, and the gateway's workload token as
 // "authorization: Bearer" metadata, re-read from WORKLOAD_TOKEN_FILE on every
 // call. Without the variable no token is sent, which only a backend with
 // WORKLOAD_AUTH=disabled accepts, so AUTH_MODE=real refuses to start.
 func backendDialOptions(authMode string, getenv func(string) string) ([]grpc.DialOption, error) {
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithStatsHandler(otel.GRPCClientStatsHandler()),
+	creds := grpc.WithTransportCredentials(insecure.NewCredentials())
+	prov, err := loadMTLS(getenv)
+	if err != nil {
+		return nil, err
 	}
+	if prov != nil {
+		creds = prov.DialOption()
+	}
+	opts := []grpc.DialOption{creds, grpc.WithStatsHandler(otel.GRPCClientStatsHandler())}
 	tokenOpt, ok, err := workloadauth.DialOptionFromEnv(getenv)
 	if err != nil {
 		return nil, err

@@ -33,6 +33,7 @@ workload identity (see [api.md](api.md), "Service-to-service authentication").
 | Variable | Default | Meaning |
 |---|---|---|
 | `WORKLOAD_TOKEN_FILE` | (none) | The gateway's projected service-account token (audience `sneakers`), for example `/var/run/secrets/sneakers/token`. It's sent to every backend as `authorization: Bearer <token>` gRPC metadata and read again on every call, so a rotated token is picked up. A set path that can't be read stops the gateway at start. Required with `AUTH_MODE=real`; unset (noauth only) sends no token, which only backends running with `WORKLOAD_AUTH=disabled` accept. |
+| `MTLS_CERT_FILE`, `MTLS_KEY_FILE`, `MTLS_CA_FILE` | (none) | The gateway's certificate, its key and the cluster CA, as PEM files. With all three set, every gRPC call to a backend and the connector uses mutual TLS 1.3: the gateway presents its certificate and checks the backend's against the CA and the name it dialed. A renewed file is used by the next connection without a restart. With none set the calls stay plaintext, so the chart switch can roll back. Setting only some stops the gateway at start. The workload token is still sent on every call. |
 
 ## Sessions (`AUTH_MODE=real`)
 
